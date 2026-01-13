@@ -11,11 +11,37 @@
 
 ## To clone the git
 ```bash
-git clone 
-cd heathtech-team-project
+git clone https://github.com/LimXintong/healthtech-team-project
+cd healthtech-team-project
+```
+## To pull the LATEST changes from Github
+``` bash
+git pull origin main
+```
 
-### 后端（我的部分）
-```bash
+## To push the code to Github
+``` bash
+git add <filename>   # or: git add . (its will push all the files that have changes)
+git commit -m "Describe your changes"
+git push origin main
+```
+
+### Backend (Xinthong)
+``` bash
 cd backend
 npm install
 npm run dev
+```
+
+### Frontend (Joseph)
+``` bash
+cd frontend
+npm install
+npm run dev
+```
+
+### Database
+``` bash
+cd database
+docker-compose up -d
+```
