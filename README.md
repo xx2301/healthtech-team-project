@@ -11,7 +11,7 @@
 
 ## To clone the git
 ```bash
-git clone https://github.com/LimXintong/healthtech-team-project
+git clone https://github.com/xx2301/healthtech-team-project
 cd healthtech-team-project
 ```
 ## To pull the LATEST changes from Github
