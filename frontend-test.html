@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HealthTech API - Complete Test Suite</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1400px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            background: #f5f7fa; 
+        }
+        .header {
+            background: linear-gradient(135deg, #39B27A 0%, #2E8B63 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+        .tab-container {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #ddd;
+        }
+        .tab {
+            padding: 12px 24px;
+            background: #f1f1f1;
+            border: none;
+            border-radius: 8px 8px 0 0;
+            margin-right: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            color: #555;
+        }
+        .tab.active {
+            background: #39B27A;
+            color: white;
+        }
+        .panel {
+            display: none;
+            padding: 25px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+            margin-bottom: 30px;
+        }
+        .panel.active {
+            display: block;
+        }
+        h2 { color: #2E8B63; margin-top: 0; }
+        h3 { color: #555; margin: 20px 0 10px 0; border-left: 4px solid #39B27A; padding-left: 10px; }
+        .form-row {
+            display: flex;
+            align-items: center;
+            margin: 12px 0;
+            flex-wrap: wrap;
+        }
+        label {
+            width: 150px;
+            font-weight: 600;
+            color: #333;
+        }
+        input, select, textarea {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            width: 250px;
+            margin-right: 15px;
+            font-size: 14px;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #39B27A;
+            box-shadow: 0 0 0 2px rgba(57, 178, 122, 0.2);
+        }
+        button {
+            padding: 10px 20px;
+            background: #39B27A;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin: 5px;
+        }
+        button:hover {
+            background: #2E8B63;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        button.secondary {
+            background: #6c757d;
+        }
+        button.danger {
+            background: #e74c3c;
+        }
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .response {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #39B27A;
+            margin-top: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .status-success { color: #39B27A; }
+        .status-error { color: #e74c3c; }
+        .status-info { color: #3498db; }
+        .test-case {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border: 1px solid #e9ecef;
+        }
+        .test-case h4 {
+            margin: 0 0 10px 0;
+            color: #495057;
+        }
+        .api-endpoint {
+            font-family: 'Courier New', monospace;
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin: 5px 0;
+            font-size: 13px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            border: 1px solid #e9ecef;
+        }
+        .card h4 {
+            margin-top: 0;
+            color: #39B27A;
+        }
+        .success-rate {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .success-rate.pass { background: #d4edda; color: #155724; }
+        .success-rate.fail { background: #f8d7da; color: #721c24; }
+        .success-rate.partial { background: #fff3cd; color: #856404; }
+        .summary {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .summary-item {
+            text-align: center;
+        }
+        .summary-item .number {
+            font-size: 28px;
+            font-weight: bold;
+            color: #39B27A;
+        }
+        .summary-item .label {
+            font-size: 14px;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🏥 HealthTech API - Complete Test Suite</h1>
+        <p>Backend API: <code style="background: rgba(255,255,255,0.2); padding: 5px 10px; border-radius: 4px;">http://localhost:3001</code></p>
+        <p>Test all available API endpoints for Stage 2 demonstration</p>
+    </div>
+
+    <div class="summary">
+        <div class="summary-item">
+            <div class="number" id="total-tests">0</div>
+            <div class="label">Total Tests</div>
+        </div>
+        <div class="summary-item">
+            <div class="number" id="passed-tests">0</div>
+            <div class="label">Passed</div>
+        </div>
+        <div class="summary-item">
+            <div class="number" id="failed-tests">0</div>
+            <div class="label">Failed</div>
+        </div>
+        <div class="summary-item">
+            <div class="number" id="api-coverage">0%</div>
+            <div class="label">API Coverage</div>
+        </div>
+    </div>
+
+    <div class="tab-container">
+        <button class="tab active" onclick="showPanel('system')">System Health</button>
+        <button class="tab" onclick="showPanel('patients')">Patient Management</button>
+        <button class="tab" onclick="showPanel('appointments')">Appointment System</button>
+        <button class="tab" onclick="showPanel('auth')">Authentication</button>
+        <button class="tab" onclick="showPanel('doctors')">Doctors & Staff</button>
+        <button class="tab" onclick="showPanel('stats')">Statistics</button>
+        <button class="tab" onclick="showPanel('run-all')">Run All Tests</button>
+    </div>
+
+    <!-- System Health Panel -->
+    <div id="system-panel" class="panel active">
+        <h2>System Health & Setup</h2>
+        
+        <div class="test-case">
+            <h4>Basic Connectivity Test</h4>
+            <div class="api-endpoint">GET /api/health</div>
+            <p>Check if backend server is running and responsive</p>
+            <button onclick="testHealth()">Test Health Check</button>
+            <button onclick="testApiDocumentation()">Test API Documentation Page</button>
+        </div>
+        
+        <div class="test-case">
+            <h4>Data Initialization</h4>
+            <div class="api-endpoint">POST /api/init-test-data</div>
+            <p>Initialize or reset test data for demonstration</p>
+            <button onclick="initTestData()">Initialize Test Data</button>
+            <button class="secondary" onclick="clearAllData()">Clear All Data (Danger)</button>
+        </div>
+        
+        <div class="response" id="system-response">System test results will appear here...</div>
+    </div>
+
+    <!-- Patient Management Panel -->
+    <div id="patients-panel" class="panel">
+        <h2>Patient Management System</h2>
+        
+        <div class="grid">
+            <div class="card">
+                <h4>Get All Patients</h4>
+                <div class="api-endpoint">GET /api/patients</div>
+                <p>Retrieve complete patient list</p>
+                <button onclick="getAllPatients()">Get All Patients</button>
+            </div>
+            
+            <div class="card">
+                <h4>Get Single Patient</h4>
+                <div class="api-endpoint">GET /api/patients/{id}</div>
+                <div class="form-row">
+                    <label>Patient ID:</label>
+                    <input type="number" id="get-patient-id" value="1" min="1">
+                </div>
+                <button onclick="getPatientById()">Get Patient</button>
+            </div>
+            
+            <div class="card">
+                <h4>Create New Patient</h4>
+                <div class="api-endpoint">POST /api/patients</div>
+                <div class="form-row">
+                    <label>Full Name:</label>
+                    <input type="text" id="create-name" value="John Doe">
+                </div>
+                <div class="form-row">
+                    <label>Age:</label>
+                    <input type="number" id="create-age" value="65">
+                </div>
+                <div class="form-row">
+                    <label>Gender:</label>
+                    <select id="create-gender">
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label>Condition:</label>
+                    <input type="text" id="create-condition" value="Hypertension">
+                </div>
+                <button onclick="createPatient()">Create Patient</button>
+            </div>
+            
+            <div class="card">
+                <h4>Update Patient</h4>
+                <div class="api-endpoint">PUT /api/patients/{id}</div>
+                <div class="form-row">
+                    <label>Patient ID:</label>
+                    <input type="number" id="update-patient-id" value="1" min="1">
+                </div>
+                <div class="form-row">
+                    <label>New Age:</label>
+                    <input type="number" id="update-age" value="70">
+                </div>
+                <div class="form-row">
+                    <label>New Status:</label>
+                    <select id="update-status">
+                        <option value="stable">Stable</option>
+                        <option value="monitoring">Monitoring</option>
+                        <option value="critical">Critical</option>
+                        <option value="recovered">Recovered</option>
+                    </select>
+                </div>
+                <button onclick="updatePatient()">Update Patient</button>
+            </div>
+            
+            <div class="card">
+                <h4>Delete Patient</h4>
+                <div class="api-endpoint">DELETE /api/patients/{id}</div>
+                <div class="form-row">
+                    <label>Patient ID to delete:</label>
+                    <input type="number" id="delete-patient-id" value="3" min="1">
+                </div>
+                <p><small>Note: Cannot delete test patients (ID 1-2)</small></p>
+                <button class="danger" onclick="deletePatient()">Delete Patient</button>
+            </div>
+            
+            <div class="card">
+                <h4>Search & Filter</h4>
+                <div class="api-endpoint">Various queries</div>
+                <div class="button-group">
+                    <button onclick="getPatientsByCondition()">By Condition</button>
+                    <button onclick="getElderlyPatients()">Age 60+</button>
+                    <button onclick="getRecentPatients()">Recent Patients</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="response" id="patients-response">Patient operation results...</div>
+    </div>
+
+    <!-- Appointment Management Panel -->
+    <div id="appointments-panel" class="panel">
+        <h2>Appointment Management System</h2>
+        
+        <div class="grid">
+            <div class="card">
+                <h4>Get All Appointments</h4>
+                <div class="api-endpoint">GET /api/appointments</div>
+                <p>Retrieve all scheduled appointments</p>
+                <button onclick="getAllAppointments()">Get Appointments</button>
+            </div>
+            
+            <div class="card">
+                <h4>Get Single Appointment</h4>
+                <div class="api-endpoint">GET /api/appointments/{id}</div>
+                <div class="form-row">
+                    <label>Appointment ID:</label>
+                    <input type="number" id="get-appointment-id" value="1" min="1">
+                </div>
+                <button onclick="getAppointmentById()">Get Appointment</button>
+            </div>
+            
+            <div class="card">
+                <h4>Create New Appointment</h4>
+                <div class="api-endpoint">POST /api/appointments</div>
+                <div class="form-row">
+                    <label>Patient ID:</label>
+                    <input type="number" id="appointment-patient-id" value="1" min="1">
+                </div>
+                <div class="form-row">
+                    <label>Date:</label>
+                    <input type="date" id="appointment-date" value="2024-01-25">
+                </div>
+                <div class="form-row">
+                    <label>Time:</label>
+                    <input type="time" id="appointment-time" value="14:30">
+                </div>
+                <div class="form-row">
+                    <label>Reason:</label>
+                    <input type="text" id="appointment-reason" value="Regular Check-up">
+                </div>
+                <button onclick="createAppointment()">Create Appointment</button>
+            </div>
+            
+            <div class="card">
+                <h4>Update Appointment Status</h4>
+                <div class="api-endpoint">PUT /api/appointments/{id}/status</div>
+                <div class="form-row">
+                    <label>Appointment ID:</label>
+                    <input type="number" id="status-appointment-id" value="1" min="1">
+                </div>
+                <div class="form-row">
+                    <label>New Status:</label>
+                    <select id="appointment-status">
+                        <option value="pending">Pending</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="cancelled">Cancelled</option>
+                        <option value="completed">Completed</option>
+                    </select>
+                </div>
+                <button onclick="updateAppointmentStatus()">Update Status</button>
+            </div>
+            
+            <div class="card">
+                <h4>Appointments by Patient</h4>
+                <div class="api-endpoint">GET /api/patients/{id}/appointments</div>
+                <div class="form-row">
+                    <label>Patient ID:</label>
+                    <input type="number" id="patient-appointments-id" value="1" min="1">
+                </div>
+                <button onclick="getAppointmentsByPatient()">Get Patient's Appointments</button>
+            </div>
+            
+            <div class="card">
+                <h4>Appointments by Date</h4>
+                <div class="api-endpoint">GET /api/appointments/date/{date}</div>
+                <div class="form-row">
+                    <label>Date:</label>
+                    <input type="date" id="date-appointments" value="2024-01-20">
+                </div>
+                <button onclick="getAppointmentsByDate()">Get Daily Schedule</button>
+            </div>
+        </div>
+        
+        <div class="response" id="appointments-response">Appointment operation results...</div>
+    </div>
+
+    <!-- Authentication Panel -->
+    <div id="auth-panel" class="panel">
+        <h2>Authentication & Authorization</h2>
+        
+        <div class="grid">
+            <div class="card">
+                <h4>User Login</h4>
+                <div class="api-endpoint">POST /api/auth/login</div>
+                <div class="form-row">
+                    <label>Email:</label>
+                    <input type="email" id="login-email" value="doctor@healthtech.com">
+                </div>
+                <div class="form-row">
+                    <label>Password:</label>
+                    <input type="password" id="login-password" value="password123">
+                </div>
+                <button onclick="testLogin()">Test Login</button>
+                <button class="secondary" onclick="testInvalidLogin()">Test Invalid Login</button>
+            </div>
+            
+            <div class="card">
+                <h4>User Registration</h4>
+                <div class="api-endpoint">POST /api/auth/register</div>
+                <div class="form-row">
+                    <label>Email:</label>
+                    <input type="email" id="register-email" value="new.patient@example.com">
+                </div>
+                <div class="form-row">
+                    <label>Password:</label>
+                    <input type="password" id="register-password" value="securepass123">
+                </div>
+                <div class="form-row">
+                    <label>Full Name:</label>
+                    <input type="text" id="register-name" value="New Patient">
+                </div>
+                <div class="form-row">
+                    <label>Role:</label>
+                    <select id="register-role">
+                        <option value="patient">Patient</option>
+                        <option value="doctor">Doctor</option>
+                        <option value="family">Family Member</option>
+                    </select>
+                </div>
+                <button onclick="testRegister()">Test Registration</button>
+            </div>
+            
+            <div class="card">
+                <h4>Get User Information</h4>
+                <div class="api-endpoint">GET /api/users/{id} (simulated)</div>
+                <div class="form-row">
+                    <label>User ID:</label>
+                    <input type="number" id="user-id" value="1" min="1">
+                </div>
+                <button onclick="getUserInfo()">Get User Info</button>
+            </div>
+            
+            <div class="card">
+                <h4>Authentication Flow</h4>
+                <div class="api-endpoint">Complete flow test</div>
+                <p>Test complete login → API call flow</p>
+                <button onclick="testAuthFlow()">Test Complete Auth Flow</button>
+            </div>
+        </div>
+        
+        <div class="response" id="auth-response">Authentication results...</div>
+    </div>
+
+    <!-- Doctors & Staff Panel -->
+    <div id="doctors-panel" class="panel">
+        <h2>Doctors & Medical Staff</h2>
+        
+        <div class="grid">
+            <div class="card">
+                <h4>Get All Doctors</h4>
+                <div class="api-endpoint">GET /api/doctors</div>
+                <p>Retrieve list of all doctors in system</p>
+                <button onclick="getAllDoctors()">Get Doctors List</button>
+            </div>
+            
+            <div class="card">
+                <h4>Doctor Availability</h4>
+                <div class="api-endpoint">GET /api/doctors/{id}/schedule (simulated)</div>
+                <div class="form-row">
+                    <label>Doctor ID:</label>
+                    <input type="number" id="doctor-id" value="1" min="1">
+                </div>
+                <div class="form-row">
+                    <label>Date:</label>
+                    <input type="date" id="doctor-schedule-date" value="2024-01-25">
+                </div>
+                <button onclick="getDoctorSchedule()">Get Doctor Schedule</button>
+            </div>
+            
+            <div class="card">
+                <h4>Assign Patient to Doctor</h4>
+                <div class="api-endpoint">PUT /api/patients/{id}/doctor (simulated)</div>
+                <div class="form-row">
+                    <label>Patient ID:</label>
+                    <input type="number" id="assign-patient-id" value="1" min="1">
+                </div>
+                <div class="form-row">
+                    <label>Doctor ID:</label>
+                    <input type="number" id="assign-doctor-id" value="1" min="1">
+                </div>
+                <button onclick="assignDoctorToPatient()">Assign Doctor</button>
+            </div>
+        </div>
+        
+        <div class="response" id="doctors-response">Doctors & staff results...</div>
+    </div>
+
+    <!-- Statistics Panel -->
+    <div id="stats-panel" class="panel">
+        <h2>System Statistics & Analytics</h2>
+        
+        <div class="grid">
+            <div class="card">
+                <h4>Get System Statistics</h4>
+                <div class="api-endpoint">GET /api/stats</div>
+                <p>Comprehensive system statistics</p>
+                <button onclick="getSystemStats()">Get Statistics</button>
+            </div>
+            
+            <div class="card">
+                <h4>Patient Statistics</h4>
+                <div class="api-endpoint">GET /api/stats/patients (simulated)</div>
+                <p>Patient demographics and health metrics</p>
+                <button onclick="getPatientStats()">Get Patient Stats</button>
+            </div>
+            
+            <div class="card">
+                <h4>Appointment Analytics</h4>
+                <div class="api-endpoint">GET /api/stats/appointments (simulated)</div>
+                <p>Appointment trends and status distribution</p>
+                <button onclick="getAppointmentStats()">Get Appointment Stats</button>
+            </div>
+            
+            <div class="card">
+                <h4>System Performance</h4>
+                <div class="api-endpoint">GET /api/stats/performance (simulated)</div>
+                <p>API response times and system load</p>
+                <button onclick="getPerformanceStats()">Get Performance Stats</button>
+            </div>
+        </div>
+        
+        <div class="response" id="stats-response">Statistics results...</div>
+    </div>
+
+    <!-- Run All Tests Panel -->
+    <div id="run-all-panel" class="panel">
+        <h2>Complete Test Suite Runner</h2>
+        
+        <div class="test-case">
+            <h4>Comprehensive API Test Suite</h4>
+            <p>Run all API tests sequentially to verify complete system functionality</p>
+            
+            <div class="button-group">
+                <button onclick="runQuickTestSuite()">Run Quick Test Suite (5 tests)</button>
+                <button onclick="runCompleteTestSuite()">Run Complete Test Suite (All APIs)</button>
+                <button class="danger" onclick="runStressTest()">Run Stress Test (High load)</button>
+            </div>
+            
+            <div class="form-row">
+                <label>Test Speed:</label>
+                <select id="test-speed">
+                    <option value="fast">Fast (no delays)</option>
+                    <option value="normal" selected>Normal (1s delay)</option>
+                    <option value="slow">Slow (3s delay)</option>
+                </select>
+            </div>
+            
+            <div style="margin: 20px 0;">
+                <label><input type="checkbox" id="stop-on-failure" checked> Stop on first failure</label>
+                <label style="margin-left: 20px;"><input type="checkbox" id="detailed-logging"> Detailed logging</label>
+            </div>
+        </div>
+        
+        <div class="response" id="suite-response" style="min-height: 500px;">
+            <div id="test-progress">
+                <h4>Test Progress</h4>
+                <div id="progress-bar" style="height: 20px; background: #e9ecef; border-radius: 10px; margin: 10px 0;">
+                    <div id="progress-fill" style="height: 100%; width: 0%; background: #39B27A; border-radius: 10px; transition: width 0.3s;"></div>
+                </div>
+                <div id="progress-text">0/0 tests completed</div>
+            </div>
+            <div id="test-results"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3001';
+        let testResults = {
+            total: 0,
+            passed: 0,
+            failed: 0,
+            coverage: 0
+        };
+        
+        // Tab navigation
+        function showPanel(panelId) {
+            // Hide all panels
+            document.querySelectorAll('.panel').forEach(panel => {
+                panel.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected panel and activate tab
+            document.getElementById(panelId + '-panel').classList.add('active');
+            event.target.classList.add('active');
+            
+            // Update test counters
+            updateTestCounters();
+        }
+        
+        // Update test counters in header
+        function updateTestCounters() {
+            document.getElementById('total-tests').textContent = testResults.total;
+            document.getElementById('passed-tests').textContent = testResults.passed;
+            document.getElementById('failed-tests').textContent = testResults.failed;
+            document.getElementById('api-coverage').textContent = testResults.coverage + '%';
+        }
+        
+        // Record test result
+        function recordTestResult(success, apiName) {
+            testResults.total++;
+            if (success) {
+                testResults.passed++;
+            } else {
+                testResults.failed++;
+            }
+            testResults.coverage = Math.round((testResults.passed / testResults.total) * 100);
+            updateTestCounters();
+        }
+        
+        // Display response in panel
+        function displayResponse(panelId, data, success = true) {
+            const responseDiv = document.getElementById(panelId + '-response');
+            let responseText = '';
+            
+            if (typeof data === 'string') {
+                responseText = data;
+            } else {
+                try {
+                    responseText = JSON.stringify(data, null, 2);
+                } catch (e) {
+                    responseText = 'Error parsing response: ' + e.message;
+                }
+            }
+            
+            // Add timestamp and status
+            const timestamp = new Date().toLocaleTimeString();
+            const status = success ? '<span class="status-success">✓ SUCCESS</span>' : '<span class="status-error">✗ FAILED</span>';
+            
+            responseDiv.innerHTML = `<div><strong>${timestamp}</strong> ${status}</div><pre>${responseText}</pre>`;
+            
+            // Scroll to response
+            responseDiv.scrollTop = responseDiv.scrollHeight;
+            
+            return success;
+        }
+        
+        // ============ SYSTEM HEALTH TESTS ============
+        async function testHealth() {
+            try {
+                const response = await fetch(`${API_BASE}/api/health`);
+                const data = await response.json();
+                const success = response.ok;
+                recordTestResult(success, 'Health Check');
+                return displayResponse('system', data, success);
+            } catch (error) {
+                recordTestResult(false, 'Health Check');
+                return displayResponse('system', 'Connection failed: ' + error.message, false);
+            }
+        }
+        
+        async function testApiDocumentation() {
+            try {
+                const response = await fetch(`${API_BASE}/`);
+                const success = response.ok;
+                recordTestResult(success, 'API Documentation');
+                return displayResponse('system', success ? 'API documentation page is accessible' : 'API documentation page not accessible', success);
+            } catch (error) {
+                recordTestResult(false, 'API Documentation');
+                return displayResponse('system', 'Failed to access API documentation: ' + error.message, false);
+            }
+        }
+        
+        async function initTestData() {
+            try {
+                const response = await fetch(`${API_BASE}/api/init-test-data`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                const success = response.ok;
+                recordTestResult(success, 'Init Test Data');
+                return displayResponse('system', data, success);
+            } catch (error) {
+                recordTestResult(false, 'Init Test Data');
+                return displayResponse('system', 'Initialization failed: ' + error.message, false);
+            }
+        }
+        
+        async function clearAllData() {
+            if (!confirm('WARNING: This will delete all patients and appointments. Continue?')) return;
+            
+            try {
+                // Get all patients and delete them (except test patients 1-2)
+                const patientsResponse = await fetch(`${API_BASE}/api/patients`);
+                const patientsData = await patientsResponse.json();
+                
+                if (patientsData.success) {
+                    for (const patient of patientsData.data) {
+                        if (patient.id > 2) { // Don't delete test patients
+                            await fetch(`${API_BASE}/api/patients/${patient.id}`, {
+                                method: 'DELETE'
+                            });
+                        }
+                    }
+                }
+                
+                // Clear appointments (simulated)
+                displayResponse('system', 'Test data cleared (except initial test patients 1-2)', true);
+                recordTestResult(true, 'Clear Data');
+            } catch (error) {
+                recordTestResult(false, 'Clear Data');
+                displayResponse('system', 'Failed to clear data: ' + error.message, false);
+            }
+        }
+        
+        // ============ PATIENT TESTS ============
+        async function getAllPatients() {
+            try {
+                const response = await fetch(`${API_BASE}/api/patients`);
+                const data = await response.json();
+                const success = response.ok;
+                recordTestResult(success, 'Get All Patients');
+                return displayResponse('patients', data, success);
+            } catch (error) {
+                recordTestResult(false, 'Get All Patients');
+                return displayResponse('patients', 'Failed to get patients: ' + error.message, false);
+            }
+        }
+        
+        async function getPatientById() {
+            const patientId = document.getElementById('get-patient-id').value;
+            try {
+                const response = await fetch(`${API_BASE}/api/patients/${patientId}`);
+                const data = await response.json();
+                const success = response.ok;
+                recordTestResult(success, 'Get Patient by ID');
+                return displayResponse('patients', data, success);
+            } catch (error) {
+                recordTestResult(false, 'Get Patient by ID');
+                return displayResponse('patients', 'Failed to get patient: ' + error.message, false);
+            }
+        }
+        
+        async function createPatient() {
+            const patientData = {
+                name: document.getElementById('create-name').value,
+                age: parseInt(document.getElementById('create-age').value),
+                gender: document.getElementById('create-gender').value,
+                condition: document.getElementById('create-condition').value,
+                contact: "138" + Math.floor(Math.random() * 100000000).toString().padStart(8, '0'),
+                address: "Test Address",
+                lastVisit: new Date().toISOString().split('T')[0],
+                status: "stable"
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/patients`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(patientData)
+                });
+                const data = await response.json();
+                const success = response.ok;
+                recordTestResult(success, 'Create Patient');
+                return displayResponse('patients', data, success);
+            } catch (error) {
+                recordTestResult(false, 'Create Patient');
+                return displayResponse('patients', 'Failed to create patient: ' + error.message, false);
+            }
+        }
+        
+        async function updatePatient() {
+            const patientId = document.getElementById('update-patient-id').value;
+            const updateData = {
+                age: parseInt(document.getElementById('update-age').value),
+                status: document.getElementById('update-status').value
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/patients/${patientId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updateData)
+                });
+                const data = await response.json();
+                const success = response.ok;
+                recordTestResult(success, 'Update Patient');
+                return displayResponse('patients', data, success);
+            } catch (error) {
+                recordTestResult(false, 'Update Patient');
+                return displayResponse('patients', 'Failed to update patient: ' + error.message, false);
+            }
+        }
+        
+        async function deletePatient() {
+            const patientId = document.getElementById('delete-patient-id').value;
+            
+            if (patientId <= 2) {
+                alert('Cannot delete test patients (ID 1-2). Use ID 3 or higher.');
+                return;
+            }
+            
+            if (!confirm(`Are you sure you want to delete patient ${patientId}?`)) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/patients/${patientId}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                const success = response.ok;
+                recordTestResult(success, 'Delete Patient');
+                return displayResponse('patients', data, success);
+            } catch (error) {
+                recordTestResult(false, 'Delete Patient');
+                return displayResponse('patients', 'Failed to delete patient: ' + error.message, false);
+            }
+        }
+        
+        async function getPatientsByCondition() {
+            // This is a simulated search - would need backend implementation
+            displayResponse('patients', 'This feature requires backend implementation for patient search/filter', false);
+            recordTestResult(false, 'Patient Search');
+        }
+        
+        async function getElderlyPatients() {
+            // Simulated filter for patients age 60+
+            try {
+                const response = await fetch(`${API_BASE}/api/patients`);
+                const data = await response.json();
+                if (data.success) {
+                    const elderlyPatients = data.data.filter(p => p.age >= 60);
+                    const result = {
+                        success: true,
+                        message: `Found ${elderlyPatients.length} patients age 60+`,
+                        count: elderlyPatients.length,
+                        data: elderlyPatients
+                    };
+                    recordTestResult(true, 'Elderly Patients Filter');
+                    return displayResponse('patients', result, true);
+                }
+            } catch (error) {
+                recordTestResult(false, 'Elderly Patients Filter');
+                return displayResponse('patients', 'Failed to filter patients: ' + error.message, false);
+            }
+        }
+        
+        async function getRecentPatients() {
+            // Simulated filter for recent patients
+            try {
+                const response = await fetch(`${API_BASE}/api/patients`);
+                const data = await response.json();
+                if (data.success) {
+                    const recentPatients = data.data.slice(-3); // Last 3 patients
+                    const result = {
+                        success: true,
+                        message: `Found ${recentPatients.length} most recent patients`,
+                        count: recentPatients.length,
+                        data: recentPatients
+                    };
+                    recordTestResult(true, 'Recent Patients');
+                    return displayResponse('patients', result, true);
+                }
+            } catch (error) {
+                recordTestResult(false, 'Recent Patients');
+                return displayResponse('patients', 'Failed to get recent patients: ' + error.message, false);
+            }
+        }
+        
+        // ============ APPOINTMENT TESTS ============
+        async function getAllAppointments() {
+            try {
+                const response = await fetch(`${API_BASE}/api/appointments`);
+                const data = await response.json();
+                const success = response.ok;
+                recordTestResult(success, 'Get All Appointments');
+                return displayResponse('appointments', data, success);
+            } catch (error) {
+                recordTestResult(false, 'Get All Appointments');
+                return displayResponse('appointments', 'Failed to get appointments: ' + error.message, false);
+            }
+        }
+        
+        async function getAppointmentById() {
+            const appointmentId = document.getElementById('get-appointment-id').value;
+            try {
+                const response = await fetch(`${API_BASE}/api/appointments/${appointmentId}`);
+                const data = await response.json();
+                const success = response.ok;
+                recordTestResult(success, 'Get Appointment by ID');
+                return displayResponse('appointments', data, success);
+            } catch (error) {
+                recordTestResult(false, 'Get Appointment by ID');
+                return displayResponse('appointments', 'Failed to get appointment: ' + error.message, false);
+            }
+        }
+        
+        async function createAppointment() {
+            const appointmentData = {
+                patientId: parseInt(document.getElementById('appointment-patient-id').value),
+                date: document.getElementById('appointment-date').value,
+                time: document.getElementById('appointment-time').value,
+                reason: document.getElementById('appointment-reason').value,
+                patientName: "Patient Name", // This should come from patient data
+                doctorId: 1,
+                doctorName: "Dr. Smith"
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/appointments`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(appointmentData)
+                });
+                const data = await response.json();
+                const success = response.ok;
+                recordTestResult(success, 'Create Appointment');
+                return displayResponse('appointments', data, success);
+            } catch (error) {
+                recordTestResult(false, 'Create Appointment');
+                return displayResponse('appointments', 'Failed to create appointment: ' + error.message, false);
+            }
+        }
+        
+        async function updateAppointmentStatus() {
+            const appointmentId = document.getElementById('status-appointment-id').value;
+            const status = document.getElementById('appointment-status').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/appointments/${appointmentId}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status })
+                });
+                const data = await response.json();
+                const success = response.ok;
+                recordTestResult(success, 'Update Appointment Status');
+                return displayResponse('appointments', data, success);
+            } catch (error) {
+                recordTestResult(false, 'Update Appointment Status');
+                return displayResponse('appointments', 'Failed to update appointment status: ' + error.message, false);
+            }
+        }
+        
+        async function getAppointmentsByPatient() {
+            const patientId = document.getElementById('patient-appointments-id').value;
+            try {
+                const response = await fetch(`${API_BASE}/api/patients/${patientId}/appointments`);
+                const data = await response.json();
+                const success = response.ok;
+                recordTestResult(success, 'Get Appointments by Patient');
+                return displayResponse('appointments', data, success);
+            } catch (error) {
+                recordTestResult(false, 'Get Appointments by Patient');
+                return displayResponse('appointments', 'Failed to get patient appointments: ' + error.message, false);
+            }
+        }
+        
+        async function getAppointmentsByDate() {
+            const date = document.getElementById('date-appointments').value;
+            try {
+                const response = await fetch(`${API_BASE}/api/appointments/date/${date}`);
+                const data = await response.json();
+                const success = response.ok;
+                recordTestResult(success, 'Get Appointments by Date');
+                return displayResponse('appointments', data, success);
+            } catch (error) {
+                recordTestResult(false, 'Get Appointments by Date');
+                return displayResponse('appointments', 'Failed to get daily appointments: ' + error.message, false);
+            }
+        }
+        
+        // ============ AUTHENTICATION TESTS ============
+        async function testLogin() {
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await response.json();
+                const success = response.ok;
+                recordTestResult(success, 'User Login');
+                return displayResponse('auth', data, success);
+            } catch (error) {
+                recordTestResult(false, 'User Login');
+                return displayResponse('auth', 'Login failed: ' + error.message, false);
+            }
+        }
+        
+        async function testInvalidLogin() {
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        email: 'invalid@email.com', 
+                        password: 'wrongpassword' 
+                    })
+                });
+                const data = await response.json();
+                // This should fail (401), so success = false
+                const expectedFailure = response.status === 401;
+                recordTestResult(expectedFailure, 'Invalid Login Test');
+                return displayResponse('auth', data, expectedFailure);
+            } catch (error) {
+                recordTestResult(false, 'Invalid Login Test');
+                return displayResponse('auth', 'Invalid login test failed: ' + error.message, false);
+            }
+        }
+        
+        async function testRegister() {
+            const userData = {
+                email: document.getElementById('register-email').value,
+                password: document.getElementById('register-password').value,
+                name: document.getElementById('register-name').value,
+                role: document.getElementById('register-role').value
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(userData)
+                });
+                const data = await response.json();
+                const success = response.ok;
+                recordTestResult(success, 'User Registration');
+                return displayResponse('auth', data, success);
+            } catch (error) {
+                recordTestResult(false, 'User Registration');
+                return displayResponse('auth', 'Registration failed: ' + error.message, false);
+            }
+        }
+        
+        async function getUserInfo() {
+            // Simulated - would need backend implementation
+            const userId = document.getElementById('user-id').value;
+            displayResponse('auth', `User info endpoint not implemented. Would fetch user ${userId}`, false);
+            recordTestResult(false, 'Get User Info');
+        }
+        
+        async function testAuthFlow() {
+            // Simulate complete auth flow
+            const steps = [
+                { name: 'Login', func: testLogin },
+                { name: 'Create Patient after login', func: createPatient },
+                { name: 'Create Appointment after login', func: createAppointment }
+            ];
+            
+            let allPassed = true;
+            let results = [];
+            
+            for (const step of steps) {
+                try {
+                    const result = await step.func();
+                    results.push(`${step.name}: ${result ? 'PASS' : 'FAIL'}`);
+                    if (!result) allPassed = false;
+                } catch (error) {
+                    results.push(`${step.name}: ERROR - ${error.message}`);
+                    allPassed = false;
+                }
+            }
+            
+            const resultText = `Authentication Flow Test Results:\n${results.join('\n')}`;
+            recordTestResult(allPassed, 'Complete Auth Flow');
+            return displayResponse('auth', resultText, allPassed);
+        }
+        
+        // ============ DOCTORS TESTS ============
+        async function getAllDoctors() {
+            try {
+                const response = await fetch(`${API_BASE}/api/doctors`);
+                const data = await response.json();
+                const success = response.ok;
+                recordTestResult(success, 'Get All Doctors');
+                return displayResponse('doctors', data, success);
+            } catch (error) {
+                recordTestResult(false, 'Get All Doctors');
+                return displayResponse('doctors', 'Failed to get doctors: ' + error.message, false);
+            }
+        }
+        
+        async function getDoctorSchedule() {
+            // Simulated - would need backend implementation
+            const doctorId = document.getElementById('doctor-id').value;
+            const date = document.getElementById('doctor-schedule-date').value;
+            displayResponse('doctors', `Doctor schedule endpoint not implemented. Would fetch schedule for doctor ${doctorId} on ${date}`, false);
+            recordTestResult(false, 'Get Doctor Schedule');
+        }
+        
+        async function assignDoctorToPatient() {
+            // Simulated - would need backend implementation
+            const patientId = document.getElementById('assign-patient-id').value;
+            const doctorId = document.getElementById('assign-doctor-id').value;
+            displayResponse('doctors', `Assign doctor endpoint not implemented. Would assign doctor ${doctorId} to patient ${patientId}`, false);
+            recordTestResult(false, 'Assign Doctor to Patient');
+        }
+        
+        // ============ STATISTICS TESTS ============
+        async function getSystemStats() {
+            try {
+                const response = await fetch(`${API_BASE}/api/stats`);
+                const data = await response.json();
+                const success = response.ok;
+                recordTestResult(success, 'Get System Statistics');
+                return displayResponse('stats', data, success);
+            } catch (error) {
+                recordTestResult(false, 'Get System Statistics');
+                return displayResponse('stats', 'Failed to get statistics: ' + error.message, false);
+            }
+        }
+        
+        async function getPatientStats() {
+            // Simulated - would need backend implementation
+            displayResponse('stats', 'Patient statistics endpoint not implemented', false);
+            recordTestResult(false, 'Get Patient Statistics');
+        }
+        
+        async function getAppointmentStats() {
+            // Simulated - would need backend implementation
+            displayResponse('stats', 'Appointment statistics endpoint not implemented', false);
+            recordTestResult(false, 'Get Appointment Statistics');
+        }
+        
+        async function getPerformanceStats() {
+            // Simulated - would need backend implementation
+            displayResponse('stats', 'Performance statistics endpoint not implemented', false);
+            recordTestResult(false, 'Get Performance Statistics');
+        }
+        
+        // ============ TEST SUITE RUNNER ============
+        async function runQuickTestSuite() {
+            const tests = [
+                { name: 'Health Check', func: testHealth },
+                { name: 'Get All Patients', func: getAllPatients },
+                { name: 'Create Patient', func: createPatient },
+                { name: 'Get All Appointments', func: getAllAppointments },
+                { name: 'User Login', func: testLogin }
+            ];
+            
+            await runTestSuite(tests, 'Quick Test Suite');
+        }
+        
+        async function runCompleteTestSuite() {
+            const tests = [
+                { name: 'Health Check', func: testHealth },
+                { name: 'Init Test Data', func: initTestData },
+                { name: 'Get All Patients', func: getAllPatients },
+                { name: 'Get Patient by ID', func: getPatientById },
+                { name: 'Create Patient', func: createPatient },
+                { name: 'Update Patient', func: updatePatient },
+                { name: 'Get All Appointments', func: getAllAppointments },
+                { name: 'Create Appointment', func: createAppointment },
+                { name: 'Update Appointment Status', func: updateAppointmentStatus },
+                { name: 'User Login', func: testLogin },
+                { name: 'User Registration', func: testRegister },
+                { name: 'Get All Doctors', func: getAllDoctors },
+                { name: 'Get System Statistics', func: getSystemStats }
+            ];
+            
+            await runTestSuite(tests, 'Complete Test Suite');
+        }
+        
+        async function runTestSuite(tests, suiteName) {
+            const resultsDiv = document.getElementById('test-results');
+            const progressFill = document.getElementById('progress-fill');
+            const progressText = document.getElementById('progress-text');
+            const stopOnFailure = document.getElementById('stop-on-failure').checked;
+            const speed = document.getElementById('test-speed').value;
+            
+            let delay = 0;
+            switch(speed) {
+                case 'fast': delay = 0; break;
+                case 'normal': delay = 1000; break;
+                case 'slow': delay = 3000; break;
+            }
+            
+            resultsDiv.innerHTML = `<h4>${suiteName} - Running...</h4>`;
+            let passed = 0;
+            let failed = 0;
+            
+            for (let i = 0; i < tests.length; i++) {
+                const test = tests[i];
+                progressFill.style.width = `${((i) / tests.length) * 100}%`;
+                progressText.textContent = `${i}/${tests.length} tests completed`;
+                
+                // Run test
+                try {
+                    await test.func();
+                    const lastResponse = document.querySelector('.response pre');
+                    const success = lastResponse && !lastResponse.textContent.includes('FAILED') && !lastResponse.textContent.includes('failed:');
+                    
+                    if (success) {
+                        resultsDiv.innerHTML += `<div style="color: #39B27A; margin: 5px 0;">✓ ${test.name}: PASSED</div>`;
+                        passed++;
+                    } else {
+                        resultsDiv.innerHTML += `<div style="color: #e74c3c; margin: 5px 0;">✗ ${test.name}: FAILED</div>`;
+                        failed++;
+                        
+                        if (stopOnFailure) {
+                            resultsDiv.innerHTML += `<div style="color: #e74c3c;">Stopping on first failure as requested.</div>`;
+                            break;
+                        }
+                    }
+                } catch (error) {
+                    resultsDiv.innerHTML += `<div style="color: #e74c3c; margin: 5px 0;">✗ ${test.name}: ERROR - ${error.message}</div>`;
+                    failed++;
+                    
+                    if (stopOnFailure) break;
+                }
+                
+                // Delay between tests
+                if (delay > 0 && i < tests.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+            
+            // Final update
+            progressFill.style.width = '100%';
+            progressText.textContent = `${tests.length}/${tests.length} tests completed`;
+            
+            const summary = `
+                <div style="margin-top: 20px; padding: 15px; background: ${passed === tests.length ? '#d4edda' : '#f8d7da'}; border-radius: 8px;">
+                    <h4>${suiteName} - Complete</h4>
+                    <div>Total Tests: ${tests.length}</div>
+                    <div style="color: #39B27A;">Passed: ${passed}</div>
+                    <div style="color: ${failed > 0 ? '#e74c3c' : '#39B27A'};">Failed: ${failed}</div>
+                    <div>Success Rate: ${Math.round((passed / tests.length) * 100)}%</div>
+                </div>
+            `;
+            
+            resultsDiv.innerHTML += summary;
+            
+            // Scroll to results
+            document.getElementById('suite-response').scrollTop = document.getElementById('suite-response').scrollHeight;
+        }
+        
+        async function runStressTest() {
+            if (!confirm('This will create multiple patients and appointments for stress testing. Continue?')) return;
+            
+            const resultsDiv = document.getElementById('test-results');
+            resultsDiv.innerHTML = '<h4>Stress Test - Running...</h4>';
+            
+            let created = 0;
+            let errors = 0;
+            
+            // Create multiple patients
+            for (let i = 0; i < 10; i++) {
+                try {
+                    const patientData = {
+                        name: `Stress Test Patient ${i}`,
+                        age: 50 + i,
+                        gender: i % 2 === 0 ? 'male' : 'female',
+                        condition: 'Stress Test',
+                        contact: `138${i.toString().padStart(8, '0')}`,
+                        address: 'Test Address',
+                        lastVisit: new Date().toISOString().split('T')[0],
+                        status: 'stable'
+                    };
+                    
+                    const response = await fetch(`${API_BASE}/api/patients`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(patientData)
+                    });
+                    
+                    if (response.ok) {
+                        created++;
+                        resultsDiv.innerHTML += `<div style="color: #39B27A;">Created patient ${i+1}</div>`;
+                    } else {
+                        errors++;
+                        resultsDiv.innerHTML += `<div style="color: #e74c3c;">Failed to create patient ${i+1}</div>`;
+                    }
+                    
+                    // Small delay
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                } catch (error) {
+                    errors++;
+                    resultsDiv.innerHTML += `<div style="color: #e74c3c;">Error creating patient ${i+1}: ${error.message}</div>`;
+                }
+            }
+            
+            const summary = `
+                <div style="margin-top: 20px; padding: 15px; background: ${errors === 0 ? '#d4edda' : '#f8d7da'}; border-radius: 8px;">
+                    <h4>Stress Test - Complete</h4>
+                    <div>Patients Created: ${created}</div>
+                    <div style="color: ${errors > 0 ? '#e74c3c' : '#39B27A'};">Errors: ${errors}</div>
+                    <div>Server handled ${created + errors} requests</div>
+                </div>
+            `;
+            
+            resultsDiv.innerHTML += summary;
+        }
+        
+        // Initialize by testing health
+        testHealth();
+    </script>
+</body>
+</html>
