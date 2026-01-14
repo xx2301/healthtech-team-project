@@ -224,7 +224,6 @@
         <button class="tab" onclick="showPanel('run-all')">Run All Tests</button>
     </div>
 
-    <!-- System Health Panel -->
     <div id="system-panel" class="panel active">
         <h2>System Health & Setup</h2>
         
@@ -247,7 +246,6 @@
         <div class="response" id="system-response">System test results will appear here...</div>
     </div>
 
-    <!-- Patient Management Panel -->
     <div id="patients-panel" class="panel">
         <h2>Patient Management System</h2>
         
@@ -343,7 +341,6 @@
         <div class="response" id="patients-response">Patient operation results...</div>
     </div>
 
-    <!-- Appointment Management Panel -->
     <div id="appointments-panel" class="panel">
         <h2>Appointment Management System</h2>
         
@@ -430,7 +427,6 @@
         <div class="response" id="appointments-response">Appointment operation results...</div>
     </div>
 
-    <!-- Authentication Panel -->
     <div id="auth-panel" class="panel">
         <h2>Authentication & Authorization</h2>
         
@@ -497,7 +493,6 @@
         <div class="response" id="auth-response">Authentication results...</div>
     </div>
 
-    <!-- Doctors & Staff Panel -->
     <div id="doctors-panel" class="panel">
         <h2>Doctors & Medical Staff</h2>
         
@@ -541,7 +536,6 @@
         <div class="response" id="doctors-response">Doctors & staff results...</div>
     </div>
 
-    <!-- Statistics Panel -->
     <div id="stats-panel" class="panel">
         <h2>System Statistics & Analytics</h2>
         
@@ -578,7 +572,6 @@
         <div class="response" id="stats-response">Statistics results...</div>
     </div>
 
-    <!-- Run All Tests Panel -->
     <div id="run-all-panel" class="panel">
         <h2>Complete Test Suite Runner</h2>
         
@@ -628,27 +621,21 @@
             coverage: 0
         };
         
-        // Tab navigation
         function showPanel(panelId) {
-            // Hide all panels
             document.querySelectorAll('.panel').forEach(panel => {
                 panel.classList.remove('active');
             });
             
-            // Remove active class from all tabs
             document.querySelectorAll('.tab').forEach(tab => {
                 tab.classList.remove('active');
             });
             
-            // Show selected panel and activate tab
             document.getElementById(panelId + '-panel').classList.add('active');
             event.target.classList.add('active');
             
-            // Update test counters
             updateTestCounters();
         }
         
-        // Update test counters in header
         function updateTestCounters() {
             document.getElementById('total-tests').textContent = testResults.total;
             document.getElementById('passed-tests').textContent = testResults.passed;
@@ -656,7 +643,6 @@
             document.getElementById('api-coverage').textContent = testResults.coverage + '%';
         }
         
-        // Record test result
         function recordTestResult(success, apiName) {
             testResults.total++;
             if (success) {
@@ -668,7 +654,6 @@
             updateTestCounters();
         }
         
-        // Display response in panel
         function displayResponse(panelId, data, success = true) {
             const responseDiv = document.getElementById(panelId + '-response');
             let responseText = '';
@@ -683,19 +668,16 @@
                 }
             }
             
-            // Add timestamp and status
             const timestamp = new Date().toLocaleTimeString();
             const status = success ? '<span class="status-success">✓ SUCCESS</span>' : '<span class="status-error">✗ FAILED</span>';
             
             responseDiv.innerHTML = `<div><strong>${timestamp}</strong> ${status}</div><pre>${responseText}</pre>`;
             
-            // Scroll to response
             responseDiv.scrollTop = responseDiv.scrollHeight;
             
             return success;
         }
         
-        // ============ SYSTEM HEALTH TESTS ============
         async function testHealth() {
             try {
                 const response = await fetch(`${API_BASE}/api/health`);
@@ -740,13 +722,12 @@
             if (!confirm('WARNING: This will delete all patients and appointments. Continue?')) return;
             
             try {
-                // Get all patients and delete them (except test patients 1-2)
                 const patientsResponse = await fetch(`${API_BASE}/api/patients`);
                 const patientsData = await patientsResponse.json();
                 
                 if (patientsData.success) {
                     for (const patient of patientsData.data) {
-                        if (patient.id > 2) { // Don't delete test patients
+                        if (patient.id > 2) { //not to delete two test patients
                             await fetch(`${API_BASE}/api/patients/${patient.id}`, {
                                 method: 'DELETE'
                             });
@@ -754,7 +735,6 @@
                     }
                 }
                 
-                // Clear appointments (simulated)
                 displayResponse('system', 'Test data cleared (except initial test patients 1-2)', true);
                 recordTestResult(true, 'Clear Data');
             } catch (error) {
@@ -763,7 +743,6 @@
             }
         }
         
-        // ============ PATIENT TESTS ============
         async function getAllPatients() {
             try {
                 const response = await fetch(`${API_BASE}/api/patients`);
@@ -867,13 +846,11 @@
         }
         
         async function getPatientsByCondition() {
-            // This is a simulated search - would need backend implementation
             displayResponse('patients', 'This feature requires backend implementation for patient search/filter', false);
             recordTestResult(false, 'Patient Search');
         }
         
         async function getElderlyPatients() {
-            // Simulated filter for patients age 60+
             try {
                 const response = await fetch(`${API_BASE}/api/patients`);
                 const data = await response.json();
@@ -895,12 +872,11 @@
         }
         
         async function getRecentPatients() {
-            // Simulated filter for recent patients
             try {
                 const response = await fetch(`${API_BASE}/api/patients`);
                 const data = await response.json();
                 if (data.success) {
-                    const recentPatients = data.data.slice(-3); // Last 3 patients
+                    const recentPatients = data.data.slice(-3);
                     const result = {
                         success: true,
                         message: `Found ${recentPatients.length} most recent patients`,
@@ -916,7 +892,6 @@
             }
         }
         
-        // ============ APPOINTMENT TESTS ============
         async function getAllAppointments() {
             try {
                 const response = await fetch(`${API_BASE}/api/appointments`);
@@ -950,7 +925,7 @@
                 date: document.getElementById('appointment-date').value,
                 time: document.getElementById('appointment-time').value,
                 reason: document.getElementById('appointment-reason').value,
-                patientName: "Patient Name", // This should come from patient data
+                patientName: "Patient Name",
                 doctorId: 1,
                 doctorName: "Dr. Smith"
             };
@@ -1019,7 +994,6 @@
             }
         }
         
-        // ============ AUTHENTICATION TESTS ============
         async function testLogin() {
             const email = document.getElementById('login-email').value;
             const password = document.getElementById('login-password').value;
@@ -1051,8 +1025,8 @@
                     })
                 });
                 const data = await response.json();
-                // This should fail (401), so success = false
-                const expectedFailure = response.status === 401;
+
+                const expectedFailure = response.status === 401; // this should failed so = success if 401
                 recordTestResult(expectedFailure, 'Invalid Login Test');
                 return displayResponse('auth', data, expectedFailure);
             } catch (error) {
@@ -1086,14 +1060,12 @@
         }
         
         async function getUserInfo() {
-            // Simulated - would need backend implementation
             const userId = document.getElementById('user-id').value;
             displayResponse('auth', `User info endpoint not implemented. Would fetch user ${userId}`, false);
             recordTestResult(false, 'Get User Info');
         }
         
         async function testAuthFlow() {
-            // Simulate complete auth flow
             const steps = [
                 { name: 'Login', func: testLogin },
                 { name: 'Create Patient after login', func: createPatient },
@@ -1119,7 +1091,6 @@
             return displayResponse('auth', resultText, allPassed);
         }
         
-        // ============ DOCTORS TESTS ============
         async function getAllDoctors() {
             try {
                 const response = await fetch(`${API_BASE}/api/doctors`);
@@ -1134,7 +1105,6 @@
         }
         
         async function getDoctorSchedule() {
-            // Simulated - would need backend implementation
             const doctorId = document.getElementById('doctor-id').value;
             const date = document.getElementById('doctor-schedule-date').value;
             displayResponse('doctors', `Doctor schedule endpoint not implemented. Would fetch schedule for doctor ${doctorId} on ${date}`, false);
@@ -1142,14 +1112,12 @@
         }
         
         async function assignDoctorToPatient() {
-            // Simulated - would need backend implementation
             const patientId = document.getElementById('assign-patient-id').value;
             const doctorId = document.getElementById('assign-doctor-id').value;
             displayResponse('doctors', `Assign doctor endpoint not implemented. Would assign doctor ${doctorId} to patient ${patientId}`, false);
             recordTestResult(false, 'Assign Doctor to Patient');
         }
         
-        // ============ STATISTICS TESTS ============
         async function getSystemStats() {
             try {
                 const response = await fetch(`${API_BASE}/api/stats`);
@@ -1164,24 +1132,20 @@
         }
         
         async function getPatientStats() {
-            // Simulated - would need backend implementation
             displayResponse('stats', 'Patient statistics endpoint not implemented', false);
             recordTestResult(false, 'Get Patient Statistics');
         }
         
         async function getAppointmentStats() {
-            // Simulated - would need backend implementation
             displayResponse('stats', 'Appointment statistics endpoint not implemented', false);
             recordTestResult(false, 'Get Appointment Statistics');
         }
         
         async function getPerformanceStats() {
-            // Simulated - would need backend implementation
             displayResponse('stats', 'Performance statistics endpoint not implemented', false);
             recordTestResult(false, 'Get Performance Statistics');
         }
         
-        // ============ TEST SUITE RUNNER ============
         async function runQuickTestSuite() {
             const tests = [
                 { name: 'Health Check', func: testHealth },
@@ -1237,7 +1201,6 @@
                 progressFill.style.width = `${((i) / tests.length) * 100}%`;
                 progressText.textContent = `${i}/${tests.length} tests completed`;
                 
-                // Run test
                 try {
                     await test.func();
                     const lastResponse = document.querySelector('.response pre');
@@ -1262,13 +1225,11 @@
                     if (stopOnFailure) break;
                 }
                 
-                // Delay between tests
                 if (delay > 0 && i < tests.length - 1) {
                     await new Promise(resolve => setTimeout(resolve, delay));
                 }
             }
             
-            // Final update
             progressFill.style.width = '100%';
             progressText.textContent = `${tests.length}/${tests.length} tests completed`;
             
@@ -1284,7 +1245,6 @@
             
             resultsDiv.innerHTML += summary;
             
-            // Scroll to results
             document.getElementById('suite-response').scrollTop = document.getElementById('suite-response').scrollHeight;
         }
         
@@ -1297,7 +1257,6 @@
             let created = 0;
             let errors = 0;
             
-            // Create multiple patients
             for (let i = 0; i < 10; i++) {
                 try {
                     const patientData = {
@@ -1325,7 +1284,6 @@
                         resultsDiv.innerHTML += `<div style="color: #e74c3c;">Failed to create patient ${i+1}</div>`;
                     }
                     
-                    // Small delay
                     await new Promise(resolve => setTimeout(resolve, 200));
                 } catch (error) {
                     errors++;
@@ -1345,7 +1303,6 @@
             resultsDiv.innerHTML += summary;
         }
         
-        // Initialize by testing health
         testHealth();
     </script>
 </body>
