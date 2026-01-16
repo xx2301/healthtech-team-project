@@ -1,1 +1,81 @@
-/* Frontend teammate: Please add your CSS styles here */
+body{
+    background-color:#daf9dc;
+     box-sizing: border-box;
+}
+.box{
+
+    width: 120px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#d1{
+    background-color:#39B27A ;
+    border-radius: 5px;
+    font-size: 1em;
+    color:white;
+     padding: 5px;
+}
+#heading{
+    font-size: 1em;
+
+}
+.Login{
+    background-color: white;
+    color:rgb(187, 187, 187);
+    border-radius: 8px;
+    padding: 10px;
+    line-height: 1px;
+}
+.wrapper{
+    height: 60px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    
+    
+}
+
+input{
+    padding: 10px;
+    border: none;
+    align-items: center;
+    
+}
+.cb{
+     align-items: center;
+    
+}
+#forget{
+    color: #4aa179;
+    background-color: transparent;
+    border: none;
+    
+}
+#forget:hover{
+     color: #306f51
+}
+#submit:hover{
+    background-color:#2d8a5e;
+    color: white;
+
+}
+#buttonWrap{
+    
+    display:flex;
+    justify-content: flex-end;
+}
+#submit{
+    background-color:#39B27A;
+    margin: 10px;
+    padding: 10px;
+    display: block;
+    width: 90%;
+    font-size: 1em;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    
+}
