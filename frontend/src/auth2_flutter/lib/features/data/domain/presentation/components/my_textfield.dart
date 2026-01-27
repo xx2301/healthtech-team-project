@@ -15,21 +15,22 @@ class MyTextfield extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TextField(
-      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+      style: TextStyle(
+        color: Colors.black,
+        fontSize: 15,
+        fontWeight: FontWeight.bold,
+      ),
       controller: controller,
       obscureText: obsecureText,
       decoration: InputDecoration(
-        enabledBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: Theme.of(context).colorScheme.tertiary),
-          borderRadius: BorderRadius.circular(10)
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
         ),
 
-        focusedBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: Theme.of(context).colorScheme.primary),
-        ),
         hintText: hintText,
-        hintStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
-        fillColor: Theme.of(context).colorScheme.secondary,
+        hintStyle: TextStyle(color: Colors.black38),
+        fillColor: Colors.white,
         filled: true,
       ),
     );

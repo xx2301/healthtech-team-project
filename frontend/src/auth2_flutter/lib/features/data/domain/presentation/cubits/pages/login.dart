@@ -3,8 +3,6 @@
 //will be redirected to make account if there is no account
 
 import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
-
-import '../../components/google_sign_in_button.dart';
 import '../../components/my_button.dart';
 import '../../components/my_textfield.dart';
 import '../auth_cubit.dart';
@@ -48,6 +46,7 @@ class _LoginPageState extends State<LoginPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: Colors.green.shade100,
         title: Text("Forgot Password"),
         content: MyTextfield(
           controller: emailController,
@@ -102,7 +101,7 @@ class _LoginPageState extends State<LoginPage> {
                     style: TextStyle(
                       fontSize: 30,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: Colors.black,
                     ),
                   ),
                 ],
@@ -110,17 +109,40 @@ class _LoginPageState extends State<LoginPage> {
               const SizedBox(height: 10),
 
               //email textfield
+              Row(
+                children: [
+                  Text(
+                    "Email",
+                    style: TextStyle(fontSize: 20, color: Colors.black),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 5),
+
               MyTextfield(
                 controller: emailController,
-                hintText: "Email",
+                hintText: "limxt@gmail.com",
                 obsecureText: false,
               ),
 
               const SizedBox(height: 15),
+
               //password textfield
+              Row(
+                children: [
+                  Text(
+                    "Password",
+                    style: TextStyle(fontSize: 20, color: Colors.black),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 5),
+
               MyTextfield(
                 controller: passwordController,
-                hintText: "Password",
+                hintText: "Apple67",
                 obsecureText: true,
               ),
               const SizedBox(height: 10),
@@ -134,7 +156,7 @@ class _LoginPageState extends State<LoginPage> {
                     child: Text(
                       "Forgot Password?",
                       style: TextStyle(
-                        color: Colors.white,
+                        color: Colors.green,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -152,14 +174,14 @@ class _LoginPageState extends State<LoginPage> {
                 children: [
                   Text(
                     "Don't have an account? ",
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: Colors.black),
                   ),
                   GestureDetector(
                     onTap: widget.togglePages,
                     child: Text(
                       "Register Now",
                       style: TextStyle(
-                        color: Colors.white,
+                        color: Colors.green,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -168,7 +190,7 @@ class _LoginPageState extends State<LoginPage> {
               ),
 
               //google sign in
-             /* Row(
+              /* Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [MyGoogleSignInButton()],
                   ),*/
