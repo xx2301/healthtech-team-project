@@ -2,13 +2,12 @@ import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubi
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-class DefaultAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const DefaultAppBar({super.key});
+class Appbar2 extends StatelessWidget implements PreferredSizeWidget {
+  const Appbar2({super.key});
 
   @override
   Widget build(BuildContext context) {
     return AppBar(
-      iconTheme: IconThemeData(color: Colors.white),
         title: Row(
           children: [
             Icon(Icons.health_and_safety, color: Colors.white),
@@ -23,20 +22,9 @@ class DefaultAppBar extends StatelessWidget implements PreferredSizeWidget {
           ],
         ),
         backgroundColor: Colors.green[500],
-
-        actions: [
-          // logout button
-          IconButton(
-            onPressed: () {
-              final authCubit = context.read<AuthCubit>();
-              authCubit.logout();
-            },
-            icon: const Icon(Icons.logout),
-          ),
-        ]
-      );
+      )
+    ;
   }
-  
   @override
   // TODO: implement preferredSize
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);

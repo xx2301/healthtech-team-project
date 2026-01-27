@@ -2,7 +2,7 @@
 
 //will be redirected to make account if there is no account
 
-import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/components/appbar2.dart';
 import '../../components/my_button.dart';
 import '../../components/my_textfield.dart';
 import '../auth_cubit.dart';
@@ -86,7 +86,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: DefaultAppBar(),
+      appBar: Appbar2(),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(15.0),

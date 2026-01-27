@@ -1,4 +1,5 @@
 import 'package:auth2_flutter/features/data/domain/entities/app_user.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
 
 import '../../../data/domain/presentation/cubits/auth_cubit.dart';
 import 'package:flutter/material.dart';
@@ -15,19 +16,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text("HOME", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),),
-        actions: [
-          // logout button
-          IconButton(
-            onPressed: () {
-              final authCubit = context.read<AuthCubit>();
-              authCubit.logout();
-            },
-            icon: const Icon(Icons.logout, color: Colors.white,),
-          ),
-        ],
-      ),
+      appBar: DefaultAppBar(),
       drawer: Drawer(
         child: Column(
           children: [
