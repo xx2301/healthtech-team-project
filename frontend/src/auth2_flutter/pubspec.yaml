@@ -38,6 +38,7 @@ dependencies:
   firebase_auth: ^6.1.4
   flutter_bloc: ^9.1.1
   google_sign_in: ^7.2.0
+  percent_indicator: ^4.2.5
 
 dev_dependencies:
   flutter_test:

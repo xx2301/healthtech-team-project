@@ -1,5 +1,6 @@
 import 'package:auth2_flutter/features/data/domain/entities/app_user.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/components/health_cards.dart';
 
 import '../../../data/domain/presentation/cubits/auth_cubit.dart';
 import 'package:flutter/material.dart';
@@ -64,25 +65,90 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
-      body: Column(children: [
-        Text("Health Tech"),
-        Row(
-          children: [
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(15.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Health Tech"),
+              Row(
+                children: [
+                  Text("Good afternoon, "),
 
-            Text("Good afternoon"),
+                  // app user name
+                  Text("Lim"),
+                ],
+              ),
 
-            // app user name
-            Text("Lim")
+              const SizedBox(height: 10),
 
-          ],
+              //health details
+              Row(
+                children: [
+                  Text("Health details"),
+                  const SizedBox(width: 10),
+                  Text("Health details"),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
+              //weather
+              Text("Weather is Sunny, perfect for a walk!"),
+
+              const SizedBox(height: 20),
+
+              //progress header
+              Text("Today’s Progress: 75%"),
+
+              //steps progress bar
+              LinearProgressIndicator(
+                value: 0.75,
+                valueColor: AlwaysStoppedAnimation(Colors.black),
+              ),
+
+              const SizedBox(height: 10),
+
+              //progress report
+              Text("Great! You’re close to hitting your step goal."),
+
+              const SizedBox(height: 20),
+
+              //Health Grid
+              Text("My Health"),
+
+              GridView.count(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                shrinkWrap: true, // let it size to content
+                physics:
+                    const NeverScrollableScrollPhysics(), // disable its own scrolling
+
+                //health cards    
+                children: const [
+
+                  //steps card
+                   HealthCards(title: "Steps", icon: Icons.directions_walk, hasProgressCircle: true, value: 2000, unit: 'steps', progress: 0.7,),
+
+                  //heart card
+                  HealthCards(title: "Heart Rate", icon: Icons.monitor_heart, hasProgressCircle: false, value: 72, unit: 'bpm',),
+
+                   //calories card
+                  HealthCards(title: "Calories", icon: Icons.local_fire_department, hasProgressCircle: true, value: 342, unit: 'Kcal', progress: 0.5,),
+
+                   //slee card
+                  HealthCards(title: "Sleep", icon: Icons.bedtime, hasProgressCircle: true, value: 8, unit: 'hours', progress: 0.2,),
+
+
+                 
+                ],
+              ),
+            ],
+          ),
         ),
-        Row(
-          children: [
-            Text("Health details")
-          ],
-        )
-
-      ],)
+      ),
     );
   }
 }
