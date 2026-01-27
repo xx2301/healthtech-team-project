@@ -116,7 +116,10 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(height: 20),
 
               //Health Grid
-              Text("My Health"),
+              Text(
+                "My Health",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+              ),
 
               GridView.count(
                 crossAxisCount: 2,
@@ -125,26 +128,75 @@ class _HomePageState extends State<HomePage> {
                 shrinkWrap: true, // let it size to content
                 physics:
                     const NeverScrollableScrollPhysics(), // disable its own scrolling
-
-                //health cards    
-                children: const [
-
+                //health cards
+                children: [
                   //steps card
-                   HealthCards(title: "Steps", icon: Icons.directions_walk, hasProgressCircle: true, value: 2000, unit: 'steps', progress: 0.7,),
+                  HealthCards(
+                    title: "Steps",
+                    icon: Icons.directions_walk,
+                    hasProgressCircle: true,
+                    value: 2000,
+                    unit: 'steps',
+                    progress: 0.7,
+                  ),
 
                   //heart card
-                  HealthCards(title: "Heart Rate", icon: Icons.monitor_heart, hasProgressCircle: false, value: 72, unit: 'bpm',),
+                  HealthCards(
+                    title: "Heart Rate",
+                    icon: Icons.monitor_heart,
+                    hasProgressCircle: false,
+                    value: 72,
+                    unit: 'bpm',
+                  ),
 
-                   //calories card
-                  HealthCards(title: "Calories", icon: Icons.local_fire_department, hasProgressCircle: true, value: 342, unit: 'Kcal', progress: 0.5,),
+                  //calories card
+                  HealthCards(
+                    title: "Calories",
+                    icon: Icons.local_fire_department,
+                    hasProgressCircle: true,
+                    value: 342,
+                    unit: 'Kcal',
+                    progress: 0.5,
+                  ),
 
-                   //slee card
-                  HealthCards(title: "Sleep", icon: Icons.bedtime, hasProgressCircle: true, value: 8, unit: 'hours', progress: 0.2,),
-
-
-                 
+                  //slee card
+                  HealthCards(
+                    title: "Sleep",
+                    icon: Icons.bedtime,
+                    hasProgressCircle: true,
+                    value: 8,
+                    unit: 'hours',
+                    progress: 0.2,
+                  ),
                 ],
               ),
+              const SizedBox(height: 20),
+
+              //Progress Grid
+              Text(
+                "My Progress",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+              ),
+
+              const SizedBox(height: 10),
+
+              Container(
+                height: 100,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+              ),
+
+                const SizedBox(height: 20),
             ],
           ),
         ),
