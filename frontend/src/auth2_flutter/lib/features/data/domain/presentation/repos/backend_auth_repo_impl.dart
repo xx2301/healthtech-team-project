@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../entities/app_user.dart';
-import 'auth_repo.dart';
+import '../../repos/auth_repo.dart';
 
 class BackendAuthRepoImpl implements AuthRepo {
   String get baseUrl {
