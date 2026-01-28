@@ -1,4 +1,5 @@
 import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/components/info_cards.dart';
 import 'package:flutter/material.dart';
 
 class ReportPage extends StatefulWidget {
@@ -12,8 +13,8 @@ class _ReportPageState extends State<ReportPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-       appBar: DefaultAppBar(),
-       drawer: Drawer(
+      appBar: DefaultAppBar(),
+      drawer: Drawer(
         child: Column(
           children: [
             // common to place a drawer header here
@@ -59,7 +60,35 @@ class _ReportPageState extends State<ReportPage> {
             ),
           ],
         ),
-      )
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(15.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Health Report", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),),
+              Text("Your health data overview and analysis", style: TextStyle(color: Colors.grey[700], fontSize: 15),),
+
+              SizedBox(
+                height: 150,
+                child: GridView.count(crossAxisCount: 
+                1, 
+                scrollDirection: Axis.horizontal,
+                mainAxisSpacing: 12,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  InfoCards(title:"Report Period", subtitle: "Nov 12 - Nov 19"),
+                
+                  InfoCards(title:"Generated On", subtitle: "Nov 19"),
+                
+                  InfoCards(title:"Goals Acheived", subtitle: "3/7 Days")
+                ],),
+              )
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
