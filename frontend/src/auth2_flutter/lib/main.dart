@@ -45,7 +45,7 @@ class MyApp extends StatelessWidget {
         },
 
         //bloc consumer - auth
-        home: HomePage()
+        home: ReportPage()
         
         /*
         BlocConsumer<AuthCubit, AuthState>(
