@@ -5,18 +5,15 @@ import 'package:auth2_flutter/features/settings/pages/settings_page.dart';
 import 'features/data/domain/presentation/components/loading.dart';
 import 'features/data/domain/presentation/cubits/auth_cubit.dart';
 import 'features/data/domain/presentation/cubits/auth_states.dart';
-import 'features/data/domain/presentation/cubits/pages/auth_page.dart';
-import 'features/data/firebase_auth_repo.dart';
+import 'features/data/domain/presentation/pages/auth_page.dart';
 import 'features/home/presentation/pages/home_page.dart';
-import 'package:auth2_flutter/firebase_options.dart';
 import 'themes/main_theme.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'features/data/domain/presentation/repos/backend_auth_repo_impl.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(MyApp());
 }
 
@@ -24,7 +21,7 @@ class MyApp extends StatelessWidget {
   MyApp({super.key});
 
   //auth repo
-  final firebaseAuthRepo = FirebaseAuthRepo();
+  final authRepo = BackendAuthRepoImpl();
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +31,7 @@ class MyApp extends StatelessWidget {
         //auth cubit
         BlocProvider<AuthCubit>(
           create: (context) =>
-              AuthCubit(authRepo: firebaseAuthRepo)..checkAuth(),
+              AuthCubit(authRepo: authRepo)..checkAuth(),
         ),
       ],
 
