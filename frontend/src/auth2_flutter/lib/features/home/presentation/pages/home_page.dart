@@ -172,7 +172,7 @@ class _HomePageState extends State<HomePage> {
               ),
               const SizedBox(height: 20),
 
-              //Progress Grid
+              // Progress Grid
               Text(
                 "My Progress",
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
@@ -180,8 +180,8 @@ class _HomePageState extends State<HomePage> {
 
               const SizedBox(height: 10),
 
+              // Progress cards
               Container(
-                height: 100,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -194,9 +194,252 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ],
                 ),
+                child: Row(
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Your Weekly Goals",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+
+                        Text(
+                          "Last 7 days",
+                          style: TextStyle(color: Colors.grey, fontSize: 10),
+                          textAlign: TextAlign.left,
+                        ),
+
+                        Center(
+                          child: Column(
+                            children: [
+                              Text(
+                                "3/7",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 20,
+                                ),
+                              ),
+                              Text(
+                                "Achieved",
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 10,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    SizedBox(width: 12),
+
+                    Row(
+                      children: [
+                        Column(
+                          children: [
+                            Icon(Icons.check, color: Colors.green),
+                            Text("Mon", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+
+                        SizedBox(width: 5),
+
+                        Column(
+                          children: [
+                            Icon(Icons.check, color: Colors.green),
+                            Text("Tues", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+
+                        SizedBox(width: 5),
+
+                        Column(
+                          children: [
+                            Icon(Icons.check, color: Colors.green),
+                            Text("Wed", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+
+                        SizedBox(width: 5),
+
+                        Column(
+                          children: [
+                            Icon(
+                              Icons.watch_later_outlined,
+                              color: Colors.yellow,
+                            ),
+                            Text("Thurs", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+
+                        SizedBox(width: 5),
+
+                        Column(
+                          children: [
+                            Icon(
+                              Icons.watch_later_outlined,
+                              color: Colors.yellow,
+                            ),
+                            Text("Fri", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+
+                        SizedBox(width: 5),
+
+                        Column(
+                          children: [
+                            Icon(Icons.check, color: Colors.green),
+                            Text("Sat", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+
+                        SizedBox(width: 5),
+
+                        Column(
+                          children: [
+                            Icon(Icons.close, color: Colors.red),
+                            Text("Sun", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
 
-                const SizedBox(height: 20),
+              const SizedBox(height: 20),
+
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Your Weekly Goals",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+
+                        Text(
+                          "Last 7 days",
+                          style: TextStyle(color: Colors.grey, fontSize: 10),
+                          textAlign: TextAlign.left,
+                        ),
+
+                        Center(
+                          child: Column(
+                            children: [
+                              Text(
+                                "3/7",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 20,
+                                ),
+                              ),
+                              Text(
+                                "Achieved",
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 10,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    SizedBox(width: 12),
+
+                    Row(
+                      children: [
+                        Column(
+                          children: [
+                            Icon(Icons.check, color: Colors.green),
+                            Text("Mon", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+
+                        SizedBox(width: 5),
+
+                        Column(
+                          children: [
+                            Icon(Icons.check, color: Colors.green),
+                            Text("Tues", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+
+                        SizedBox(width: 5),
+
+                        Column(
+                          children: [
+                            Icon(Icons.check, color: Colors.green),
+                            Text("Wed", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+
+                        SizedBox(width: 5),
+
+                        Column(
+                          children: [
+                            Icon(
+                              Icons.watch_later_outlined,
+                              color: Colors.yellow,
+                            ),
+                            Text("Thurs", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+
+                        SizedBox(width: 5),
+
+                        Column(
+                          children: [
+                            Icon(
+                              Icons.watch_later_outlined,
+                              color: Colors.yellow,
+                            ),
+                            Text("Fri", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+
+                        SizedBox(width: 5),
+
+                        Column(
+                          children: [
+                            Icon(Icons.check, color: Colors.green),
+                            Text("Sat", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+
+                        SizedBox(width: 5),
+
+                        Column(
+                          children: [
+                            Icon(Icons.close, color: Colors.red),
+                            Text("Sun", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
