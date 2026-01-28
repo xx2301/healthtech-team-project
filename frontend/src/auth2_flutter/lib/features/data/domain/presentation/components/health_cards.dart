@@ -57,33 +57,36 @@ class _HealthCardsState extends State<HealthCards> {
           const SizedBox(height: 12),
 
           // progress circle (only if enabled)
-          if (widget.hasProgressCircle)
-            Center(
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  SizedBox(
-                    width: 70,
-                    height: 70,
-                    child: CircularProgressIndicator(
-                      value: widget.progress ?? 0.0,
-                      strokeWidth: 6,
-                      backgroundColor: Colors.grey[200],
-                      valueColor: AlwaysStoppedAnimation(Colors.green),
-                    ),
-                  ),
-                  Text(
-                    widget.value.toString(), // 👈 title used as center text
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                
-                ],
-              ),
-            ),
+         Center(
+  child: Stack(
+    alignment: Alignment.center,
+    children: [
+      SizedBox(
+        width: 100,
+        height: 100,
+        child: widget.hasProgressCircle
+            ? CircularProgressIndicator(
+                value: widget.progress ?? 0.0,
+                strokeWidth: 6,
+                backgroundColor: Colors.grey[200],
+                valueColor:
+                    const AlwaysStoppedAnimation(Colors.green),
+              )
+            : null, // 👈 no circle when false
+      ),
+      Text(
+        '${widget.value} ${widget.unit}',
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    ],
+  ),
+)
+
+
         ],
       ),
     );

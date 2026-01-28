@@ -173,14 +173,28 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(height: 20),
 
               // Progress Grid
-              Text(
-                "My Progress",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "My Progress",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+                  ),
+
+                  // view more -> report page
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/reportpage');
+                    },
+                    child: Text("View All >"),
+                  ),
+                ],
               ),
 
               const SizedBox(height: 10),
 
-              // Progress cards
+              // Goal card
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -194,7 +208,9 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ],
                 ),
+
                 child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -220,6 +236,7 @@ class _HomePageState extends State<HomePage> {
                                   fontSize: 20,
                                 ),
                               ),
+
                               Text(
                                 "Achieved",
                                 style: TextStyle(
@@ -235,6 +252,8 @@ class _HomePageState extends State<HomePage> {
                     ),
 
                     SizedBox(width: 12),
+
+                    // week goal progression
 
                     Row(
                       children: [
@@ -312,6 +331,8 @@ class _HomePageState extends State<HomePage> {
 
               const SizedBox(height: 20),
 
+              // sleep progression card
+
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -326,12 +347,13 @@ class _HomePageState extends State<HomePage> {
                   ],
                 ),
                 child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Your Weekly Goals",
+                          "Sleep Duration",
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
 
@@ -366,6 +388,8 @@ class _HomePageState extends State<HomePage> {
                     ),
 
                     SizedBox(width: 12),
+
+                    // sleep progress per day 
 
                     Row(
                       children: [
