@@ -159,8 +159,10 @@ db.createUser({
   user: "backend_app",
   pwd: "Backend@2024",
   roles: [
-    { role: "readWrite", db: "healthtech" },
-    { role: "read", db: "healthtech" }
+    {
+      role: "dbOwner", 
+      db: "healthtech"
+    }
   ],
   mechanisms: ["SCRAM-SHA-256"]
 });

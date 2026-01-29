@@ -16,6 +16,7 @@ services:
       - mongodb_data:/data/db
       - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
       - ./backups:/backups
+    command: mongod --auth
     healthcheck:
       test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/${MONGO_DATABASE:-healthtech} --quiet
       interval: 30s
@@ -34,7 +35,7 @@ services:
       ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_ROOT_USER:-admin}
       ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGO_ROOT_PASS:-simplepassword}
       ME_CONFIG_MONGODB_URL: mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASS:-simplepassword}@mongodb:27017/
-      ME_CONFIG_BASICAUTH: ${ME_BASICAUTH:-false}
+      ME_CONFIG_BASICAUTH: ${ME_BASICAUTH:-true} //can check true or false, true means enable basic auth
       ME_CONFIG_BASICAUTH_USERNAME: ${ME_USER:-admin}
       ME_CONFIG_BASICAUTH_PASSWORD: ${ME_PASS:-admin}
       ME_CONFIG_SITE_BASEURL: /${ME_BASEURL:-}
@@ -42,7 +43,7 @@ services:
       mongodb:
         condition: service_healthy
     volumes:
-      - ./mongo-express-config.js:/config.js  # Custom configuration file
+      - ./mongo-express-config.js:/config.js  # custom configuration file
 
 volumes:
   mongodb_data:
