@@ -126,8 +126,10 @@ class _RegisterPageState extends State<RegisterPage> {
               const SizedBox(height: 15),
 
               //row textfield details
+              
               Row(
                 children: [
+
                   //age textfield
                   Expanded(
                     child: MyTextfield(
@@ -138,6 +140,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
 
                   const SizedBox(width: 12),
+
                   //weight textfield
                   Expanded(
                     child: MyTextfield(
@@ -148,6 +151,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
 
                   const SizedBox(width: 12),
+
                   //height textfield
                   Expanded(
                     child: MyTextfield(

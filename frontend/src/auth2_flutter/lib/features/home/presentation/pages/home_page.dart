@@ -159,7 +159,7 @@ class _HomePageState extends State<HomePage> {
                     progress: 0.5,
                   ),
 
-                  //slee card
+                  //sleep card
                   HealthCards(
                     title: "Sleep",
                     icon: Icons.bedtime,
@@ -181,7 +181,7 @@ class _HomePageState extends State<HomePage> {
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
                   ),
 
-                  // view more -> report page
+                  // view more button -> report page
                   GestureDetector(
                     onTap: () {
                       Navigator.pop(context);
@@ -332,7 +332,6 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(height: 20),
 
               // sleep progression card
-
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
