@@ -1,5 +1,7 @@
 import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/components/bar_graph.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/info_cards.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/components/line_graph.dart';
 import 'package:flutter/material.dart';
 
 class ReportPage extends StatefulWidget {
@@ -79,12 +81,12 @@ class _ReportPageState extends State<ReportPage> {
               const SizedBox(height: 10),
 
               SizedBox(
-                height: 150,
+                height: 120,
                 child: GridView.count(
                   crossAxisCount: 1,
                   scrollDirection: Axis.horizontal,
-                  mainAxisSpacing: 12,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  mainAxisSpacing: 20,
+                  padding: const EdgeInsets.symmetric(horizontal: 0),
                   children: [
                     InfoCards(
                       title: "Report Period",
@@ -160,6 +162,47 @@ class _ReportPageState extends State<ReportPage> {
                       minHeight: 8,
                       borderRadius: BorderRadius.circular(12),
                     ),
+
+                    const SizedBox(height: 10),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Column(
+                          children: [
+                            Text(
+                              "5,263",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              "Daily Average",
+                              style: TextStyle(fontSize: 10),
+                            ),
+                          ],
+                        ),
+
+                        Column(
+                          children: [
+                            Text(
+                              "4,900",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text("Last Week", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+
+                        Column(
+                          children: [
+                            Text(
+                              "6,700",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text("Goal", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -187,7 +230,7 @@ class _ReportPageState extends State<ReportPage> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          "Steps",
+                          "Heart Rate",
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
 
@@ -198,13 +241,96 @@ class _ReportPageState extends State<ReportPage> {
                             color: Colors.green[100],
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Text("+5%"),
+                          child: Text("+10%"),
                         ),
                       ],
                     ),
 
                     Text(
-                      "36,841",
+                      "72 BPM",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 25,
+                      ),
+                    ),
+
+                    Text("Average heart rate", style: TextStyle(fontSize: 10)),
+
+                    SizedBox(height: 150, child: LineGraph()),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Column(
+                          children: [
+                            Text(
+                              "2,004",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              "Daily Average",
+                              style: TextStyle(fontSize: 10),
+                            ),
+                          ],
+                        ),
+
+                        Column(
+                          children: [
+                            Text(
+                              "12,700",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text("Goal", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          "Calories",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+
+                        // steps progress status
+                        Container(
+                          padding: EdgeInsets.only(left: 5, right: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.green[100],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text("+10%"),
+                        ),
+                      ],
+                    ),
+
+                    Text(
+                      "12,000",
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 25,
@@ -212,49 +338,230 @@ class _ReportPageState extends State<ReportPage> {
                     ),
 
                     Text(
-                      "Total steps this week",
+                      "Active calories burned this week",
                       style: TextStyle(fontSize: 10),
                     ),
-
-                    
 
                     const SizedBox(height: 10),
 
                     // steps progress bar
                     LinearProgressIndicator(
-                      value: 0.75,
+                      value: 0.55,
                       valueColor: AlwaysStoppedAnimation(Colors.green),
                       minHeight: 8,
                       borderRadius: BorderRadius.circular(12),
                     ),
 
+                    const SizedBox(height: 10),
+
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Column(
                           children: [
-                            Text("5,263",),
-                            Text("Daily Average", style: TextStyle(fontSize: 10,))
+                            Text(
+                              "2,004",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              "Daily Average",
+                              style: TextStyle(fontSize: 10),
+                            ),
                           ],
-                        ), 
+                        ),
 
                         Column(
                           children: [
-                            Text("5,263"),
-                           Text("Daily Average", style: TextStyle(fontSize: 10,))
+                            Text(
+                              "8,900",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text("Last Week", style: TextStyle(fontSize: 10)),
                           ],
-                        ), 
+                        ),
 
                         Column(
                           children: [
-                            Text("5,263"),
-                            Text("Daily Average", style: TextStyle(fontSize: 10,))
+                            Text(
+                              "12,700",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text("Goal", style: TextStyle(fontSize: 10)),
                           ],
-                        )
+                        ),
                       ],
-                      
                     ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          "Sleep",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+
+                        // steps progress status
+                        Container(
+                          padding: EdgeInsets.only(left: 5, right: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.red[100],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text("-10%"),
+                        ),
+                      ],
+                    ),
+
+                    Text(
+                      "72 Hours",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 25,
+                      ),
+                    ),
+
+                    Text(
+                      "Average resting rate",
+                      style: TextStyle(fontSize: 10),
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    SizedBox(height: 130, child: BarGraph()),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Column(
+                          children: [
+                            Text(
+                              "8 hours",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              "Daily Average",
+                              style: TextStyle(fontSize: 10),
+                            ),
+                          ],
+                        ),
+
+                        Column(
+                          children: [
+                            Text(
+                              "71 Hours",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text("Last Week", style: TextStyle(fontSize: 10)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Weekly Progress",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          "3/7",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 20,
+                          ),
+                        ),
+
+                        const SizedBox(width: 10),
+
+                        Text(
+                          "Goals Achieved This Week",
+                          style: TextStyle(fontSize: 10),
+                        ),
+                      ],
+                    ),
+
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color.fromARGB(255, 223, 242, 250),
+                        borderRadius: BorderRadius.only(
+                          topRight: Radius.circular(16),
+                          bottomRight: Radius.circular(20),
+                        ),
+                        border: Border(
+                          left: BorderSide(style: BorderStyle.solid, width: 3, color: Colors.blue)
+                        )
+                        
+                      ),
+
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Weekly Insight",
+                            style: TextStyle(
+                              color: Colors.blue,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            "He knew what he was supposed to do. Tas supposed to do and what he would do were not the same. This would have been fine if he were willing to face the inevitable consequences, but he wasn't.",
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 10),
                   ],
                 ),
               ),
