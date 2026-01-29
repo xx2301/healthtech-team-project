@@ -1,3 +1,4 @@
+import 'package:auth2_flutter/features/data/domain/presentation/components/appbar2.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/my_button.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/my_textfield.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubit.dart';
@@ -44,26 +45,23 @@ class _RegisterPageState extends State<RegisterPage> {
         age.isNotEmpty &&
         weight.isNotEmpty &&
         height.isNotEmpty) {
-
       if (password == confirmPassword) {
         authCubit.register(fullName, email, password, age, weight, height);
-      } 
-      else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Passwords do not match!")));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Passwords do not match!")),
+        );
       }
-      
     } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Please complete all fields!")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please complete all fields!")),
+      );
     }
   }
 
   //dispose all controllers
-  @override 
-  void dispose(){
+  @override
+  void dispose() {
     fullNameController.dispose();
     emailController.dispose();
     passwordController.dispose();
@@ -71,29 +69,12 @@ class _RegisterPageState extends State<RegisterPage> {
     weightController.dispose();
     heightController.dispose();
     super.dispose();
-  
-
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            Icon(Icons.health_and_safety, color: Colors.white),
-            const SizedBox(width: 10),
-            Text(
-              "HealthTech",
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.green[500],
-      ),
+      appBar: Appbar2(),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(15.0),
@@ -105,11 +86,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 children: [
                   Text(
                     "REGISTER PAGE",
-                    style: TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+                    style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -165,7 +142,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   Expanded(
                     child: MyTextfield(
                       controller: weightController,
-                      hintText: "Weight",
+                      hintText: "Weight kg",
                       obsecureText: false,
                     ),
                   ),
@@ -175,7 +152,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   Expanded(
                     child: MyTextfield(
                       controller: heightController,
-                      hintText: "Height",
+                      hintText: "Height cm",
                       obsecureText: false,
                     ),
                   ),
@@ -192,16 +169,13 @@ class _RegisterPageState extends State<RegisterPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    "Already have an account? ",
-                    style: TextStyle(color: Colors.white),
-                  ),
+                  Text("Already have an account? "),
                   GestureDetector(
                     onTap: widget.togglePages,
                     child: Text(
                       "Login Now",
                       style: TextStyle(
-                        color: Colors.white,
+                        color: Colors.green,
                         fontWeight: FontWeight.bold,
                       ),
                     ),

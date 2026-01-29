@@ -20,9 +20,27 @@ class _ReportPageState extends State<ReportPage> {
         child: Column(
           children: [
             // common to place a drawer header here
-            DrawerHeader(
-              child: Icon(Icons.favorite, size: 48), // Icon
-            ), // DrawerHeader
+            Container(
+        height: 80, 
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        color: Colors.green,
+        child: Row(
+          children: const [
+            Icon(Icons.health_and_safety,
+                color: Colors.white, size: 28),
+            SizedBox(width: 10),
+            Text(
+              'HealthTech',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+
             // home page list tile
             ListTile(
               leading: Icon(Icons.home),
@@ -31,7 +49,8 @@ class _ReportPageState extends State<ReportPage> {
                 Navigator.pop(context);
                 Navigator.pushNamed(context, '/homepage');
               },
-            ), // ListTile
+            ),
+
             // settings page list title
             ListTile(
               leading: Icon(Icons.settings),
@@ -50,7 +69,8 @@ class _ReportPageState extends State<ReportPage> {
                 Navigator.pop(context);
                 Navigator.pushNamed(context, '/reportpage');
               },
-            ), // ListTile
+            ),
+
             // chat page list title
             ListTile(
               leading: Icon(Icons.chat),
@@ -69,10 +89,13 @@ class _ReportPageState extends State<ReportPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Page Title
               Text(
                 "Health Report",
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
               ),
+
+              // Page Subtitle
               Text(
                 "Your health data overview and analysis",
                 style: TextStyle(color: Colors.grey[700], fontSize: 15),
@@ -88,13 +111,16 @@ class _ReportPageState extends State<ReportPage> {
                   mainAxisSpacing: 20,
                   padding: const EdgeInsets.symmetric(horizontal: 0),
                   children: [
+                    // Report Info Card Duration
                     InfoCards(
                       title: "Report Period",
                       subtitle: "Nov 12 - Nov 19",
                     ),
 
+                    // Report Info Card Creation Date
                     InfoCards(title: "Generated On", subtitle: "Nov 19"),
 
+                    // Report Info Card Goals Achieved
                     InfoCards(title: "Goals Acheived", subtitle: "3/7 Days"),
                   ],
                 ),
@@ -102,6 +128,7 @@ class _ReportPageState extends State<ReportPage> {
 
               const SizedBox(height: 10),
 
+              // Steps Health Card
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -140,6 +167,7 @@ class _ReportPageState extends State<ReportPage> {
                       ],
                     ),
 
+                    // total value of steps this week
                     Text(
                       "36,841",
                       style: TextStyle(
@@ -171,6 +199,7 @@ class _ReportPageState extends State<ReportPage> {
                       children: [
                         Column(
                           children: [
+                            // daily average steps
                             Text(
                               "5,263",
                               style: TextStyle(fontWeight: FontWeight.bold),
@@ -184,6 +213,7 @@ class _ReportPageState extends State<ReportPage> {
 
                         Column(
                           children: [
+                            // total steps last week
                             Text(
                               "4,900",
                               style: TextStyle(fontWeight: FontWeight.bold),
@@ -194,6 +224,7 @@ class _ReportPageState extends State<ReportPage> {
 
                         Column(
                           children: [
+                            // total steps goal
                             Text(
                               "6,700",
                               style: TextStyle(fontWeight: FontWeight.bold),
@@ -208,6 +239,7 @@ class _ReportPageState extends State<ReportPage> {
               ),
               const SizedBox(height: 10),
 
+              // heart rate health card
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -246,6 +278,7 @@ class _ReportPageState extends State<ReportPage> {
                       ],
                     ),
 
+                    // heart rate value
                     Text(
                       "72 BPM",
                       style: TextStyle(
@@ -256,6 +289,7 @@ class _ReportPageState extends State<ReportPage> {
 
                     Text("Average heart rate", style: TextStyle(fontSize: 10)),
 
+                    // heart rate line graph
                     SizedBox(height: 150, child: LineGraph()),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -486,6 +520,7 @@ class _ReportPageState extends State<ReportPage> {
 
               const SizedBox(height: 10),
 
+              // Weekly Progress Summary Card
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -539,9 +574,12 @@ class _ReportPageState extends State<ReportPage> {
                           bottomRight: Radius.circular(20),
                         ),
                         border: Border(
-                          left: BorderSide(style: BorderStyle.solid, width: 3, color: Colors.blue)
-                        )
-                        
+                          left: BorderSide(
+                            style: BorderStyle.solid,
+                            width: 3,
+                            color: Colors.blue,
+                          ),
+                        ),
                       ),
 
                       child: Column(
@@ -554,6 +592,8 @@ class _ReportPageState extends State<ReportPage> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
+
+                          // Weekly Health Summary
                           Text(
                             "He knew what he was supposed to do. Tas supposed to do and what he would do were not the same. This would have been fine if he were willing to face the inevitable consequences, but he wasn't.",
                           ),
