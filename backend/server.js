@@ -1,478 +1,750 @@
-﻿const express = require("express");
-const cors = require("cors");
-require("dotenv").config();
-
-const PatientService = require("./services/PatientService");
-const AppointmentService = require("./services/AppointmentService");
-const AuthService = require("./services/AuthService");
+﻿const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+const { body, validationResult } = require('express-validator');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
-app.use(cors());
-app.use(express.json());
+app.use(helmet()); //Security headers
+app.use(cors({
+  origin: '*', //Allow all origins; in a production environment, specific origins should be specified.
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+app.use(express.json()); //Parse JSON request body
+app.use(express.urlencoded({ extended: true })); //Parse URL-encoded request body
 
-const initializeTestData = () => {
-  PatientService.initializeTestData();
-  AppointmentService.initTestData();
-  console.log("Test data initialized");
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, //15mins
+  max: 100, //each ip max 100 requests in 15 minutes
+  message: 'Request limit exceeded, please try again later.'
+});
+app.use('/api/', limiter);
+
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/healthtech', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => console.log('✅ Connected to MongoDB'))
+.catch(err => console.error('❌ MongoDB connection error:', err));
+
+const userSchema = new mongoose.Schema({
+  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  password: { type: String, required: true },
+  name: { type: String, required: true, trim: true },
+  age: { type: Number, min: 0, max: 150 },
+  weight: { type: Number, min: 0, max: 300 },
+  height: { type: Number, min: 0, max: 300 },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+const healthDataSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  date: { type: Date, default: Date.now },
+  steps: { type: Number, min: 0, default: 0 },
+  heartRate: { type: Number, min: 0, max: 300, default: 0 },
+  calories: { type: Number, min: 0, default: 0 },
+  sleepHours: { type: Number, min: 0, max: 24, default: 0 },
+  notes: { type: String, trim: true }
+});
+
+const reminderSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  title: { type: String, required: true, trim: true },
+  description: { type: String, trim: true },
+  dueDate: { type: Date, required: true },
+  completed: { type: Boolean, default: false },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const User = mongoose.model('User', userSchema);
+const HealthData = mongoose.model('HealthData', healthDataSchema);
+const Reminder = mongoose.model('Reminder', reminderSchema);
+
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ success: false, error: 'Access token missing' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ success: false, error: 'Invalid access token' });
+    }
+    req.user = user;
+    next();
+  });
 };
 
-initializeTestData();
-
-// Health check endpoint
-app.get("/api/health", (req, res) => {
-  res.json({
-    status: "OK",
-    message: "The backend server is running",
-    timestamp: new Date().toISOString(),
-    port: PORT,
-    service: {
-      patients: PatientService.getAllPatients().data.length,
-      appointments: AppointmentService.getAllAppointments().data.length,
-      users: "In-memory storage"
-    }
-  });
-});
-
-// Patients Management API
-app.get("/api/patients", (req, res) => {
-  const result = PatientService.getAllPatients();
-  res.status(result.success ? 200 : 404).json(result);
-});
-
-app.get("/api/patients/:id", (req, res) => {
-  const id = parseInt(req.params.id);
-  const result = PatientService.getPatientById(id);
-  res.status(result.success ? 200 : 404).json(result);
-});
-
-app.post("/api/patients", (req, res) => {
-  const result = PatientService.createPatient(req.body);
-  res.status(result.success ? 201 : 400).json(result);
-});
-
-app.put("/api/patients/:id", (req, res) => {
-  const id = parseInt(req.params.id);
-  const result = PatientService.updatePatient(id, req.body);
-  res.status(result.success ? 200 : 404).json(result);
-});
-
-app.delete("/api/patients/:id", (req, res) => {
-  const id = parseInt(req.params.id);
-  const result = PatientService.deletePatient(id);
-  res.status(result.success ? 200 : 404).json(result);
-});
-
-// Appointments Management API
-app.get("/api/appointments", (req, res) => {
-  const result = AppointmentService.getAllAppointments();
-  res.status(result.success ? 200 : 404).json(result);
-});
-
-app.get("/api/appointments/:id", (req, res) => {
-  const id = parseInt(req.params.id);
-  const result = AppointmentService.getAppointmentById(id);
-  res.status(result.success ? 200 : 404).json(result);
-});
-
-app.post("/api/appointments", (req, res) => {
-  const result = AppointmentService.createAppointment(req.body);
-  res.status(result.success ? 201 : 400).json(result);
-});
-
-app.put("/api/appointments/:id/status", (req, res) => {
-  const id = parseInt(req.params.id);
-  const { status } = req.body;
-  
-  if (!status || !['pending', 'confirmed', 'cancelled', 'completed'].includes(status)) {
-    return res.status(400).json({
-      success: false,
-      message: 'Status must be: pending, confirmed, cancelled, completed'
-    });
-  }
-
-  const result = AppointmentService.updateAppointmentStatus(id, status);
-  res.status(result.success ? 200 : 404).json(result);
-});
-
-app.get("/api/patients/:patientId/appointments", (req, res) => {
-  const patientId = parseInt(req.params.patientId);
-  const result = AppointmentService.getAppointmentByPatientId(patientId);
-  res.status(result.success ? 200 : 400).json(result);
-});
-
-app.get("/api/appointments/date/:date", (req, res) => {
-  const { date } = req.params;
-  const result = AppointmentService.getAppointmentByDate(date);
-  res.status(result.success ? 200 : 400).json(result);
-});
-
-// User Login API
-app.post("/api/auth/login", (req, res) => {
-  const { email, password } = req.body;
-  
-  if (!email || !password) {
-    return res.status(400).json({
-      success: false,
-      message: 'Please provide email and password'
-    });
-  }
-  
-  const result = AuthService.login(email, password);
-  res.status(result.success ? 200 : 401).json(result);
-});
-
-// User Registration API
-app.post("/api/auth/register", (req, res) => {
-  const { email, password, name, role } = req.body;
-  
-  if (!email || !password || !name) {
-    return res.status(400).json({
-      success: false,
-      message: 'Please provide email, password, and name'
-    });
-  }
-  
-  const result = AuthService.register({ email, password, name, role });
-  res.status(result.success ? 201 : 400).json(result);
-});
-
-// Data Statistics API
-app.get("/api/stats", (req, res) => {
-  const patients = PatientService.getAllPatients();
-  const appointments = AppointmentService.getAllAppointments();
-  const doctors = AuthService.getAllDoctors();
-  
-  const pendingAppointments = appointments.data.filter(
-    a => a.status === 'pending'
-  ).length;
-  
-  const completedAppointments = appointments.data.filter(
-    a => a.status === 'completed'
-  ).length;
-  
-  res.json({
-    success: true,
-    data: {
-      totalPatients: patients.count,
-      totalAppointments: appointments.count,
-      pendingAppointments,
-      completedAppointments,
-      totalDoctors: doctors.count,
-      recentPatients: patients.data.slice(-5).map(p => ({
-        id: p.id,
-        name: p.name,
-        lastVisit: p.lastVisit
-      })),
-      systemStatus: "All systems operational",
-      database: "In-memory storage (no persistent DB)",
-      lastUpdated: new Date().toISOString()
-    }
-  });
-});
-
-// Initializing mock data (must be called manually)
-app.post("/api/init-test-data", (req, res) => {
-  const patientResult = PatientService.initializeTestData();
-  const appointmentResult = AppointmentService.initTestData();
-  
-  res.json({
-    success: true,
-    message: "Test data initialized successfully",
-    data: {
-      patients: patientResult.count,
-      appointments: appointmentResult.count,
-      timestamp: new Date().toISOString()
-    }
-  });
-});
-
-// Get all doctors
-app.get("/api/doctors", (req, res) => {
-  const result = AuthService.getAllDoctors();
-  res.status(result.success ? 200 : 400).json(result);
-});
-
-// Main page
-app.get("/", (req, res) => {
+app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
-    <html>
-      <head>
-        <title>HealthTech Backend API</title>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>HealthTech - Health Management System</title>
         <style>
-          body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 1200px; 
-            margin: 0 auto; 
-            padding: 20px; 
-            background: #f8f9fa; 
-          }
-          .header {
-            background: linear-gradient(135deg, #39B27A 0%, #2E8B63 100%);
-            color: white;
-            padding: 40px;
-            border-radius: 15px;
-            margin-bottom: 30px;
-          }
-          .container { 
-            background: white; 
-            padding: 30px; 
-            border-radius: 10px; 
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
-          }
-          h1 { color: white; margin: 0; }
-          h2 { color: #39B27A; border-bottom: 2px solid #39B27A; padding-bottom: 10px; }
-          .api-list { margin-top: 20px; }
-          .api-group { margin-bottom: 30px; }
-          .api-item { 
-            background: #f9f9f9; 
-            padding: 15px; 
-            margin: 10px 0; 
-            border-left: 5px solid #39B27A;
-            border-radius: 5px;
-            display: flex;
-            align-items: center;
-          }
-          .method { 
-            display: inline-block; 
-            padding: 5px 10px; 
-            border-radius: 4px; 
-            font-weight: bold; 
-            margin-right: 15px;
-            min-width: 60px;
-            text-align: center;
-          }
-          .get { background: #61affe; color: white; }
-          .post { background: #49cc90; color: white; }
-          .put { background: #fca130; color: white; }
-          .delete { background: #f93e3e; color: white; }
-          .endpoint { 
-            font-family: 'Courier New', monospace; 
-            font-size: 16px; 
-            flex-grow: 1;
-          }
-          .test-btn { 
-            background: #39B27A; 
-            color: white; 
-            border: none; 
-            padding: 8px 15px; 
-            border-radius: 5px; 
-            cursor: pointer; 
-            margin-left: 10px;
-            text-decoration: none;
-            display: inline-block;
-            transition: all 0.3s;
-          }
-          .test-btn:hover { 
-            background: #2E8B63; 
-            transform: translateY(-2px);
-          }
-          .status-badge {
-            display: inline-block;
-            padding: 3px 8px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: bold;
-            margin-left: 10px;
-          }
-          .status-ready { background: #d4edda; color: #155724; }
-          .note-box {
-            background: #e8f5e9;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 20px 0;
-            border-left: 5px solid #39B27A;
-          }
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            }
+            
+            body {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                padding: 20px;
+            }
+            
+            .container {
+                background: white;
+                border-radius: 20px;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                overflow: hidden;
+                width: 100%;
+                max-width: 900px;
+            }
+            
+            .header {
+                background: #4CAF50;
+                color: white;
+                padding: 30px;
+                text-align: center;
+            }
+            
+            .header h1 {
+                font-size: 2.5rem;
+                margin-bottom: 10px;
+            }
+            
+            .header p {
+                font-size: 1.1rem;
+                opacity: 0.9;
+            }
+            
+            .content {
+                padding: 40px;
+            }
+            
+            .stats-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 20px;
+                margin-bottom: 40px;
+            }
+            
+            .stat-card {
+                background: #f8f9fa;
+                border-radius: 10px;
+                padding: 20px;
+                text-align: center;
+                transition: transform 0.3s;
+            }
+            
+            .stat-card:hover {
+                transform: translateY(-5px);
+            }
+            
+            .stat-card h3 {
+                color: #4CAF50;
+                font-size: 2.5rem;
+                margin-bottom: 10px;
+            }
+            
+            .stat-card p {
+                color: #666;
+                font-size: 1rem;
+            }
+            
+            .api-info {
+                background: #f0f7ff;
+                border-left: 4px solid #2196F3;
+                padding: 20px;
+                margin-bottom: 30px;
+                border-radius: 0 8px 8px 0;
+            }
+            
+            .api-info h3 {
+                color: #2196F3;
+                margin-bottom: 15px;
+            }
+            
+            .endpoint {
+                background: white;
+                padding: 10px 15px;
+                margin: 10px 0;
+                border-radius: 5px;
+                border: 1px solid #e0e0e0;
+                font-family: monospace;
+            }
+            
+            .buttons {
+                display: flex;
+                gap: 15px;
+                flex-wrap: wrap;
+            }
+            
+            .btn {
+                padding: 12px 24px;
+                border: none;
+                border-radius: 8px;
+                font-size: 1rem;
+                cursor: pointer;
+                transition: all 0.3s;
+                text-decoration: none;
+                display: inline-block;
+            }
+            
+            .btn-primary {
+                background: #4CAF50;
+                color: white;
+            }
+            
+            .btn-secondary {
+                background: #2196F3;
+                color: white;
+            }
+            
+            .btn-outline {
+                background: transparent;
+                border: 2px solid #4CAF50;
+                color: #4CAF50;
+            }
+            
+            .btn:hover {
+                opacity: 0.9;
+                transform: translateY(-2px);
+            }
+            
+            .footer {
+                text-align: center;
+                padding: 20px;
+                color: #666;
+                border-top: 1px solid #eee;
+            }
+            
+            @media (max-width: 768px) {
+                .container {
+                    margin: 10px;
+                }
+                
+                .content {
+                    padding: 20px;
+                }
+                
+                .header h1 {
+                    font-size: 2rem;
+                }
+            }
         </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>🚀 HealthTech Backend API</h1>
-          <p>The server is running on port ${PORT}</p>
-          <p>Service Layer Architecture | In-Memory Storage | Switchable Database</p>
-        </div>
-        
+    </head>
+    <body>
         <div class="container">
-          <div class="note-box">
-            <h3>🎯 Backend Leader's Focused Plan</h3>
-            <p>✅ <strong>Done: </strong>Complete API layer + service layer architecture</p>
-            <p>🔧 <strong>Current use: </strong>In-Memory Storage (data lost on restart)</p>
-            <p>🔄 <strong>Switch Ready: </strong>After database team decides, only service layer needs to be modified</p>
-            <p>📡 <strong>Available for immediate frontend use: </strong>All APIs are ready</p>
-          </div>
-          
-          <div class="api-group">
-            <h2>📋 Patient Management API</h2>
-            <div class="api-list">
-              <div class="api-item">
-                <span class="method get">GET</span>
-                <span class="endpoint">/api/patients</span>
-                <span class="status-badge status-ready">Ready</span>
-                <a href="/api/patients" class="test-btn" target="_blank">Test</a>
-              </div>
-              <div class="api-item">
-                <span class="method get">GET</span>
-                <span class="endpoint">/api/patients/{id}</span>
-                <span class="status-badge status-ready">Ready</span>
-                <button class="test-btn" onclick="testGet('/api/patients/1')">Test</button>
-              </div>
-              <div class="api-item">
-                <span class="method post">POST</span>
-                <span class="endpoint">/api/patients</span>
-                <span class="status-badge status-ready">Ready</span>
-                <button class="test-btn" onclick="testPost('/api/patients', {name: 'Test Patient', age: 30})">Test</button>
-              </div>
-              <div class="api-item">
-                <span class="method put">PUT</span>
-                <span class="endpoint">/api/patients/{id}</span>
-                <span class="status-badge status-ready">Ready</span>
-                <button class="test-btn" onclick="testPut('/api/patients/1', {age: 31})">Test</button>
-              </div>
-              <div class="api-item">
-                <span class="method delete">DELETE</span>
-                <span class="endpoint">/api/patients/{id}</span>
-                <span class="status-badge status-ready">Ready</span>
-                <button class="test-btn" onclick="testDelete('/api/patients/1')">Test</button>
-              </div>
+            <div class="header">
+                <h1>🏥 HealthTech API</h1>
+                <p>Health Management System Backend Service</p>
             </div>
-          </div>
-          
-          <div class="api-group">
-            <h2>📅 Appointment Management API</h2>
-            <div class="api-list">
-              <div class="api-item">
-                <span class="method get">GET</span>
-                <span class="endpoint">/api/appointments</span>
-                <a href="/api/appointments" class="test-btn" target="_blank">Test</a>
-              </div>
-              <div class="api-item">
-                <span class="method post">POST</span>
-                <span class="endpoint">/api/appointments</span>
-                <button class="test-btn" onclick="testPost('/api/appointments', {patientId: 1, date: '2024-01-25'})">Test</button>
-              </div>
-              <div class="api-item">
-                <span class="method put">PUT</span>
-                <span class="endpoint">/api/appointments/{id}/status</span>
-                <button class="test-btn" onclick="testPut('/api/appointments/1/status', {status: 'confirmed'})">Test</button>
-              </div>
+            
+            <div class="content">
+                <div class="stats-grid" id="stats">
+                    <!-- Dynamic data will be populated using JavaScript -->
+                    <div class="stat-card">
+                        <h3 id="userCount">...</h3>
+                        <p>Registered Users</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3 id="healthDataCount">...</h3>
+                        <p>Health Records</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3 id="reminderCount">...</h3>
+                        <p>Active Reminders</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3 id="dbStatus">✅</h3>
+                        <p>Database Status</p>
+                    </div>
+                </div>
+                
+                <div class="api-info">
+                    <h3>📡 API Endpoints</h3>
+                    <div class="endpoint">GET /api/health - Health check</div>
+                    <div class="endpoint">POST /api/auth/register - User registration</div>
+                    <div class="endpoint">POST /api/auth/login - User login</div>
+                    <div class="endpoint">GET /api/health-data - Get health data (auth required)</div>
+                    <div class="endpoint">POST /api/health-data - Add health data (auth required)</div>
+                    <div class="endpoint">GET /api/reminders - Get reminders (auth required)</div>
+                </div>
+                
+                <div class="buttons">
+                    <a href="/api/health" class="btn btn-primary">Check API Health</a>
+                    <a href="/admin" class="btn btn-secondary">Admin Dashboard</a>
+                    <a href="https://github.com/xx2301" class="btn btn-outline">GitHub Repository</a>
+                </div>
             </div>
-          </div>
-          
-          <div class="api-group">
-            <h2>🔐 Authentication API</h2>
-            <div class="api-list">
-              <div class="api-item">
-                <span class="method post">POST</span>
-                <span class="endpoint">/api/auth/login</span>
-                <button class="test-btn" onclick="testPost('/api/auth/login', {email: 'doctor@healthtech.com', password: 'password123'})">Test</button>
-              </div>
-              <div class="api-item">
-                <span class="method post">POST</span>
-                <span class="endpoint">/api/auth/register</span>
-                <button class="test-btn" onclick="testPost('/api/auth/register', {email: 'test@example.com', password: '123456', name: 'Test User'})">Test</button>
-              </div>
+            
+            <div class="footer">
+                <p>© 2026 HealthTech System | Port: ${PORT} | MongoDB Connected</p>
             </div>
-          </div>
-          
-          <div class="api-group">
-            <h2>📊 System API</h2>
-            <div class="api-list">
-              <div class="api-item">
-                <span class="method get">GET</span>
-                <span class="endpoint">/api/health</span>
-                <a href="/api/health" class="test-btn" target="_blank">Test</a>
-              </div>
-              <div class="api-item">
-                <span class="method get">GET</span>
-                <span class="endpoint">/api/stats</span>
-                <a href="/api/stats" class="test-btn" target="_blank">Test</a>
-              </div>
-              <div class="api-item">
-                <span class="method post">POST</span>
-                <span class="endpoint">/api/init-test-data</span>
-                <button class="test-btn" onclick="testPost('/api/init-test-data', {})">Initialize Data</button>
-              </div>
-            </div>
-          </div>
-          
-          <div class="note-box">
-            <h3>📚 Instructions for Frontend Teammates</h3>
-            <p><strong>API Base URL:</strong> <code>http://localhost:${PORT}</code></p>
-            <p><strong>Suggested Steps:</strong></p>
-            <ol>
-              <li>First, run <code>POST /api/init-test-data</code> to initialize test data</li>
-              <li>Use <code>POST /api/auth/login</code> to get a mock token</li>
-              <li>All patient and appointment APIs are now available</li>
-              <li>Use <code>GET /api/health</code> to check server status</li>
-            </ol>
-          </div>
         </div>
         
         <script>
-          async function testGet(url) {
-            try {
-              const response = await fetch(url);
-              const result = await response.json();
-              alert(JSON.stringify(result, null, 2));
-            } catch (error) {
-              alert('Request failed: ' + error.message);
+            // 获取并显示统计信息
+            async function loadStats() {
+                try {
+                    const response = await fetch('/api/health');
+                    const data = await response.json();
+                    
+                    document.getElementById('userCount').textContent = data.database.stats.users;
+                    document.getElementById('healthDataCount').textContent = data.database.stats.healthData;
+                    document.getElementById('reminderCount').textContent = data.database.stats.reminders;
+                    
+                    if (!data.database.connected) {
+                        document.getElementById('dbStatus').textContent = '❌';
+                        document.getElementById('dbStatus').style.color = 'red';
+                    }
+                } catch (error) {
+                    console.error('Failed to load stats:', error);
+                    document.getElementById('userCount').textContent = 'Error';
+                    document.getElementById('healthDataCount').textContent = 'Error';
+                    document.getElementById('reminderCount').textContent = 'Error';
+                    document.getElementById('dbStatus').textContent = '❌';
+                }
             }
-          }
-          
-          async function testPost(url, data) {
-            try {
-              const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-              });
-              const result = await response.json();
-              alert(JSON.stringify(result, null, 2));
-            } catch (error) {
-              alert('Request failed: ' + error.message);
-            }
-          }
-          
-          async function testPut(url, data) {
-            try {
-              const response = await fetch(url, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-              });
-              const result = await response.json();
-              alert(JSON.stringify(result, null, 2));
-            } catch (error) {
-              alert('Request failed: ' + error.message);
-            }
-          }
-          
-          async function testDelete(url) {
-            try {
-              const response = await fetch(url, { method: 'DELETE' });
-              const result = await response.json();
-              alert(JSON.stringify(result, null, 2));
-            } catch (error) {
-              alert('Request failed: ' + error.message);
-            }
-          }
+            
+            document.addEventListener('DOMContentLoaded', loadStats);
+            
+            setInterval(loadStats, 30000);
         </script>
-      </body>
+    </body>
     </html>
   `);
 });
 
-module.exports = app;
+app.get('/api/health', async (req, res) => {
+  try {
+    const dbState = mongoose.connection.readyState;
+    const dbStatus = dbState === 1 ? 'connected' : 'disconnected';
 
-// Starting Server
+    const userCount = await User.countDocuments();
+    const healthDataCount = await HealthData.countDocuments();
+    const reminderCount = await Reminder.countDocuments();
+
+    res.status(200).json({
+      status: 'OK',
+      timestamp: new Date().toISOString(),
+      service: 'HealthTech API',
+      version: '1.0.0',
+      database: {
+        connected: dbState === 1,
+        message: dbState === 1 ? '✅ Connected to MongoDB successfully!' : '❌ MongoDB connection issue',
+        stats: {
+          users: userCount,
+          healthData: healthDataCount,
+          reminders: reminderCount,
+          status: dbStatus
+        }
+      },
+      endpoints: {
+        auth: [
+          'POST /api/auth/register',
+          'POST /api/auth/login'
+        ],
+        health: [
+          'GET /api/health-data',
+          'POST /api/health-data'
+        ],
+        reminders: [
+          'GET /api/reminders',
+          'POST /api/reminders'
+        ],
+        admin: [
+          'GET /api/admin/stats',
+          'POST /api/admin/backup'
+        ]
+      },
+      services: {
+        patientService: 'running',
+        appointmentService: 'running',
+        authService: 'running'
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'ERROR',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+app.post('/api/auth/register', [
+  body('email').isEmail().normalizeEmail(),
+  body('password').isLength({ min: 6 }),
+  body('name').notEmpty().trim().escape(),
+  body('age').optional().isInt({ min: 0, max: 150 }),
+  body('weight').optional().isFloat({ min: 0, max: 300 }),
+  body('height').optional().isFloat({ min: 0, max: 300 })
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+
+  try {
+    const { email, password, name, age, weight, height } = req.body;
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ success: false, error: 'Email has already been registered' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = new User({
+      email,
+      password: hashedPassword,
+      name,
+      age,
+      weight,
+      height
+    });
+
+    await user.save();
+
+    const token = jwt.sign(
+      { userId: user._id, email: user.email },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    //return data for user excluded password
+    const userResponse = {
+      _id: user._id,
+      email: user.email,
+      name: user.name,
+      age: user.age,
+      weight: user.weight,
+      height: user.height,
+      createdAt: user.createdAt
+    };
+
+    res.status(201).json({
+      success: true,
+      message: 'Register successful',
+      user: userResponse,
+      token
+    });
+  } catch (error) {
+    console.error('Register Error:', error);
+    res.status(500).json({ success: false, error: 'Register failed, please try again later' });
+  }
+});
+
+app.post('/api/auth/login', [
+  body('email').isEmail().normalizeEmail(),
+  body('password').notEmpty()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+
+  try {
+    const { email, password } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'Email or password is incorrect' });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ success: false, error: 'Email or password is incorrect' });
+    }
+
+    const token = jwt.sign(
+      { userId: user._id, email: user.email },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    //return data for user excluded password
+    const userResponse = {
+      _id: user._id,
+      email: user.email,
+      name: user.name,
+      age: user.age,
+      weight: user.weight,
+      height: user.height,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
+    };
+
+    res.status(200).json({
+      success: true,
+      message: 'Login successful',
+      user: userResponse,
+      token
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ success: false, error: 'Login failed, please try again later' });
+  }
+});
+
+app.get('/api/auth/verify', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select('-password');
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    res.status(200).json({
+      success: true,
+      user: {
+        _id: user._id,
+        email: user.email,
+        name: user.name,
+        age: user.age,
+        weight: user.weight,
+        height: user.height,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+      }
+    });
+  } catch (error) {
+    console.error('Verification failed:', error);
+    res.status(500).json({ success: false, error: 'Verification failed' });
+  }
+});
+
+app.post('/api/auth/forgot-password', [
+  body('email').isEmail().normalizeEmail()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+
+  try {
+    const { email } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      //for security, return a success message even if email not found
+      return res.status(200).json({
+        success: true,
+        message: 'If the email exists, a password reset link has been sent'
+      });
+    }
+
+    const resetToken = jwt.sign(
+      { userId: user._id, email: user.email, purpose: 'password_reset' },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    // An email should be sent here, but for simplicity, we just return a message
+    // In a real project: sendResetEmail(user.email, resetToken);
+    res.status(200).json({
+      success: true,
+      message: 'password reset link has been sent to your email',
+      resetToken // This should not be returned in an actual project; it is only used for demonstration here.
+    });
+  } catch (error) {
+    console.error('forgot password error:', error);
+    res.status(500).json({ success: false, error: 'request failed, please try again later' });
+  }
+});
+
+app.post('/api/auth/logout', authenticateToken, (req, res) => {
+  res.status(200).json({ success: true, message: 'Logged out successfully' });
+});
+
+app.delete('/api/auth/delete-account', authenticateToken, async (req, res) => {
+  try {
+    await User.findByIdAndDelete(req.user.userId);
+    //await HealthData.deleteMany({ userId: req.user.userId });
+    //await Reminder.deleteMany({ userId: req.user.userId });
+
+    res.status(200).json({ success: true, message: 'account deleted successfully' });
+  } catch (error) {
+    console.error('delete account error:', error);
+    res.status(500).json({ success: false, error: 'delete account failed' });
+  }
+});
+
+app.get('/api/health-data', authenticateToken, async (req, res) => {
+  try {
+    const healthData = await HealthData.find({ userId: req.user.userId })
+      .sort({ date: -1 })
+      .limit(30);
+
+    res.status(200).json({
+      success: true,
+      data: healthData
+    });
+  } catch (error) {
+    console.error('Fetch health data error:', error);
+    res.status(500).json({ success: false, error: 'Fetch health data failed' });
+  }
+});
+
+app.post('/api/health-data', authenticateToken, [
+  body('steps').optional().isInt({ min: 0 }),
+  body('heartRate').optional().isInt({ min: 0, max: 300 }),
+  body('calories').optional().isFloat({ min: 0 }),
+  body('sleepHours').optional().isFloat({ min: 0, max: 24 }),
+  body('notes').optional().trim().escape()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+
+  try {
+    const { steps, heartRate, calories, sleepHours, notes } = req.body;
+
+    const healthData = new HealthData({
+      userId: req.user.userId,
+      steps,
+      heartRate,
+      calories,
+      sleepHours,
+      notes
+    });
+
+    await healthData.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Health data saved successfully',
+      data: healthData
+    });
+  } catch (error) {
+    console.error('Save health data error:', error);
+    res.status(500).json({ success: false, error: 'Save health data failed' });
+  }
+});
+
+app.get('/api/reminders', authenticateToken, async (req, res) => {
+  try {
+    const reminders = await Reminder.find({ userId: req.user.userId })
+      .sort({ dueDate: 1 });
+
+    res.status(200).json({
+      success: true,
+      data: reminders
+    });
+  } catch (error) {
+    console.error('Fetch reminders error:', error);
+    res.status(500).json({ success: false, error: 'Fetch reminders failed' });
+  }
+});
+
+app.post('/api/reminders', authenticateToken, [
+  body('title').notEmpty().trim().escape(),
+  body('description').optional().trim().escape(),
+  body('dueDate').isISO8601()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+
+  try {
+    const { title, description, dueDate } = req.body;
+
+    const reminder = new Reminder({
+      userId: req.user.userId,
+      title,
+      description,
+      dueDate
+    });
+
+    await reminder.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Reminder created successfully',
+      data: reminder
+    });
+  } catch (error) {
+    console.error('Create reminder error:', error);
+    res.status(500).json({ success: false, error: 'Create reminder failed' });
+  }
+});
+
+app.get('/api/admin/stats', authenticateToken, async (req, res) => {
+  try {
+    // Verify administrator privileges (simplified: check a specific user ID)
+    const ADMIN_USER_ID = process.env.ADMIN_USER_ID;
+    if (req.user.userId !== ADMIN_USER_ID) {
+      return res.status(403).json({ success: false, error: 'Restricted access' });
+    }
+
+    const totalUsers = await User.countDocuments();
+    const totalHealthData = await HealthData.countDocuments();
+    const totalReminders = await Reminder.countDocuments();
+
+    //new users in the last 7 days
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const recentUsers = await User.countDocuments({
+      createdAt: { $gte: sevenDaysAgo }
+    });
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        totalUsers,
+        totalHealthData,
+        totalReminders,
+        recentUsers
+      }
+    });
+  } catch (error) {
+    console.error('Fetch statistics error:', error);
+    res.status(500).json({ success: false, error: 'Fetch statistics failed' });
+  }
+});
+
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Endpoint not found'
+  });
+});
+
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({
+    success: false,
+    error: 'Server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
+
 app.listen(PORT, () => {
-  console.log("========================================");
-  console.log("✅ Backend server started successfully!");
-  console.log("📍 Local Host: http://localhost:" + PORT);
-  console.log("📡 API Health Check: http://localhost:" + PORT + "/api/health");
-  console.log("🔧 Development command: npm run dev");
-  console.log("🎯 Frontend Local Host: http://localhost:5173");
-  console.log("========================================");
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🌐 Homepage: http://localhost:${PORT}`);
+  console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
+  console.log(`🔧 Admin panel: http://localhost:${PORT}/admin`);
 });
