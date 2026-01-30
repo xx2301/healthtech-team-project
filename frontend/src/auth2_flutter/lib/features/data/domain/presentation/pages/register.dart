@@ -24,6 +24,14 @@ class _RegisterPageState extends State<RegisterPage> {
   final weightController = TextEditingController();
   final heightController = TextEditingController();
 
+  //focusnode for enter key navigation
+  final FocusNode emailFocusNode = FocusNode();
+  final FocusNode passwordFocusNode = FocusNode();
+  final FocusNode confirmPasswordFocusNode = FocusNode();
+  final FocusNode ageFocusNode = FocusNode();
+  final FocusNode weightFocusNode = FocusNode();
+  final FocusNode heightFocusNode = FocusNode();
+
   //register button pressed
   void register() async {
     //prepare info
@@ -65,9 +73,18 @@ class _RegisterPageState extends State<RegisterPage> {
     fullNameController.dispose();
     emailController.dispose();
     passwordController.dispose();
+    confirmPasswordController.dispose();
     ageController.dispose();
     weightController.dispose();
     heightController.dispose();
+
+    emailFocusNode.dispose();
+    passwordFocusNode.dispose();
+    confirmPasswordFocusNode.dispose();
+    ageFocusNode.dispose();
+    weightFocusNode.dispose();
+    heightFocusNode.dispose();
+
     super.dispose();
   }
 
@@ -97,6 +114,10 @@ class _RegisterPageState extends State<RegisterPage> {
                 controller: fullNameController,
                 hintText: "Full Name",
                 obsecureText: false,
+                textInputAction: TextInputAction.next,
+                onSubmitted: () {
+                  FocusScope.of(context).requestFocus(emailFocusNode);
+                },
               ),
               const SizedBox(height: 15),
               //email textfield
@@ -104,6 +125,12 @@ class _RegisterPageState extends State<RegisterPage> {
                 controller: emailController,
                 hintText: "Email",
                 obsecureText: false,
+                focusNode: emailFocusNode,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                onSubmitted: () {
+                  FocusScope.of(context).requestFocus(passwordFocusNode);
+                },
               ),
 
               const SizedBox(height: 15),
@@ -113,6 +140,11 @@ class _RegisterPageState extends State<RegisterPage> {
                 controller: passwordController,
                 hintText: "Password",
                 obsecureText: true,
+                focusNode: passwordFocusNode,
+                textInputAction: TextInputAction.next,
+                onSubmitted: () {
+                  FocusScope.of(context).requestFocus(confirmPasswordFocusNode);
+                },
               ),
               const SizedBox(height: 15),
 
@@ -121,6 +153,11 @@ class _RegisterPageState extends State<RegisterPage> {
                 controller: confirmPasswordController,
                 hintText: "Confirm Password",
                 obsecureText: true,
+                focusNode: confirmPasswordFocusNode,
+                textInputAction: TextInputAction.next,
+                onSubmitted: () {
+                  FocusScope.of(context).requestFocus(ageFocusNode);
+                },
               ),
 
               const SizedBox(height: 15),
@@ -136,6 +173,12 @@ class _RegisterPageState extends State<RegisterPage> {
                       controller: ageController,
                       hintText: "Age",
                       obsecureText: false,
+                      focusNode: ageFocusNode,
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
+                      onSubmitted: () {
+                        FocusScope.of(context).requestFocus(weightFocusNode);
+                      },
                     ),
                   ),
 
@@ -147,6 +190,12 @@ class _RegisterPageState extends State<RegisterPage> {
                       controller: weightController,
                       hintText: "Weight kg",
                       obsecureText: false,
+                      focusNode: weightFocusNode,
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
+                      onSubmitted: () {
+                        FocusScope.of(context).requestFocus(heightFocusNode);
+                      },
                     ),
                   ),
 
@@ -158,6 +207,10 @@ class _RegisterPageState extends State<RegisterPage> {
                       controller: heightController,
                       hintText: "Height cm",
                       obsecureText: false,
+                      focusNode: heightFocusNode,
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: register,
                     ),
                   ),
                 ],

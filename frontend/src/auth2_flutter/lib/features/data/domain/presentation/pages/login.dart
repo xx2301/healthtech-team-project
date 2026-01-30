@@ -23,6 +23,7 @@ class _LoginPageState extends State<LoginPage> {
   //text editting controllers for password and email
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
+  final FocusNode passwordFocusNode = FocusNode();
 
   //auth cubit
   late final authCubit = context.read<AuthCubit>();
@@ -89,6 +90,14 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    passwordFocusNode.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: Appbar2(),
@@ -117,6 +126,11 @@ class _LoginPageState extends State<LoginPage> {
                 controller: emailController,
                 hintText: "Email",
                 obsecureText: false,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                onSubmitted: () {
+                  FocusScope.of(context).requestFocus(passwordFocusNode);
+                },
               ),
 
               const SizedBox(height: 15),
@@ -125,6 +139,9 @@ class _LoginPageState extends State<LoginPage> {
                 controller: passwordController,
                 hintText: "Password",
                 obsecureText: true,
+                focusNode: passwordFocusNode,
+                textInputAction: TextInputAction.done,
+                onSubmitted: login,
               ),
               const SizedBox(height: 10),
 
