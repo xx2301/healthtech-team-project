@@ -137,4 +137,39 @@ class BackendAuthRepository {
       throw Exception('Fetch health data failed: HTTP ${response.statusCode}');
     }
   }
+
+  // get chat list from backend
+  Future<List<Map<String, dynamic>>> getChats() async {
+    final token = await getToken();
+    if (token == null) {
+      throw Exception('Not logged in');
+    }
+
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/chats'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data['success'] == true) {
+          // ensure we always return a List<Map<String, dynamic>>
+          final List<dynamic> rawList = data['chats'] ?? [];
+          return rawList.cast<Map<String, dynamic>>();
+        } else {
+          throw Exception(data['error'] ?? 'Fetch chats failed');
+        }
+      } else {
+        final errorData = jsonDecode(response.body);
+        throw Exception(errorData['error'] ?? 'HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Network error while fetching chats: $e');
+    }
+  }
 }
