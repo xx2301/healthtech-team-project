@@ -45,7 +45,8 @@ class MyApp extends StatelessWidget {
         },
 
         //bloc consumer - auth
-        home: BlocConsumer<AuthCubit, AuthState>(
+        home: SettingsPage()
+        /*<AuthCubit, AuthState>(
           builder: (context, state) {
             print(state);
             //unathenticated -> auth page (login/register)
@@ -69,8 +70,8 @@ class MyApp extends StatelessWidget {
               ).showSnackBar(SnackBar(content: Text((state.message))));
             }
           },
-        ), 
-        theme: mainTheme,
+        ), */
+        //theme: mainTheme,
       
       
       ),

@@ -1,5 +1,6 @@
 import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/bar_graph.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/components/drawer.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/info_cards.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/line_graph.dart';
 import 'package:flutter/material.dart';
@@ -16,73 +17,7 @@ class _ReportPageState extends State<ReportPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: DefaultAppBar(),
-      drawer: Drawer(
-        child: Column(
-          children: [
-            // common to place a drawer header here
-            Container(
-        height: 80, 
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        color: Colors.green,
-        child: Row(
-          children: const [
-            Icon(Icons.health_and_safety,
-                color: Colors.white, size: 28),
-            SizedBox(width: 10),
-            Text(
-              'HealthTech',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ),
-
-            // home page list tile
-            ListTile(
-              leading: Icon(Icons.home),
-              title: Text("H O M E"),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/homepage');
-              },
-            ),
-
-            // settings page list title
-            ListTile(
-              leading: Icon(Icons.settings),
-              title: Text("S E T T I N G S"),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/settingspage');
-              },
-            ),
-
-            // report page list title
-            ListTile(
-              leading: Icon(Icons.analytics),
-              title: Text("R E P O R T"),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/reportpage');
-              },
-            ),
-
-            // chat page list title
-            ListTile(
-              leading: Icon(Icons.chat),
-              title: Text("C H A T "),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/chatpage');
-              },
-            ),
-          ],
-        ),
-      ),
+      drawer: DefaultDrawer(),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(15.0),
