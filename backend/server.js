@@ -1,73 +1,43 @@
 ﻿const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const { body, validationResult } = require('express-validator');
+require('dotenv').config();
+
+const { User, Doctor, Patient,HealthMetric,MedicalRecord,EmergencyContact,DoctorPatientRelation,HealthGoal,SymptomLog,Device,HealthReport,Conversation,ChatMessage} = require('./models/index');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-app.use(helmet()); //Security headers
-app.use(cors({
-  origin: '*', //Allow all origins; in a production environment, specific origins should be specified.
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-app.use(express.json()); //Parse JSON request body
-app.use(express.urlencoded({ extended: true })); //Parse URL-encoded request body
+app.use(helmet());
+app.use(cors({ origin: '*', credentials: true }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, //15mins
-  max: 100, //each ip max 100 requests in 15 minutes
-  message: 'Request limit exceeded, please try again later.'
-});
-app.use('/api/', limiter);
+const mongoURI = process.env.MONGODB_URI || 'mongodb://admin:simplepassword@localhost:27017/healthtech?authSource=admin';
 
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/healthtech', {
+mongoose.connect(mongoURI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
-.then(() => console.log('✅ Connected to MongoDB'))
-.catch(err => console.error('❌ MongoDB connection error:', err));
-
-const userSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-  password: { type: String, required: true },
-  name: { type: String, required: true, trim: true },
-  age: { type: Number, min: 0, max: 150 },
-  weight: { type: Number, min: 0, max: 300 },
-  height: { type: Number, min: 0, max: 300 },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
+.then(() => {
+  console.log('✅ Connected to MongoDB');
+  
+  User.createIndexes();
+  Patient.createIndexes();
+  Doctor.createIndexes();
+  HealthMetric.createIndexes();
+  MedicalRecord.createIndexes();
+  EmergencyContact.createIndexes();
+  DoctorPatientRelation.createIndexes();
+})
+.catch(err => {
+  console.error('❌ MongoDB Connect error:', err);
+  process.exit(1);
 });
-
-const healthDataSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  date: { type: Date, default: Date.now },
-  steps: { type: Number, min: 0, default: 0 },
-  heartRate: { type: Number, min: 0, max: 300, default: 0 },
-  calories: { type: Number, min: 0, default: 0 },
-  sleepHours: { type: Number, min: 0, max: 24, default: 0 },
-  notes: { type: String, trim: true }
-});
-
-const reminderSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  title: { type: String, required: true, trim: true },
-  description: { type: String, trim: true },
-  dueDate: { type: Date, required: true },
-  completed: { type: Boolean, default: false },
-  createdAt: { type: Date, default: Date.now }
-});
-
-const User = mongoose.model('User', userSchema);
-const HealthData = mongoose.model('HealthData', healthDataSchema);
-const Reminder = mongoose.model('Reminder', reminderSchema);
 
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -77,260 +47,109 @@ const authenticateToken = (req, res, next) => {
     return res.status(401).json({ success: false, error: 'Access token missing' });
   }
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
+  jwt.verify(token, JWT_SECRET, async (err, decoded) => {
     if (err) {
       return res.status(403).json({ success: false, error: 'Invalid access token' });
     }
-    req.user = user;
-    next();
+
+    try {
+      const user = await User.findById(decoded.userId);
+
+      if (!user) {
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+      
+      let detailedUser = user;
+      if (user.userType === 'doctor') {
+        detailedUser = await Doctor.findById(user._id);
+      } else if (user.userType === 'patient') {
+        detailedUser = await Patient.findById(user._id);
+      }
+      
+      req.user = {
+        userId: detailedUser._id,
+        email: detailedUser.email,
+        userType: detailedUser.userType,
+        ...detailedUser.toObject()
+      };
+      
+      next();
+    } catch (error) {
+      return res.status(500).json({ success: false, error: 'Failed to authenticate user' });
+    }
   });
+};
+
+const requireRole = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.userType)) {
+      return res.status(403).json({ 
+        success: false, 
+        error: `Required role: ${roles.join(' or ')}` 
+      });
+    }
+    next();
+  };
 };
 
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
-    <html lang="en">
+    <html>
     <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>HealthTech - Health Management System</title>
-        <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            }
-            
-            body {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                min-height: 100vh;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                padding: 20px;
-            }
-            
-            .container {
-                background: white;
-                border-radius: 20px;
-                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-                overflow: hidden;
-                width: 100%;
-                max-width: 900px;
-            }
-            
-            .header {
-                background: #4CAF50;
-                color: white;
-                padding: 30px;
-                text-align: center;
-            }
-            
-            .header h1 {
-                font-size: 2.5rem;
-                margin-bottom: 10px;
-            }
-            
-            .header p {
-                font-size: 1.1rem;
-                opacity: 0.9;
-            }
-            
-            .content {
-                padding: 40px;
-            }
-            
-            .stats-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 20px;
-                margin-bottom: 40px;
-            }
-            
-            .stat-card {
-                background: #f8f9fa;
-                border-radius: 10px;
-                padding: 20px;
-                text-align: center;
-                transition: transform 0.3s;
-            }
-            
-            .stat-card:hover {
-                transform: translateY(-5px);
-            }
-            
-            .stat-card h3 {
-                color: #4CAF50;
-                font-size: 2.5rem;
-                margin-bottom: 10px;
-            }
-            
-            .stat-card p {
-                color: #666;
-                font-size: 1rem;
-            }
-            
-            .api-info {
-                background: #f0f7ff;
-                border-left: 4px solid #2196F3;
-                padding: 20px;
-                margin-bottom: 30px;
-                border-radius: 0 8px 8px 0;
-            }
-            
-            .api-info h3 {
-                color: #2196F3;
-                margin-bottom: 15px;
-            }
-            
-            .endpoint {
-                background: white;
-                padding: 10px 15px;
-                margin: 10px 0;
-                border-radius: 5px;
-                border: 1px solid #e0e0e0;
-                font-family: monospace;
-            }
-            
-            .buttons {
-                display: flex;
-                gap: 15px;
-                flex-wrap: wrap;
-            }
-            
-            .btn {
-                padding: 12px 24px;
-                border: none;
-                border-radius: 8px;
-                font-size: 1rem;
-                cursor: pointer;
-                transition: all 0.3s;
-                text-decoration: none;
-                display: inline-block;
-            }
-            
-            .btn-primary {
-                background: #4CAF50;
-                color: white;
-            }
-            
-            .btn-secondary {
-                background: #2196F3;
-                color: white;
-            }
-            
-            .btn-outline {
-                background: transparent;
-                border: 2px solid #4CAF50;
-                color: #4CAF50;
-            }
-            
-            .btn:hover {
-                opacity: 0.9;
-                transform: translateY(-2px);
-            }
-            
-            .footer {
-                text-align: center;
-                padding: 20px;
-                color: #666;
-                border-top: 1px solid #eee;
-            }
-            
-            @media (max-width: 768px) {
-                .container {
-                    margin: 10px;
-                }
-                
-                .content {
-                    padding: 20px;
-                }
-                
-                .header h1 {
-                    font-size: 2rem;
-                }
-            }
-        </style>
+      <title>HealthTech - 简化版</title>
+      <style>
+        body { font-family: Arial; padding: 40px; max-width: 800px; margin: 0 auto; }
+        h1 { color: #4CAF50; }
+        .endpoint { background: #f5f5f5; padding: 10px; margin: 10px 0; border-left: 4px solid #4CAF50; }
+        code { background: #eee; padding: 2px 5px; }
+      </style>
     </head>
     <body>
-        <div class="container">
-            <div class="header">
-                <h1>🏥 HealthTech API</h1>
-                <p>Health Management System Backend Service</p>
-            </div>
+      <h1>🏥 HealthTech </h1>
+      <p>Portal: ${PORT}</p>
+      <p>This is a simplified healthcare system with only one unified user model.</p>
+      
+      <h3>📡 API Port</h3>
+      <div class="endpoint">
+        <strong>GET /health</strong> - System health check
+      </div>
+      <div class="endpoint">
+        <strong>POST /auth/register</strong> - Registered users (patients or doctors) <br>
+        <code>{ "email": "...", "password": "...", "fullName": "...", "userType": "patient|doctor" }</code>
+      </div>
+      <div class="endpoint">
+        <strong>POST /auth/login</strong> - Login <br>
+        <code>{ "email": "...", "password": "..." }</code>
+      </div>
+      <div class="endpoint">
+        <strong>GET /auth/me</strong> - Get current user information (token required)
+      </div>
+      
+      <h3>🔗 Quick Test</h3>
+      <button onclick="testAPI()">Test API</button>
+      <div id="result"></div>
+      
+      <script>
+        async function testAPI() {
+          const result = document.getElementById('result');
+          result.innerHTML = 'Testing API...';
+          
+          try {
+            // Health check
+            const healthRes = await fetch('/health');
+            const healthData = await healthRes.json();
             
-            <div class="content">
-                <div class="stats-grid" id="stats">
-                    <!-- Dynamic data will be populated using JavaScript -->
-                    <div class="stat-card">
-                        <h3 id="userCount">...</h3>
-                        <p>Registered Users</p>
-                    </div>
-                    <div class="stat-card">
-                        <h3 id="healthDataCount">...</h3>
-                        <p>Health Records</p>
-                    </div>
-                    <div class="stat-card">
-                        <h3 id="reminderCount">...</h3>
-                        <p>Active Reminders</p>
-                    </div>
-                    <div class="stat-card">
-                        <h3 id="dbStatus">✅</h3>
-                        <p>Database Status</p>
-                    </div>
-                </div>
-                
-                <div class="api-info">
-                    <h3>📡 API Endpoints</h3>
-                    <div class="endpoint">GET /api/health - Health check</div>
-                    <div class="endpoint">POST /api/auth/register - User registration</div>
-                    <div class="endpoint">POST /api/auth/login - User login</div>
-                    <div class="endpoint">GET /api/health-data - Get health data (auth required)</div>
-                    <div class="endpoint">POST /api/health-data - Add health data (auth required)</div>
-                    <div class="endpoint">GET /api/reminders - Get reminders (auth required)</div>
-                </div>
-                
-                <div class="buttons">
-                    <a href="/api/health" class="btn btn-primary">Check API Health</a>
-                    <a href="/admin" class="btn btn-secondary">Admin Dashboard</a>
-                    <a href="https://github.com/xx2301" class="btn btn-outline">GitHub Repository</a>
-                </div>
-            </div>
-            
-            <div class="footer">
-                <p>© 2026 HealthTech System | Port: ${PORT} | MongoDB Connected</p>
-            </div>
-        </div>
-        
-        <script>
-            // 获取并显示统计信息
-            async function loadStats() {
-                try {
-                    const response = await fetch('/api/health');
-                    const data = await response.json();
-                    
-                    document.getElementById('userCount').textContent = data.database.stats.users;
-                    document.getElementById('healthDataCount').textContent = data.database.stats.healthData;
-                    document.getElementById('reminderCount').textContent = data.database.stats.reminders;
-                    
-                    if (!data.database.connected) {
-                        document.getElementById('dbStatus').textContent = '❌';
-                        document.getElementById('dbStatus').style.color = 'red';
-                    }
-                } catch (error) {
-                    console.error('Failed to load stats:', error);
-                    document.getElementById('userCount').textContent = 'Error';
-                    document.getElementById('healthDataCount').textContent = 'Error';
-                    document.getElementById('reminderCount').textContent = 'Error';
-                    document.getElementById('dbStatus').textContent = '❌';
-                }
-            }
-            
-            document.addEventListener('DOMContentLoaded', loadStats);
-            
-            setInterval(loadStats, 30000);
-        </script>
+            result.innerHTML = \`
+              ✅ System is running normally<br>
+              Status: \${healthData.status}<br>
+              User count: \${healthData.stats.users}
+            \`;
+          } catch (error) {
+            result.innerHTML = '❌ Test failed: ' + error.message;
+          }
+        }
+      </script>
     </body>
     </html>
   `);
@@ -340,48 +159,92 @@ app.get('/api/health', async (req, res) => {
   try {
     const dbState = mongoose.connection.readyState;
     const dbStatus = dbState === 1 ? 'connected' : 'disconnected';
-
-    const userCount = await User.countDocuments();
-    const healthDataCount = await HealthData.countDocuments();
-    const reminderCount = await Reminder.countDocuments();
-
+    
+    const [
+      userCount,
+      doctorCount,
+      patientCount,
+      healthMetricCount,
+      medicalRecordCount,
+      emergencyContactCount
+    ] = await Promise.all([
+      User.countDocuments(),
+      Doctor.countDocuments(),
+      Patient.countDocuments(),
+      HealthMetric.countDocuments(),
+      MedicalRecord.countDocuments(),
+      EmergencyContact.countDocuments()
+    ]);
+    
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const recentUsers = await User.countDocuments({
+      registrationDate: { $gte: sevenDaysAgo }
+    });
+    
+    const twentyFourHoursAgo = new Date();
+    twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+    
+    const recentHealthMetrics = await HealthMetric.countDocuments({
+      timestamp: { $gte: twentyFourHoursAgo }
+    });
+    
     res.status(200).json({
       status: 'OK',
       timestamp: new Date().toISOString(),
-      service: 'HealthTech API',
-      version: '1.0.0',
+      service: 'HealthTech API v2.0',
+      version: '2.0.0',
       database: {
         connected: dbState === 1,
         message: dbState === 1 ? '✅ Connected to MongoDB successfully!' : '❌ MongoDB connection issue',
         stats: {
           users: userCount,
-          healthData: healthDataCount,
-          reminders: reminderCount,
-          status: dbStatus
+          doctors: doctorCount,
+          patients: patientCount,
+          healthMetrics: healthMetricCount,
+          medicalRecords: medicalRecordCount,
+          emergencyContacts: emergencyContactCount,
+          recentUsers24h: recentUsers,
+          recentHealthMetrics24h: recentHealthMetrics
         }
       },
       endpoints: {
         auth: [
           'POST /api/auth/register',
-          'POST /api/auth/login'
+          'POST /api/auth/login',
+          'GET  /api/auth/verify',
+          'POST /api/auth/logout'
+        ],
+        patient: [
+          'GET  /api/patients/profile',
+          'POST /api/patients/update-profile',
+          'GET  /api/patients/doctors',
+          'POST /api/patients/emergency-contacts'
+        ],
+        doctor: [
+          'GET  /api/doctors/profile',
+          'POST /api/doctors/update-profile',
+          'GET  /api/doctors/patients',
+          'POST /api/doctors/medical-records'
         ],
         health: [
-          'GET /api/health-data',
-          'POST /api/health-data'
+          'GET  /api/health-metrics',
+          'POST /api/health-metrics',
+          'GET  /api/medical-records',
+          'POST /api/symptom-logs'
         ],
-        reminders: [
-          'GET /api/reminders',
-          'POST /api/reminders'
-        ],
-        admin: [
-          'GET /api/admin/stats',
-          'POST /api/admin/backup'
+        relations: [
+          'POST /api/doctor-patient-relations',
+          'GET  /api/relations/pending',
+          'POST /api/relations/:id/approve'
         ]
       },
-      services: {
-        patientService: 'running',
-        appointmentService: 'running',
-        authService: 'running'
+      system: {
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        nodeVersion: process.version,
+        platform: process.platform
       }
     });
   } catch (error) {
@@ -396,64 +259,70 @@ app.get('/api/health', async (req, res) => {
 app.post('/api/auth/register', [
   body('email').isEmail().normalizeEmail(),
   body('password').isLength({ min: 6 }),
-  body('name').notEmpty().trim().escape(),
-  body('age').optional().isInt({ min: 0, max: 150 }),
-  body('weight').optional().isFloat({ min: 0, max: 300 }),
-  body('height').optional().isFloat({ min: 0, max: 300 })
+  body('fullName').notEmpty().trim().escape(),
+  body('dateOfBirth').optional().isISO8601().toDate(),
+  body('gender').optional().isIn(['male', 'female', 'other', 'prefer_not_to_say'])
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
+    return res.status(400).json({ 
+      success: false, 
+      errors: errors.array(),
+      message: 'Validation failed' 
+    });
   }
 
   try {
-    const { email, password, name, age, weight, height } = req.body;
+    const { email, password, fullName, dateOfBirth, gender } = req.body;
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ success: false, error: 'Email has already been registered' });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Email has already been registered' 
+      });
     }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = new User({
       email,
-      password: hashedPassword,
-      name,
-      age,
-      weight,
-      height
+      password,
+      fullName,
+      userType: 'user',
+      dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : new Date('1990-01-01'),
+      gender: gender || 'other'
     });
 
     await user.save();
 
     const token = jwt.sign(
-      { userId: user._id, email: user.email },
+      { userId: user._id, email: user.email, userType: user.userType },
       JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: '7d' }
     );
 
-    //return data for user excluded password
-    const userResponse = {
-      _id: user._id,
-      email: user.email,
-      name: user.name,
-      age: user.age,
-      weight: user.weight,
-      height: user.height,
-      createdAt: user.createdAt
-    };
+    const userResponse = user.toObject();
+    delete userResponse.password;
 
     res.status(201).json({
       success: true,
-      message: 'Register successful',
+      message: 'Registration successful',
       user: userResponse,
       token
     });
+
   } catch (error) {
-    console.error('Register Error:', error);
-    res.status(500).json({ success: false, error: 'Register failed, please try again later' });
+    console.error('Registration error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Registration failed',
+      details: process.env.NODE_ENV === 'development' ? error.message : 'Please try again later'
+    });
   }
+});
+
+app.post('/auth/register', (req, res) => {
+  req.url = '/api/auth/register';
+  app._router.handle(req, res);
 });
 
 app.post('/api/auth/login', [
@@ -470,31 +339,35 @@ app.post('/api/auth/login', [
 
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(401).json({ success: false, error: 'Email or password is incorrect' });
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Email or password incorrect' 
+      });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ success: false, error: 'Email or password is incorrect' });
+    const isValidPassword = await user.comparePassword(password);
+    if (!isValidPassword) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Email or password incorrect' 
+      });
     }
+
+    user.updatedAt = new Date();
+    await user.save();
 
     const token = jwt.sign(
-      { userId: user._id, email: user.email },
+      { 
+        userId: user._id, 
+        email: user.email,
+        userType: user.userType 
+      },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
 
-    //return data for user excluded password
-    const userResponse = {
-      _id: user._id,
-      email: user.email,
-      name: user.name,
-      age: user.age,
-      weight: user.weight,
-      height: user.height,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt
-    };
+    const userResponse = user.toObject();
+    delete userResponse.password;
 
     res.status(200).json({
       success: true,
@@ -502,234 +375,1342 @@ app.post('/api/auth/login', [
       user: userResponse,
       token
     });
+
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ success: false, error: 'Login failed, please try again later' });
+    res.status(500).json({ 
+      success: false, 
+      error: 'Login failed' 
+    });
   }
 });
 
-app.get('/api/auth/verify', authenticateToken, async (req, res) => {
+app.post('/auth/login', (req, res) => {
+  req.url = '/api/auth/login';
+  app._router.handle(req, res);
+});
+
+app.post('/api/user/apply-for-doctor', authenticateToken, [
+  body('medicalLicenseNumber').notEmpty().trim(),
+  body('specialization').notEmpty().isIn([
+    'cardiology', 'dermatology', 'endocrinology', 'gastroenterology',
+    'neurology', 'pediatrics', 'psychiatry', 'radiology',
+    'surgery', 'general_practice', 'orthopedics', 'ophthalmology'
+  ]),
+  body('hospitalAffiliation').optional().trim(),
+  body('department').optional().trim(),
+  body('yearsOfExperience').optional().isInt({ min: 0 }),
+  body('consultationFee').optional().isFloat({ min: 0 }),
+  body('qualifications').optional().isArray(),
+  body('bio').optional().trim(),
+  body('languagesSpoken').optional().isArray()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+  
   try {
-    const user = await User.findById(req.user.userId).select('-password');
+    const user = await User.findById(req.user.userId);
+    
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    const existingDoctor = await Doctor.findOne({ userId: user._id });
+    if (existingDoctor) {
+      return res.status(400).json({ 
+        success: false, 
+        error: existingDoctor.approvalStatus === 'approved' 
+          ? 'You are already a doctor' 
+          : 'You already have a pending doctor application'
+      });
+    }
+    
+    const existingLicense = await Doctor.findOne({ 
+      medicalLicenseNumber: req.body.medicalLicenseNumber.toUpperCase() 
+    });
+    
+    if (existingLicense) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Medical license number already registered' 
+      });
+    }
+    
+    const doctor = new Doctor({
+      userId: user._id,
+      medicalLicenseNumber: req.body.medicalLicenseNumber.toUpperCase(),
+      specialization: req.body.specialization,
+      hospitalAffiliation: req.body.hospitalAffiliation,
+      department: req.body.department,
+      yearsOfExperience: req.body.yearsOfExperience,
+      consultationFee: req.body.consultationFee || 0,
+      qualifications: req.body.qualifications || [],
+      bio: req.body.bio,
+      languagesSpoken: req.body.languagesSpoken || [],
+      approvalStatus: 'pending'
+    });
+    
+    await doctor.save();
+    
+    user.accountStatus = 'pending_doctor_approval';
+    await user.save();
+    
+    res.status(201).json({
+      success: true,
+      message: 'Doctor application submitted successfully. Waiting for admin approval.',
+      applicationId: doctor._id
+    });
+    
+  } catch (error) {
+    console.error('Submit doctor application error:', error);
+    res.status(500).json({ success: false, error: 'Failed to submit doctor application' });
+  }
+});
+
+const requireAdmin = (req, res, next) => {
+  if (!req.user || req.user.userType !== 'admin') {
+    return res.status(403).json({ 
+      success: false, 
+      error: 'Admin access required' 
+    });
+  }
+  next();
+};
+
+app.post('/api/admin/create-patient', authenticateToken, requireAdmin, [
+  body('userId').isMongoId(),
+  body('weight').optional().isFloat({ min: 0, max: 500 }),
+  body('height').optional().isFloat({ min: 0, max: 300 }),
+  body('bloodType').optional().isIn(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'unknown'])
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+  
+  try {
+    const user = await User.findById(req.body.userId);
+    
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    if (user.patientProfileId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User already has a patient profile' 
+      });
+    }
+    
+    const patient = new Patient({
+      userId: user._id,
+      weight: req.body.weight,
+      height: req.body.height,
+      bloodType: req.body.bloodType || 'unknown',
+      careModeEnabled: false,
+      preferredUnitSystem: 'metric'
+    });
+    
+    await patient.save();
+    
+    user.patientProfileId = patient._id;
+    await user.save();
+    
+    res.status(201).json({
+      success: true,
+      message: 'Patient profile created successfully',
+      patient: patient
+    });
+    
+  } catch (error) {
+    console.error('Create patient error:', error);
+    res.status(500).json({ success: false, error: 'Failed to create patient profile' });
+  }
+});
+
+app.post('/api/doctor/create-patient', authenticateToken, [
+  body('userId').isMongoId(),
+  body('weight').optional().isFloat({ min: 0, max: 500 }),
+  body('height').optional().isFloat({ min: 0, max: 300 }),
+  body('bloodType').optional().isIn(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'unknown'])
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+  
+  try {
+    const doctor = await Doctor.findOne({ 
+      userId: req.user.userId,
+      approvalStatus: 'approved'
+    });
+    
+    if (!doctor) {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Only approved doctors can create patient profiles' 
+      });
+    }
+    
+    const user = await User.findById(req.body.userId);
+    
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    if (user.patientProfileId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User already has a patient profile' 
+      });
+    }
+    
+    const patient = new Patient({
+      userId: user._id,
+      weight: req.body.weight,
+      height: req.body.height,
+      bloodType: req.body.bloodType || 'unknown',
+      careModeEnabled: false,
+      preferredUnitSystem: 'metric'
+    });
+    
+    await patient.save();
+    
+    user.patientProfileId = patient._id;
+    await user.save();
+    
+    const relation = new DoctorPatientRelation({
+      doctorId: doctor._id,
+      patientId: patient._id,
+      relationType: 'primary',
+      status: 'active',
+      permissions: {
+        viewMedicalRecords: true,
+        viewHealthMetrics: true,
+        addMedicalNotes: true,
+        writePrescriptions: true
+      }
+    });
+    
+    await relation.save();
+    
+    res.status(201).json({
+      success: true,
+      message: 'Patient profile created successfully',
+      patient: patient,
+      relation: relation
+    });
+    
+  } catch (error) {
+    console.error('Doctor create patient error:', error);
+    res.status(500).json({ success: false, error: 'Failed to create patient profile' });
+  }
+});
+
+app.get('/api/admin/pending-doctor-applications', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const applications = await Doctor.find({ approvalStatus: 'pending' })
+      .populate('userId', 'email fullName dateOfBirth gender phone createdAt')
+      .sort({ createdAt: 1 });
+    
+    res.json({
+      success: true,
+      data: applications,
+      count: applications.length
+    });
+    
+  } catch (error) {
+    console.error('Get pending doctor applications error:', error);
+    res.status(500).json({ success: false, error: 'Failed to get applications' });
+  }
+});
+
+app.post('/api/admin/approve-doctor/:doctorId', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const doctor = await Doctor.findById(req.params.doctorId);
+    
+    if (!doctor) {
+      return res.status(404).json({ success: false, error: 'Doctor application not found' });
+    }
+    
+    if (doctor.approvalStatus !== 'pending') {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Application is already ${doctor.approvalStatus}` 
+      });
+    }
+    
+    doctor.approvalStatus = 'approved';
+    doctor.approvedBy = req.user.userId;
+    doctor.approvedAt = new Date();
+    
+    await doctor.save();
+    
+    await User.findByIdAndUpdate(doctor.userId, {
+      accountStatus: 'active',
+      doctorProfileId: doctor._id
+    });
+    
+    res.json({
+      success: true,
+      message: 'Doctor application approved successfully',
+      doctor: doctor
+    });
+    
+  } catch (error) {
+    console.error('Approve doctor error:', error);
+    res.status(500).json({ success: false, error: 'Failed to approve doctor application' });
+  }
+});
+
+app.post('/api/admin/reject-doctor/:doctorId', authenticateToken, requireAdmin, [
+  body('rejectionReason').optional().trim()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+  
+  try {
+    const doctor = await Doctor.findById(req.params.doctorId);
+    
+    if (!doctor) {
+      return res.status(404).json({ success: false, error: 'Doctor application not found' });
+    }
+    
+    if (doctor.approvalStatus !== 'pending') {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Application is already ${doctor.approvalStatus}` 
+      });
+    }
+    
+    doctor.approvalStatus = 'rejected';
+    doctor.rejectionReason = req.body.rejectionReason;
+    
+    await doctor.save();
+    
+    await User.findByIdAndUpdate(doctor.userId, {
+      accountStatus: 'active'
+    });
+    
+    res.json({
+      success: true,
+      message: 'Doctor application rejected',
+      doctor: doctor
+    });
+    
+  } catch (error) {
+    console.error('Reject doctor error:', error);
+    res.status(500).json({ success: false, error: 'Failed to reject doctor application' });
+  }
+});
+
+app.get('/auth/me', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'User not found' 
+      });
+    }
+
+    const userResponse = user.toObject();
+    delete userResponse.password;
+
+    res.status(200).json({
+      success: true,
+      user: userResponse
+    });
+  } catch (error) {
+    console.error('Fetch user info error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch user information' 
+    });
+  }
+});
+
+app.get('/api/user/full-profile', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    let profileData = {
+      user: user.toObject()
+    };
+    
+    if (user.patientProfileId) {
+      const patient = await Patient.findOne({ userId: user._id });
+      profileData.patient = patient;
+      
+      const relations = await DoctorPatientRelation.find({ patientId: patient._id })
+        .populate('doctorId', 'specialization hospitalAffiliation')
+        .populate('doctorId.userId', 'fullName email phone');
+      profileData.assignedDoctors = relations;
+    }
+    
+    if (user.doctorProfileId) {
+      const doctor = await Doctor.findOne({ userId: user._id });
+      profileData.doctor = doctor;
+      
+      if (doctor && doctor.approvalStatus === 'approved') {
+        const relations = await DoctorPatientRelation.find({ doctorId: doctor._id })
+          .populate('patientId', 'patientCode bloodType')
+          .populate('patientId.userId', 'fullName dateOfBirth gender');
+        profileData.assignedPatients = relations;
+      }
+    }
+    
+    delete profileData.user.password;
+    
+    res.json({
+      success: true,
+      data: profileData
+    });
+    
+  } catch (error) {
+    console.error('Get full profile error:', error);
+    res.status(500).json({ success: false, error: 'Failed to get profile' });
+  }
+});
+
+app.put('/api/user/profile', authenticateToken, [
+  body('fullName').optional().trim().escape(),
+  body('dateOfBirth').optional().isISO8601(),
+  body('gender').optional().isIn(['male', 'female', 'other', 'prefer_not_to_say']),
+  body('phone').optional().trim()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+
+  try {
+    const user = await User.findById(req.user.userId);
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    res.status(200).json({
+    if (req.body.fullName) user.fullName = req.body.fullName;
+    if (req.body.dateOfBirth) user.dateOfBirth = new Date(req.body.dateOfBirth);
+    if (req.body.gender) user.gender = req.body.gender;
+    if (req.body.phone !== undefined) user.phone = req.body.phone;
+    
+    user.updatedAt = new Date();
+    await user.save();
+
+    const userResponse = user.toObject();
+    delete userResponse.password;
+
+    res.json({
       success: true,
-      user: {
-        _id: user._id,
-        email: user.email,
-        name: user.name,
-        age: user.age,
-        weight: user.weight,
-        height: user.height,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt
-      }
+      message: 'Profile updated successfully',
+      user: userResponse
     });
+
   } catch (error) {
-    console.error('Verification failed:', error);
-    res.status(500).json({ success: false, error: 'Verification failed' });
+    console.error('Update profile error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update profile' });
   }
 });
 
-app.post('/api/auth/forgot-password', [
-  body('email').isEmail().normalizeEmail()
-], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
-  }
-
+app.put('/api/patient/profile', authenticateToken, async (req, res) => {
   try {
-    const { email } = req.body;
-
-    const user = await User.findOne({ email });
+    const user = await User.findById(req.user.userId);
     if (!user) {
-      //for security, return a success message even if email not found
-      return res.status(200).json({
-        success: true,
-        message: 'If the email exists, a password reset link has been sent'
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    if (!user.patientProfileId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'No patient profile found for this user' 
       });
     }
-
-    const resetToken = jwt.sign(
-      { userId: user._id, email: user.email, purpose: 'password_reset' },
-      JWT_SECRET,
-      { expiresIn: '1h' }
-    );
-
-    // An email should be sent here, but for simplicity, we just return a message
-    // In a real project: sendResetEmail(user.email, resetToken);
-    res.status(200).json({
-      success: true,
-      message: 'password reset link has been sent to your email',
-      resetToken // This should not be returned in an actual project; it is only used for demonstration here.
-    });
-  } catch (error) {
-    console.error('forgot password error:', error);
-    res.status(500).json({ success: false, error: 'request failed, please try again later' });
-  }
-});
-
-app.post('/api/auth/logout', authenticateToken, (req, res) => {
-  res.status(200).json({ success: true, message: 'Logged out successfully' });
-});
-
-app.delete('/api/auth/delete-account', authenticateToken, async (req, res) => {
-  try {
-    await User.findByIdAndDelete(req.user.userId);
-    //await HealthData.deleteMany({ userId: req.user.userId });
-    //await Reminder.deleteMany({ userId: req.user.userId });
-
-    res.status(200).json({ success: true, message: 'account deleted successfully' });
-  } catch (error) {
-    console.error('delete account error:', error);
-    res.status(500).json({ success: false, error: 'delete account failed' });
-  }
-});
-
-app.get('/api/health-data', authenticateToken, async (req, res) => {
-  try {
-    const healthData = await HealthData.find({ userId: req.user.userId })
-      .sort({ date: -1 })
-      .limit(30);
-
-    res.status(200).json({
-      success: true,
-      data: healthData
-    });
-  } catch (error) {
-    console.error('Fetch health data error:', error);
-    res.status(500).json({ success: false, error: 'Fetch health data failed' });
-  }
-});
-
-app.post('/api/health-data', authenticateToken, [
-  body('steps').optional().isInt({ min: 0 }),
-  body('heartRate').optional().isInt({ min: 0, max: 300 }),
-  body('calories').optional().isFloat({ min: 0 }),
-  body('sleepHours').optional().isFloat({ min: 0, max: 24 }),
-  body('notes').optional().trim().escape()
-], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
-  }
-
-  try {
-    const { steps, heartRate, calories, sleepHours, notes } = req.body;
-
-    const healthData = new HealthData({
-      userId: req.user.userId,
-      steps,
-      heartRate,
-      calories,
-      sleepHours,
-      notes
-    });
-
-    await healthData.save();
-
-    res.status(201).json({
-      success: true,
-      message: 'Health data saved successfully',
-      data: healthData
-    });
-  } catch (error) {
-    console.error('Save health data error:', error);
-    res.status(500).json({ success: false, error: 'Save health data failed' });
-  }
-});
-
-app.get('/api/reminders', authenticateToken, async (req, res) => {
-  try {
-    const reminders = await Reminder.find({ userId: req.user.userId })
-      .sort({ dueDate: 1 });
-
-    res.status(200).json({
-      success: true,
-      data: reminders
-    });
-  } catch (error) {
-    console.error('Fetch reminders error:', error);
-    res.status(500).json({ success: false, error: 'Fetch reminders failed' });
-  }
-});
-
-app.post('/api/reminders', authenticateToken, [
-  body('title').notEmpty().trim().escape(),
-  body('description').optional().trim().escape(),
-  body('dueDate').isISO8601()
-], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
-  }
-
-  try {
-    const { title, description, dueDate } = req.body;
-
-    const reminder = new Reminder({
-      userId: req.user.userId,
-      title,
-      description,
-      dueDate
-    });
-
-    await reminder.save();
-
-    res.status(201).json({
-      success: true,
-      message: 'Reminder created successfully',
-      data: reminder
-    });
-  } catch (error) {
-    console.error('Create reminder error:', error);
-    res.status(500).json({ success: false, error: 'Create reminder failed' });
-  }
-});
-
-app.get('/api/admin/stats', authenticateToken, async (req, res) => {
-  try {
-    // Verify administrator privileges (simplified: check a specific user ID)
-    const ADMIN_USER_ID = process.env.ADMIN_USER_ID;
-    if (req.user.userId !== ADMIN_USER_ID) {
-      return res.status(403).json({ success: false, error: 'Restricted access' });
+    
+    const patient = await Patient.findById(user.patientProfileId);
+    if (!patient) {
+      return res.status(404).json({ success: false, error: 'Patient profile not found' });
     }
 
-    const totalUsers = await User.countDocuments();
-    const totalHealthData = await HealthData.countDocuments();
-    const totalReminders = await Reminder.countDocuments();
-
-    //new users in the last 7 days
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-    const recentUsers = await User.countDocuments({
-      createdAt: { $gte: sevenDaysAgo }
+    const updates = req.body;
+    Object.keys(updates).forEach(key => {
+      if (['weight', 'height', 'bloodType', 'allergies', 'chronicConditions', 'emergencyContacts', 
+           'careModeEnabled', 'preferredUnitSystem', 'primaryDoctor', 'smokingStatus', 
+           'alcoholConsumption', 'exerciseFrequency', 'medicalHistorySummary', 
+           'dataSharingConsent', 'shareWithDoctors'].includes(key)) {
+        patient[key] = updates[key];
+      }
     });
 
+    await patient.save();
+
+    const patientResponse = patient.toObject();
+
+    res.json({
+      success: true,
+      message: 'Patient information updated successfully',
+      patient: patientResponse
+    });
+
+  } catch (error) {
+    console.error('Update patient information error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update patient information' });
+  }
+});
+
+app.put('/api/doctor/profile', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    if (!user.doctorProfileId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'No doctor profile found for this user' 
+      });
+    }
+    
+    const doctor = await Doctor.findById(user.doctorProfileId);
+    if (!doctor) {
+      return res.status(404).json({ success: false, error: 'Doctor profile not found' });
+    }
+
+    const updates = req.body;
+    Object.keys(updates).forEach(key => {
+      if (['hospitalAffiliation', 'department', 'yearsOfExperience', 'consultationFee', 
+           'availabilitySchedule', 'status', 'maxPatients', 'qualifications', 
+           'bio', 'languagesSpoken'].includes(key)) {
+        doctor[key] = updates[key];
+      }
+      
+      if (key === 'medicalLicenseNumber' && updates[key] !== doctor.medicalLicenseNumber) {
+        return res.status(400).json({
+          success: false,
+          error: 'Medical license number cannot be changed directly. Please contact admin.'
+        });
+      }
+      
+      if (key === 'specialization' && updates[key] !== doctor.specialization) {
+        return res.status(400).json({
+          success: false,
+          error: 'Specialization change requires admin approval.'
+        });
+      }
+    });
+
+    await doctor.save();
+
+    const doctorResponse = doctor.toObject();
+
+    res.json({
+      success: true,
+      message: 'Doctor profile updated successfully',
+      doctor: doctorResponse
+    });
+
+  } catch (error) {
+    console.error('Update doctor profile error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update doctor profile' });
+  }
+});
+
+app.get('/api/user/check-role', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    let hasPatientProfile = false;
+    let hasDoctorProfile = false;
+    let isApprovedDoctor = false;
+    
+    if (user.patientProfileId) {
+      const patient = await Patient.findById(user.patientProfileId);
+      hasPatientProfile = !!patient;
+    }
+    
+    if (user.doctorProfileId) {
+      const doctor = await Doctor.findById(user.doctorProfileId);
+      hasDoctorProfile = !!doctor;
+      isApprovedDoctor = doctor && doctor.approvalStatus === 'approved';
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        userType: user.userType,
+        hasPatientProfile,
+        hasDoctorProfile,
+        isApprovedDoctor,
+        accountStatus: user.accountStatus
+      }
+    });
+    
+  } catch (error) {
+    console.error('Check role error:', error);
+    res.status(500).json({ success: false, error: 'Failed to check user role' });
+  }
+});
+
+app.get('/api/user/basic-info', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId)
+      .select('-password -__v');
+    
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    res.json({
+      success: true,
+      data: user
+    });
+    
+  } catch (error) {
+    console.error('Get basic info error:', error);
+    res.status(500).json({ success: false, error: 'Failed to get user info' });
+  }
+});
+
+app.get('/api/health-metrics', authenticateToken, async (req, res) => {
+  try {
+    const { 
+      startDate, 
+      endDate, 
+      metricType,
+      limit = 100,
+      page = 1 
+    } = req.query;
+    
+    let query = {};
+    
+    if (req.user.userType === 'patient') {
+      query.patientId = req.user._id;
+      query.userId = req.user._id;
+    }
+    
+    if (req.user.userType === 'doctor') {
+      const relations = await DoctorPatientRelation.find({ 
+        doctorId: req.user._id,
+        status: 'active'
+      }).select('patientId');
+      
+      const patientIds = relations.map(r => r.patientId);
+      
+      if (patientIds.length === 0) {
+        return res.status(200).json({
+          success: true,
+          data: [],
+          pagination: { total: 0, page, limit }
+        });
+      }
+      
+      query.patientId = { $in: patientIds };
+    }
+    
+    if (startDate || endDate) {
+      query.timestamp = {};
+      if (startDate) query.timestamp.$gte = new Date(startDate);
+      if (endDate) query.timestamp.$lte = new Date(endDate);
+    }
+    
+    if (metricType) {
+      query.metricType = metricType;
+    }
+    
+    const skip = (page - 1) * limit;
+    
+    const [metrics, total] = await Promise.all([
+      HealthMetric.find(query)
+        .sort({ timestamp: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .populate('patient', 'fullName patientCode')
+        .populate('doctor', 'fullName specialization'),
+      HealthMetric.countDocuments(query)
+    ]);
+    
     res.status(200).json({
       success: true,
-      stats: {
-        totalUsers,
-        totalHealthData,
-        totalReminders,
-        recentUsers
+      data: metrics,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
+    
+  } catch (error) {
+    console.error('Fetch health metrics error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch health metrics' 
+    });
+  }
+});
+
+app.post('/api/health-metrics', authenticateToken, [
+  body('metricType').isIn([
+    'steps', 'heart_rate', 'blood_pressure', 'blood_glucose',
+    'weight', 'height', 'bmi', 'body_temperature',
+    'oxygen_saturation', 'sleep_duration', 'calories_burned',
+    'water_intake', 'respiratory_rate'
+  ]),
+  body('value').notEmpty(),
+  body('unit').optional(),
+  body('timestamp').optional().isISO8601(),
+  body('source').optional().isIn(['device', 'manual', 'calculated', 'imported'])
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+  
+  try {
+    const { 
+      metricType, 
+      value, 
+      unit, 
+      timestamp,
+      source = 'manual',
+      deviceId,
+      notes 
+    } = req.body;
+    
+    let patientId;
+    
+    if (req.user.userType === 'patient') {
+      patientId = req.user._id;
+    } else if (req.user.userType === 'doctor') {
+      if (!req.body.patientId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Patient ID is required for doctors'
+        });
+      }
+      
+      const relation = await DoctorPatientRelation.findOne({
+        doctorId: req.user._id,
+        patientId: req.body.patientId,
+        status: 'active',
+        'permissions.viewHealthMetrics': true
+      });
+      
+      if (!relation) {
+        return res.status(403).json({
+          success: false,
+          error: 'No permission to add health metrics for this patient'
+        });
+      }
+      
+      patientId = req.body.patientId;
+    } else {
+      return res.status(403).json({
+        success: false,
+        error: 'Permission denied'
+      });
+    }
+    
+    const healthMetric = new HealthMetric({
+      patientId,
+      userId: req.user._id,
+      metricType,
+      value,
+      unit,
+      timestamp: timestamp ? new Date(timestamp) : new Date(),
+      source,
+      deviceId,
+      notes,
+      qualityScore: 100,
+      isAbnormal: false
+    });
+    
+    await healthMetric.save();
+    
+    if (healthMetric.isAbnormal) {
+      await notifyAbnormalMetric(healthMetric);
+    }
+    
+    res.status(201).json({
+      success: true,
+      message: 'Health metric recorded successfully',
+      data: healthMetric
+    });
+    
+  } catch (error) {
+    console.error('Save health metric error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to save health metric'
+    });
+  }
+});
+
+app.post('/api/medical-records', authenticateToken, requireRole('doctor'), [
+  body('patientId').isMongoId(),
+  body('visitType').isIn([
+    'consultation', 'follow_up', 'emergency', 
+    'routine_checkup', 'vaccination', 'lab_test'
+  ]),
+  body('diagnosis.primary').optional().notEmpty(),
+  body('prescriptions.*.medication').optional().notEmpty(),
+  body('followUpDate').optional().isISO8601()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+  
+  try {
+    const {
+      patientId,
+      visitType,
+      symptoms,
+      diagnosis,
+      prescriptions,
+      labResults,
+      treatmentPlan,
+      followUpDate,
+      notes
+    } = req.body;
+    
+    const relation = await DoctorPatientRelation.findOne({
+      doctorId: req.user._id,
+      patientId,
+      status: 'active',
+      'permissions.addMedicalNotes': true
+    });
+    
+    if (!relation) {
+      return res.status(403).json({
+        success: false,
+        error: 'No permission to create medical records for this patient'
+      });
+    }
+    
+    const medicalRecord = new MedicalRecord({
+      patientId,
+      doctorId: req.user._id,
+      visitDate: new Date(),
+      visitType,
+      symptoms: symptoms || [],
+      diagnosis: diagnosis || { primary: '', notes: '' },
+      prescriptions: prescriptions || [],
+      labResults: labResults || [],
+      treatmentPlan: treatmentPlan || { description: '' },
+      followUpDate: followUpDate ? new Date(followUpDate) : null,
+      notes,
+      recordStatus: 'draft',
+      createdBy: req.user._id,
+      lastUpdatedBy: req.user._id
+    });
+    
+    await medicalRecord.save();
+    
+    await createActivityLog({
+      userId: req.user._id,
+      patientId,
+      action: 'create_medical_record',
+      details: { recordId: medicalRecord._id, visitType },
+      timestamp: new Date()
+    });
+    
+    res.status(201).json({
+      success: true,
+      message: 'Medical record created successfully',
+      data: medicalRecord
+    });
+    
+  } catch (error) {
+    console.error('Create medical record error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create medical record'
+    });
+  }
+});
+
+app.get('/api/patients/medical-records', authenticateToken, async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const { 
+      startDate, 
+      endDate, 
+      visitType,
+      limit = 20,
+      page = 1 
+    } = req.query;
+    
+    let hasPermission = false;
+    
+    if (req.user.userType === 'patient' && req.user._id.toString() === patientId) {
+      hasPermission = true;
+    } else if (req.user.userType === 'doctor') {
+      const relation = await DoctorPatientRelation.findOne({
+        doctorId: req.user._id,
+        patientId,
+        status: 'active',
+        'permissions.viewMedicalRecords': true
+      });
+      
+      hasPermission = !!relation;
+    }
+    
+    if (!hasPermission) {
+      return res.status(403).json({
+        success: false,
+        error: 'No permission to view medical records'
+      });
+    }
+    
+    let query = { patientId };
+    
+    if (startDate || endDate) {
+      query.visitDate = {};
+      if (startDate) query.visitDate.$gte = new Date(startDate);
+      if (endDate) query.visitDate.$lte = new Date(endDate);
+    }
+    
+    if (visitType) {
+      query.visitType = visitType;
+    }
+    
+    const skip = (page - 1) * limit;
+    
+    const [records, total] = await Promise.all([
+      MedicalRecord.find(query)
+        .sort({ visitDate: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .populate('doctor', 'fullName specialization hospitalAffiliation')
+        .populate('patient', 'fullName dateOfBirth gender')
+        .exec(),
+      MedicalRecord.countDocuments(query)
+    ]);
+    
+    res.status(200).json({
+      success: true,
+      data: records,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
+    
+  } catch (error) {
+    console.error('Fetch medical records error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch medical records'
+    });
+  }
+});
+
+app.post('/api/emergency-contacts', authenticateToken, requireRole('patient'), [
+  body('fullName').notEmpty().trim(),
+  body('relationship').isIn([
+    'spouse', 'parent', 'child', 'sibling',
+    'friend', 'relative', 'caregiver', 'other'
+  ]),
+  body('phoneNum').isMobilePhone(),
+  body('email').optional().isEmail(),
+  body('isPrimary').optional().isBoolean()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+  
+  try {
+    const {
+      fullName,
+      relationship,
+      phoneNum,
+      email,
+      address,
+      isPrimary = false,
+      notiEnabled = true,
+      preferredContactMethod = 'phone'
+    } = req.body;
+    
+    const emergencyContact = new EmergencyContact({
+      patientId: req.user._id,
+      fullName,
+      relationship,
+      phoneNum,
+      email,
+      address,
+      isPrimary,
+      notiEnabled,
+      preferredContactMethod
+    });
+    
+    await emergencyContact.save();
+    
+    await Patient.findByIdAndUpdate(
+      req.user._id,
+      { $push: { emergencyContacts: emergencyContact._id } }
+    );
+    
+    res.status(201).json({
+      success: true,
+      message: 'Emergency contact added successfully',
+      data: emergencyContact
+    });
+    
+  } catch (error) {
+    console.error('Add emergency contact error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to add emergency contact'
+    });
+  }
+});
+
+app.post('/api/doctor-patient-relations', authenticateToken, requireRole('doctor'), [
+  body('patientId').isMongoId(),
+  body('relationType').isIn(['primary', 'specialist', 'consultant', 'temporary']),
+  body('permissions').optional().isObject(),
+  body('reasonForRelation').optional().notEmpty()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+  
+  try {
+    const {
+      patientId,
+      relationType,
+      permissions = {
+        viewMedicalRecords: true,
+        viewHealthMetrics: true,
+        addMedicalNotes: false,
+        writePrescriptions: false
+      },
+      reasonForRelation,
+      accessLevel = 'limited'
+    } = req.body;
+    
+    const patient = await Patient.findById(patientId);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        error: 'Patient not found'
+      });
+    }
+    
+    const existingRelation = await DoctorPatientRelation.findOne({
+      doctorId: req.user._id,
+      patientId,
+      status: 'active'
+    });
+    
+    if (existingRelation) {
+      return res.status(400).json({
+        success: false,
+        error: 'Active relation already exists with this patient'
+      });
+    }
+    
+    const relation = new DoctorPatientRelation({
+      doctorId: req.user._id,
+      patientId,
+      relationType,
+      permissions,
+      reasonForRelation,
+      accessLevel,
+      status: 'pending', //need permission from patient
+      createdBy: req.user._id,
+      lastUpdatedBy: req.user._id
+    });
+    
+    await relation.save();
+    
+    await sendNotification({
+      userId: patientId,
+      type: 'doctor_request',
+      title: 'New Doctor Connection Request',
+      message: `Dr. ${req.user.fullName} wants to connect with you`,
+      data: { relationId: relation._id, doctorId: req.user._id }
+    });
+    
+    res.status(201).json({
+      success: true,
+      message: 'Doctor-patient relation request sent successfully',
+      data: relation
+    });
+    
+  } catch (error) {
+    console.error('Create doctor-patient relation error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create doctor-patient relation'
+    });
+  }
+});
+
+app.get('/api/doctors/patients', authenticateToken, requireRole('doctor'), async (req, res) => {
+  try {
+    const relations = await DoctorPatientRelation.find({ 
+      doctorId: req.user.userId,
+      status: 'active'
+    }).populate('patient', 'fullName patientCode dateOfBirth gender');
+    
+    const patients = relations.map(relation => ({
+      ...relation.patient.toObject(),
+      relationType: relation.relationType,
+      permissions: relation.permissions
+    }));
+    
+    res.status(200).json({
+      success: true,
+      data: patients,
+      count: patients.length
+    });
+  } catch (error) {
+    console.error('Fetch patients error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch patients list' });
+  }
+});
+
+app.get('/api/patients/doctors', authenticateToken, requireRole('patient'), async (req, res) => {
+  try {
+    const relations = await DoctorPatientRelation.find({ 
+      patientId: req.user.userId,
+      status: 'active'
+    }).populate('doctor', 'fullName specialization hospitalAffiliation rating');
+    
+    const doctors = relations.map(relation => ({
+      ...relation.doctor.toObject(),
+      relationType: relation.relationType,
+      permissions: relation.permissions
+    }));
+    
+    res.status(200).json({
+      success: true,
+      data: doctors,
+      count: doctors.length
+    });
+  } catch (error) {
+    console.error('Fetch doctors error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch doctors list' });
+  }
+});
+
+app.post('/api/symptom-logs', authenticateToken, requireRole('patient'), [
+  body('symptomType').notEmpty(),
+  body('severity').isInt({ min: 1, max: 10 }),
+  body('startTime').isISO8601(),
+  body('location').optional()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+  
+  try {
+    const { symptomType, severity, startTime, endTime, location, triggers, reliefMethods, notes } = req.body;
+    
+    const symptomLog = new SymptomLog({
+      patientId: req.user.userId,
+      symptomType,
+      severity: parseInt(severity),
+      startTime: new Date(startTime),
+      endTime: endTime ? new Date(endTime) : null,
+      location,
+      triggers: triggers || [],
+      reliefMethods: reliefMethods || [],
+      notes
+    });
+    
+    await symptomLog.save();
+    
+    res.status(201).json({
+      success: true,
+      message: 'Symptom log created successfully',
+      data: symptomLog
+    });
+  } catch (error) {
+    console.error('Create symptom log error:', error);
+    res.status(500).json({ success: false, error: 'Failed to create symptom log' });
+  }
+});
+
+app.get('/api/symptom-logs', authenticateToken, requireRole('patient'), async (req, res) => {
+  try {
+    const { limit = 50, page = 1, symptomType, startDate, endDate } = req.query;
+    const skip = (page - 1) * limit;
+    
+    let query = { patientId: req.user.userId };
+    
+    if (symptomType) query.symptomType = symptomType;
+    
+    if (startDate || endDate) {
+      query.startTime = {};
+      if (startDate) query.startTime.$gte = new Date(startDate);
+      if (endDate) query.startTime.$lte = new Date(endDate);
+    }
+    
+    const [logs, total] = await Promise.all([
+      SymptomLog.find(query)
+        .sort({ startTime: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .exec(),
+      SymptomLog.countDocuments(query)
+    ]);
+    
+    res.status(200).json({
+      success: true,
+      data: logs,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
       }
     });
   } catch (error) {
-    console.error('Fetch statistics error:', error);
-    res.status(500).json({ success: false, error: 'Fetch statistics failed' });
+    console.error('Fetch symptom logs error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch symptom logs' });
   }
 });
+
+app.post('/api/health-goals', authenticateToken, requireRole('patient'), [
+  body('goalType').notEmpty(),
+  body('targetValue').isNumeric(),
+  body('targetDate').isISO8601()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+  
+  try {
+    const { goalType, targetValue, targetDate, startDate, frequency, priority, description } = req.body;
+    
+    const healthGoal = new HealthGoal({
+      patientId: req.user.userId,
+      userId: req.user.userId,
+      goalType,
+      targetValue: parseFloat(targetValue),
+      currentValue: 0,
+      startDate: startDate ? new Date(startDate) : new Date(),
+      targetDate: new Date(targetDate),
+      frequency: frequency || 'daily',
+      priority: priority || 'medium',
+      isActive: true,
+      progressPercentage: 0,
+      description
+    });
+    
+    await healthGoal.save();
+    
+    res.status(201).json({
+      success: true,
+      message: 'Health goal set successfully',
+      data: healthGoal
+    });
+  } catch (error) {
+    console.error('Set health goal error:', error);
+    res.status(500).json({ success: false, error: 'Failed to set health goal' });
+  }
+});
+
+app.get('/api/health-goals', authenticateToken, requireRole('patient'), async (req, res) => {
+  try {
+    const { isActive } = req.query;
+    
+    let query = { patientId: req.user.userId };
+    if (isActive !== undefined) {
+      query.isActive = isActive === 'true';
+    }
+    
+    const goals = await HealthGoal.find(query)
+      .sort({ priority: 1, targetDate: 1 })
+      .exec();
+    
+    res.status(200).json({
+      success: true,
+      data: goals,
+      count: goals.length
+    });
+  } catch (error) {
+    console.error('Fetch health goals error:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve health goals' });
+  }
+});
+
+//new router for v2 APIs
+const router = express.Router();
+
+//patient routes
+router.get('/patients/profile', authenticateToken, requireRole('patient'), async (req, res) => {
+  try {
+    const patient = await Patient.findById(req.user._id)
+      .populate('emergencyContacts')
+      .populate('primaryDoctor', 'fullName specialization')
+      .populate('shareWithDoctors.doctorId', 'fullName specialization');
+    
+    res.status(200).json({
+      success: true,
+      data: patient
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+//doctor routes
+router.get('/doctors/profile', authenticateToken, requireRole('doctor'), async (req, res) => {
+  try {
+    const doctor = await Doctor.findById(req.user._id)
+      .populate('assignedPatients', 'fullName patientCode dateOfBirth');
+    
+    res.status(200).json({
+      success: true,
+      data: doctor
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.use('/api/v2', router);
+
+function getDefaultUnit(type) {
+  const units = {
+    'steps': 'steps',
+    'heart_rate': 'bpm',
+    'blood_pressure': 'mmHg',
+    'weight': 'kg',
+    'height': 'cm',
+    'temperature': '°C',
+    'sleep': 'hours',
+    'calories': 'kcal'
+  };
+  return units[type] || 'unit';
+}
 
 app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
-    error: 'Endpoint not found'
+    error: 'Portal not found'
   });
 });
 
@@ -737,14 +1718,15 @@ app.use((err, req, res, next) => {
   console.error('Server error:', err);
   res.status(500).json({
     success: false,
-    error: 'Server error',
+    error: 'Server error occurred',
     message: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 HealthTech ${PORT}`);
   console.log(`🌐 Homepage: http://localhost:${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
-  console.log(`🔧 Admin panel: http://localhost:${PORT}/admin`);
+  console.log(`📊 Health Check: http://localhost:${PORT}/api/health`);
+  console.log(`📝 Register: POST http://localhost:${PORT}/api/auth/register`);
+  console.log(`🔐 Login: POST http://localhost:${PORT}/api/auth/login`);
 });
