@@ -5,7 +5,7 @@ services:
   mongodb:
     image: mongo:6.0
     container_name: healthtech-mongodb
-    restart: unless-stopped
+    restart: always
     ports:
       - "${MONGODB_PORT:-27017}:27017"
     environment:
@@ -21,14 +21,14 @@ services:
       test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/${MONGO_DATABASE:-healthtech} --quiet
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
       start_period: 40s
 
   # Mongo Express Management Interface
   mongo-express:
     image: mongo-express:latest
     container_name: healthtech-mongo-express
-    restart: unless-stopped
+    restart: always
     ports:
       - "${MONGO_EXPRESS_PORT:-8081}:8081"
     environment:

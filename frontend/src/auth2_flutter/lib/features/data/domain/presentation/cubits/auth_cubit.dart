@@ -48,8 +48,8 @@ class AuthCubit extends Cubit<AuthState> {
     String email,
     String password,
     String age,
-    String height,
     String weight,
+    String height,
   ) async {
     try {
       emit(AuthLoading());
@@ -58,8 +58,8 @@ class AuthCubit extends Cubit<AuthState> {
         email,
         password,
         age,
-        height,
         weight,
+        height,
       );
 
       _currentUser = user;

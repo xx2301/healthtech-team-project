@@ -70,14 +70,14 @@ class BackendAuthRepoImpl implements AuthRepo {
     bool needsAuth = false,
   }) async {
     try {
-      final url = Uri.parse('$baseUrl$endpoint');
-      final headers = {'Content-Type': 'application/json'};
-      
-      if (needsAuth) {
-        final token = await _getToken();
-        if (token != null) {
-          headers['Authorization'] = 'Bearer $token';
-        } else {
+    final url = Uri.parse('$baseUrl$endpoint');
+    final headers = {'Content-Type': 'application/json; charset=UTF-8'};
+    
+    if (needsAuth) {
+      final token = await _getToken();
+      if (token != null) {
+        headers['Authorization'] = 'Bearer $token';
+      } else {
           throw Exception('Please log in first.');
         }
       }
@@ -89,10 +89,11 @@ class BackendAuthRepoImpl implements AuthRepo {
           response = await _client.get(url, headers: headers);
           break;
         case 'POST':
+          final bodyToSend = body ?? {};
           response = await _client.post(
             url,
             headers: headers,
-            body: jsonEncode(body),
+            body: jsonEncode(bodyToSend),
           );
           break;
         case 'DELETE':
@@ -189,7 +190,7 @@ class BackendAuthRepoImpl implements AuthRepo {
         body: {
           'email': email,
           'password': password,
-          'name': fullName,
+          'fullName': fullName,
           'age': int.tryParse(age),
           'weight': double.tryParse(weight),
           'height': double.tryParse(height),

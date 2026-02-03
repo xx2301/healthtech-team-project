@@ -18,12 +18,36 @@ const userSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  age: {
+    type: String,
+    default: ''
+  },
+  height: {
+    type: String,
+    default: ''
+  },
+  weight: {
+    type: String,
+    default: ''
+  },
   
   userType: { 
     type: String, 
-    enum: ['user'], 
+    enum: ['user', 'admin'], 
     default: 'user' 
   },
+
+  role: {
+    type: String,
+    enum: ['super_admin', 'admin', 'user', 'moderator'],
+    default: 'user'
+  },
+
+  permissions: [{
+    type: String,
+    action: String,
+    allowed: Boolean
+  }],
 
   patientProfileId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -45,13 +69,15 @@ const userSchema = new mongoose.Schema({
 
   dateOfBirth: {
     type: Date,
-    required: true
+    //required: true
+    default: null
   },
 
   gender: { 
     type: String, 
     enum: ['male', 'female', 'other', 'prefer_not_to_say'],
-    required: true 
+    //required: true 
+    default: 'other'
   },
 
   phone: String,
