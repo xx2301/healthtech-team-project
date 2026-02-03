@@ -21,7 +21,7 @@ class Appbar2 extends StatelessWidget implements PreferredSizeWidget {
             ),
           ],
         ),
-        backgroundColor: Colors.green[500],
+        backgroundColor: Colors.green.shade500,
       )
     ;
   }
