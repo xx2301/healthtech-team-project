@@ -1,4 +1,5 @@
-﻿const express = require('express');
+﻿const bcrypt = require('bcryptjs');
+const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
@@ -260,6 +261,9 @@ app.post('/api/auth/register', [
   body('email').isEmail().normalizeEmail(),
   body('password').isLength({ min: 6 }),
   body('fullName').notEmpty().trim().escape(),
+  body('age').optional().isString(),
+  body('height').optional().isString(),
+  body('weight').optional().isString(),
   body('dateOfBirth').optional().isISO8601().toDate(),
   body('gender').optional().isIn(['male', 'female', 'other', 'prefer_not_to_say'])
 ], async (req, res) => {
@@ -273,7 +277,7 @@ app.post('/api/auth/register', [
   }
 
   try {
-    const { email, password, fullName, dateOfBirth, gender } = req.body;
+    const { email, password, fullName, age, height, weight, dateOfBirth, gender } = req.body;
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -287,9 +291,13 @@ app.post('/api/auth/register', [
       email,
       password,
       fullName,
+      age: age || '',
+      height: height || '',
+      weight: weight || '',
       userType: 'user',
-      dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : new Date('1990-01-01'),
-      gender: gender || 'other'
+      dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+      gender: gender || 'other',
+      isActive: true,
     });
 
     await user.save();
@@ -390,6 +398,75 @@ app.post('/auth/login', (req, res) => {
   app._router.handle(req, res);
 });
 
+app.post('/api/admin/login', [
+  body('email').isEmail(),
+  body('password').notEmpty()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+
+  try {
+    const { email, password } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Invalid credentials' 
+      });
+    }
+
+    const isValidPassword = await user.comparePassword(password);
+    if (!isValidPassword) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Invalid credentials' 
+      });
+    }
+
+    if (user.userType !== 'admin' && user.role === 'user') {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Admin access required' 
+      });
+    }
+
+    user.lastLogin = new Date();
+    await user.save();
+
+    const token = jwt.sign(
+      { 
+        userId: user._id, 
+        email: user.email,
+        userType: user.userType,
+        role: user.role,
+        permissions: user.permissions
+      },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    const userResponse = user.toObject();
+    delete userResponse.password;
+
+    res.status(200).json({
+      success: true,
+      message: 'Admin login successful',
+      user: userResponse,
+      token
+    });
+
+  } catch (error) {
+    console.error('Admin login error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Login failed' 
+    });
+  }
+});
+
 app.post('/api/user/apply-for-doctor', authenticateToken, [
   body('medicalLicenseNumber').notEmpty().trim(),
   body('specialization').notEmpty().isIn([
@@ -470,7 +547,7 @@ app.post('/api/user/apply-for-doctor', authenticateToken, [
 });
 
 const requireAdmin = (req, res, next) => {
-  if (!req.user || req.user.userType !== 'admin') {
+  if (!req.user || (req.user.userType !== 'admin' && !['super_admin', 'admin', 'moderator'].includes(req.user.role))) {
     return res.status(403).json({ 
       success: false, 
       error: 'Admin access required' 
@@ -624,6 +701,120 @@ app.get('/api/admin/pending-doctor-applications', authenticateToken, requireAdmi
   } catch (error) {
     console.error('Get pending doctor applications error:', error);
     res.status(500).json({ success: false, error: 'Failed to get applications' });
+  }
+});
+
+app.get('/api/admin/doctor-applications', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { status, page = 1, limit = 20 } = req.query;
+    const skip = (page - 1) * limit;
+    
+    let query = {};
+    if (status) {
+      query.approvalStatus = status;
+    } else {
+      query.approvalStatus = 'pending';
+    }
+    
+    const [applications, total] = await Promise.all([
+      Doctor.find(query)
+        .populate('userId', 'email fullName dateOfBirth gender phone createdAt')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .exec(),
+      Doctor.countDocuments(query)
+    ]);
+    
+    res.json({
+      success: true,
+      data: applications,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
+    
+  } catch (error) {
+    console.error('Get doctor applications error:', error);
+    res.status(500).json({ success: false, error: 'Failed to get applications' });
+  }
+});
+
+app.get('/api/admin/doctor-applications/:applicationId', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const application = await Doctor.findById(req.params.applicationId)
+      .populate('userId', 'email fullName dateOfBirth gender phone createdAt')
+      .populate('approvedBy', 'fullName email');
+    
+    if (!application) {
+      return res.status(404).json({ success: false, error: 'Application not found' });
+    }
+    
+    res.json({
+      success: true,
+      data: application
+    });
+    
+  } catch (error) {
+    console.error('Get application detail error:', error);
+    res.status(500).json({ success: false, error: 'Failed to get application detail' });
+  }
+});
+
+app.post('/api/admin/doctor-applications/bulk-action', authenticateToken, requireAdmin, [
+  body('applicationIds').isArray(),
+  body('action').isIn(['approve', 'reject']),
+  body('rejectionReason').optional().trim()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+  
+  try {
+    const { applicationIds, action, rejectionReason } = req.body;
+    
+    const updateData = {
+      approvalStatus: action === 'approve' ? 'approved' : 'rejected',
+      approvedBy: req.user.userId,
+      approvedAt: new Date()
+    };
+    
+    if (action === 'reject' && rejectionReason) {
+      updateData.rejectionReason = rejectionReason;
+    }
+    
+    const result = await Doctor.updateMany(
+      { _id: { $in: applicationIds }, approvalStatus: 'pending' },
+      updateData
+    );
+    
+    if (action === 'approve') {
+      const approvedDoctors = await Doctor.find({ 
+        _id: { $in: applicationIds }, 
+        approvalStatus: 'approved' 
+      });
+      
+      for (const doctor of approvedDoctors) {
+        await User.findByIdAndUpdate(doctor.userId, {
+          doctorProfileId: doctor._id,
+          accountStatus: 'active'
+        });
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `Successfully ${action}d ${result.modifiedCount} applications`,
+      modifiedCount: result.modifiedCount
+    });
+    
+  } catch (error) {
+    console.error('Bulk action error:', error);
+    res.status(500).json({ success: false, error: 'Failed to process bulk action' });
   }
 });
 
@@ -818,6 +1009,227 @@ app.put('/api/user/profile', authenticateToken, [
   } catch (error) {
     console.error('Update profile error:', error);
     res.status(500).json({ success: false, error: 'Failed to update profile' });
+  }
+});
+
+app.get('/api/admin/users', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { 
+      search, 
+      userType, 
+      accountStatus,
+      page = 1, 
+      limit = 20 
+    } = req.query;
+    const skip = (page - 1) * limit;
+    
+    let query = {};
+    
+    if (search) {
+      query.$or = [
+        { fullName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    if (userType) {
+      query.userType = userType;
+    }
+    
+    if (accountStatus) {
+      query.accountStatus = accountStatus;
+    }
+    
+    const [users, total] = await Promise.all([
+      User.find(query)
+        .select('-password -__v')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .exec(),
+      User.countDocuments(query)
+    ]);
+    
+    const usersWithDetails = await Promise.all(users.map(async (user) => {
+      const userObj = user.toObject();
+      
+      if (user.patientProfileId) {
+        const patient = await Patient.findById(user.patientProfileId)
+          .select('patientCode bloodType')
+          .populate('primaryDoctor', 'specialization')
+          .populate('primaryDoctor.userId', 'fullName');
+        userObj.patientDetails = patient;
+      }
+      
+      if (user.doctorProfileId) {
+        const doctor = await Doctor.findById(user.doctorProfileId)
+          .select('specialization approvalStatus hospitalAffiliation');
+        userObj.doctorDetails = doctor;
+      }
+      
+      return userObj;
+    }));
+    
+    res.json({
+      success: true,
+      data: usersWithDetails,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
+    
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({ success: false, error: 'Failed to get users' });
+  }
+});
+
+app.put('/api/admin/users/:userId/status', authenticateToken, requireAdmin, [
+  body('accountStatus').isIn(['active', 'suspended', 'pending_doctor_approval'])
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+  
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.params.userId,
+      { accountStatus: req.body.accountStatus },
+      { new: true }
+    ).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    res.json({
+      success: true,
+      message: 'User status updated successfully',
+      data: user
+    });
+    
+  } catch (error) {
+    console.error('Update user status error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update user status' });
+  }
+});
+
+app.get('/api/admin/patients', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { search, page = 1, limit = 20 } = req.query;
+    const skip = (page - 1) * limit;
+    
+    let query = {};
+    
+    if (search) {
+      const users = await User.find({
+        $or: [
+          { fullName: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } }
+        ]
+      }).select('_id');
+      
+      const userIds = users.map(user => user._id);
+      query.userId = { $in: userIds };
+    }
+    
+    const [patients, total] = await Promise.all([
+      Patient.find(query)
+        .populate('userId', 'email fullName dateOfBirth gender phone')
+        .populate('primaryDoctor', 'specialization hospitalAffiliation')
+        .populate('primaryDoctor.userId', 'fullName')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .exec(),
+      Patient.countDocuments(query)
+    ]);
+    
+    res.json({
+      success: true,
+      data: patients,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
+    
+  } catch (error) {
+    console.error('Get patients error:', error);
+    res.status(500).json({ success: false, error: 'Failed to get patients' });
+  }
+});
+
+app.put('/api/admin/patients/:patientId', authenticateToken, requireAdmin, [
+  body('weight').optional().isFloat({ min: 0, max: 500 }),
+  body('height').optional().isFloat({ min: 0, max: 300 }),
+  body('bloodType').optional().isIn(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'unknown']),
+  body('careModeEnabled').optional().isBoolean(),
+  body('preferredUnitSystem').optional().isIn(['metric', 'imperial']),
+  body('primaryDoctor').optional().isMongoId()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+  
+  try {
+    const patient = await Patient.findById(req.params.patientId);
+    
+    if (!patient) {
+      return res.status(404).json({ success: false, error: 'Patient not found' });
+    }
+    
+    const updates = req.body;
+    Object.keys(updates).forEach(key => {
+      if (['weight', 'height', 'bloodType', 'careModeEnabled', 'preferredUnitSystem', 'primaryDoctor'].includes(key)) {
+        patient[key] = updates[key];
+      }
+    });
+    
+    await patient.save();
+    
+    res.json({
+      success: true,
+      message: 'Patient profile updated successfully',
+      data: patient
+    });
+    
+  } catch (error) {
+    console.error('Update patient error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update patient' });
+  }
+});
+
+app.delete('/api/admin/patients/:patientId', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const patient = await Patient.findById(req.params.patientId);
+    
+    if (!patient) {
+      return res.status(404).json({ success: false, error: 'Patient not found' });
+    }
+    
+    await User.findByIdAndUpdate(patient.userId, {
+      patientProfileId: null
+    });
+    
+    await Patient.findByIdAndDelete(req.params.patientId);
+    
+    res.json({
+      success: true,
+      message: 'Patient profile deleted successfully'
+    });
+    
+  } catch (error) {
+    console.error('Delete patient error:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete patient' });
   }
 });
 
@@ -1707,10 +2119,52 @@ function getDefaultUnit(type) {
   return units[type] || 'unit';
 }
 
+app.post('/api/debug/check-request', (req, res) => {
+  console.log('Debug request body:', req.body);
+  console.log('Body type:', typeof req.body);
+  
+  res.json({
+    success: true,
+    received: req.body,
+    type: typeof req.body,
+    headers: req.headers
+  });
+});
+
 app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
     error: 'Portal not found'
+  });
+});
+
+app.use((req, res, next) => {
+  console.log('=== REQUEST LOG ===');
+  console.log('Method:', req.method);
+  console.log('URL:', req.url);
+  console.log('Content-Type:', req.headers['content-type']);
+  
+  let data = '';
+  req.on('data', chunk => {
+    data += chunk.toString();
+  });
+  
+  req.on('end', () => {
+    console.log('Raw body:', data);
+    console.log('Body type:', typeof data);
+    console.log('=== END REQUEST LOG ===');
+    
+    if (data && data !== 'null') {
+      try {
+        req.body = JSON.parse(data);
+      } catch (e) {
+        req.body = data;
+      }
+    } else {
+      req.body = {};
+    }
+    
+    next();
   });
 });
 
