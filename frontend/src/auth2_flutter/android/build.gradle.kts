@@ -22,3 +22,10 @@ subprojects {
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
+
+android {
+    namespace "com.amolg.flutterbarcodescanner"
+    // ... keep the rest
+}
+
+
