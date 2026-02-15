@@ -49,6 +49,24 @@ class DefaultDrawer extends StatelessWidget {
                 Navigator.pushNamed(context, '/chatpage');
               },
             ),
+
+            ListTile(
+              leading: Icon(Icons.people),
+              title: Text("P A T I E N T "),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/patientpage');
+              },
+            ), 
+
+            ListTile(
+              leading: Icon(Icons.computer),
+              title: Text("D E V I C E S "),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/devicepage');
+              },
+            )
           ],
         ),
       );

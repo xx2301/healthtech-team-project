@@ -1,4 +1,6 @@
 import 'package:auth2_flutter/features/chat/presentation/pages/chat_page.dart';
+import 'package:auth2_flutter/features/devices/devices.dart';
+import 'package:auth2_flutter/features/patient/patient_search.dart';
 import 'package:auth2_flutter/features/report/presentation/pages/report_page.dart';
 import 'package:auth2_flutter/features/settings/pages/settings_page.dart';
 
@@ -42,10 +44,12 @@ class MyApp extends StatelessWidget {
           '/settingspage':(context)=> SettingsPage(),
           '/reportpage':(context)=> ReportPage(),
           '/chatpage':(context)=> ChatPage(),
+          '/patientpage':(context)=> PatientSearch(),
+          '/devicepage':(context)=> DevicesPage(),
         },
 
         //bloc consumer - auth
-        home: ReportPage()
+        home: DevicesPage()
         /*BlocConsumer<AuthCubit, AuthState>(
           builder: (context, state) {
             print(state);
