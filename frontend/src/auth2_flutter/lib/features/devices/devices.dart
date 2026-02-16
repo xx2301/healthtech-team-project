@@ -35,6 +35,9 @@ class _DevicesPageState extends State<DevicesPage> {
                     SizedBox(
                       width: 250,
                       child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          foregroundColor: Colors.black,
+                        ),
                         onPressed: () {},
                         child: Text("Link Device by QR"),
                       ),
@@ -43,6 +46,9 @@ class _DevicesPageState extends State<DevicesPage> {
                     SizedBox(
                       width: 250,
                       child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          foregroundColor: Colors.black,
+                        ),
                         onPressed: () {},
                         child: Text("Link Device by Bluetooth"),
                       ),
@@ -146,8 +152,17 @@ class _DevicesPageState extends State<DevicesPage> {
 
                     const SizedBox(height: 10),
 
-                    // steps progress bar
-                    const SizedBox(height: 10),
+                    GestureDetector(
+                      onTap: () {},
+                      child: Text(
+                        "Terminate Session",
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: Colors.red,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),

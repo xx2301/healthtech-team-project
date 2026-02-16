@@ -76,7 +76,7 @@ class SettingsPage extends StatelessWidget {
                 icon: Icons.person,
                 title: 'Personal Information',
                 isLinkTile: true,
-                routeName: '/homepage',
+                routeName: '/personalinfopage',
               ),
 
               SettingsTile(
@@ -121,7 +121,7 @@ class SettingsPage extends StatelessWidget {
                 icon: Icons.phone_android,
                 title: 'Device Management',
                 isLinkTile: true,
-                routeName: '/homepage',
+                routeName: '/devicepage',
               ),
 
               SettingsTile(

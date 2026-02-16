@@ -16,6 +16,90 @@ class _PatientSearchState extends State<PatientSearch> {
   final pNameController = TextEditingController();
   final pIDController = TextEditingController();
   final dateController = TextEditingController();
+  String selectedStatus = 'Available';
+  DateTime? selectedDate;
+
+  late final List<Patient> allPatients;
+  List<Patient> filteredPatients = [];
+
+  @override
+  void initState() {
+    super.initState();
+    allPatients = [
+      Patient(
+        pid: 'P001',
+        fname: 'Adam Lee',
+        dateOfBirth: DateTime(1974, 5, 12),
+        gender: 'Male',
+        height: 175,
+        weight: 78,
+        bloodType: 'O+',
+        allergies: ['Peanuts'],
+        chronicConditions: ['Hypertension'],
+        emergencyContactID: 101,
+      ),
+      Patient(
+        pid: 'P002',
+        fname: 'Noor Aisyah',
+        dateOfBirth: DateTime(1961, 8, 21),
+        gender: 'Female',
+        height: 160,
+        weight: 65,
+        bloodType: 'A+',
+        allergies: ['Penicillin'],
+        chronicConditions: ['Diabetes'],
+        emergencyContactID: 102,
+      ),
+      Patient(
+        pid: 'P003',
+        fname: 'Ivan Tan',
+        dateOfBirth: DateTime(1965, 3, 2),
+        gender: 'Male',
+        height: 180,
+        weight: 85,
+        bloodType: 'B+',
+        allergies: [],
+        chronicConditions: ['Asthma'],
+        emergencyContactID: 103,
+      ),
+    ];
+
+    filteredPatients = List.of(allPatients);
+  }
+
+  void _resetFilters() {
+    pNameController.clear();
+    pIDController.clear();
+    dateController.clear();
+    selectedDate = null;
+    selectedStatus = 'Available';
+
+    setState(() {
+      filteredPatients = List.of(allPatients);
+    });
+  }
+
+  void _applySearch() {
+    final nameQ = pNameController.text.trim().toLowerCase();
+    final idQ = pIDController.text.trim().toLowerCase();
+
+    setState(() {
+      filteredPatients = allPatients.where((p) {
+        final matchesName =
+            nameQ.isEmpty || p.fname.toLowerCase().contains(nameQ);
+        final matchesId = idQ.isEmpty || p.pid.toLowerCase().contains(idQ);
+
+        // status: you currently don't have p.status, so we only filter if you add it later.
+        // For now, this will always be true.
+        final matchesStatus = true;
+
+        // date of visit: you also don't have visit dates in Patient model, so can't filter yet.
+        final matchesDate = true;
+
+        return matchesName && matchesId && matchesStatus && matchesDate;
+      }).toList();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +122,7 @@ class _PatientSearchState extends State<PatientSearch> {
                     offset: const Offset(0, 3),
                   ),
                 ],
-                color: const Color.fromARGB(255, 203, 231, 204),
+                color: const Color(0xFFEAF4EC),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -86,34 +170,55 @@ class _PatientSearchState extends State<PatientSearch> {
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 10),
-                  DropdownMenu<String>(
-                    initialSelection: "Avaliable",
-                    textStyle: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                    dropdownMenuEntries: [
-                      DropdownMenuEntry(value: "Avaliable", label: "Available"),
-                      DropdownMenuEntry(value: "Healthy", label: "Healthy"),
-                      DropdownMenuEntry(value: "Critical", label: "Critical"),
-                    ],
-                    onSelected: (value) {
-                      print(value);
-                    },
+                  SizedBox(
+                    width: double.infinity,
+                    child: DropdownMenu<String>(
+                      initialSelection: selectedStatus,
+                      dropdownMenuEntries: const [
+                        DropdownMenuEntry(
+                          value: "Available",
+                          label: "Available",
+                        ),
+                        DropdownMenuEntry(value: "Healthy", label: "Healthy"),
+                        DropdownMenuEntry(value: "Critical", label: "Critical"),
+                      ],
+                      onSelected: (value) {
+                        if (value == null) return;
+                        setState(() => selectedStatus = value);
+                      },
+                    ),
                   ),
+
                   const SizedBox(height: 20),
 
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      ElevatedButton(child: Text("Reset"), onPressed: () {}),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          foregroundColor: Colors.black,
+                        ),
+                        child: const Text("Reset"),
+                        onPressed: _resetFilters,
+                      ),
 
-                      const SizedBox(width: 20),
+                       const SizedBox(width: 10),
 
-                      ElevatedButton(child: Text("Search"), onPressed: () {}),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          foregroundColor: Colors.black,
+                        ),
+                        child: const Text("Search"),
+                        onPressed: _applySearch,
+                      ),
                     ],
                   ),
                 ],
               ),
             ),
 
+  const SizedBox(height: 10),
+  
             Text(
               "Patients",
               style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold),
@@ -123,54 +228,27 @@ class _PatientSearchState extends State<PatientSearch> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                ElevatedButton(child: Text("+ Add Patient"), onPressed: () {}),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    foregroundColor: Colors.black,
+                  ),
+                  child: Text("+ Add Patient"),
+                  onPressed: () {},
+                ),
 
-                ElevatedButton(child: Text("Export Data"), onPressed: () {}),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    foregroundColor: Colors.black,
+                  ),
+                  child: Text("Export Data"),
+                  onPressed: () {},
+                ),
               ],
             ),
 
             const SizedBox(height: 10),
 
-            PatientSearchTable(
-              patients: [
-                Patient(
-                  pid: 'P001',
-                  fname: 'Adam Lee',
-                  dateOfBirth: DateTime(1974, 5, 12),
-                  gender: 'Male',
-                  height: 175,
-                  weight: 78,
-                  bloodType: 'O+',
-                  allergies: ['Peanuts'],
-                  chronicConditions: ['Hypertension'],
-                  emergencyContactID: 101,
-                ),
-                Patient(
-                  pid: 'P002',
-                  fname: 'Noor Aisyah',
-                  dateOfBirth: DateTime(1961, 8, 21),
-                  gender: 'Female',
-                  height: 160,
-                  weight: 65,
-                  bloodType: 'A+',
-                  allergies: ['Penicillin'],
-                  chronicConditions: ['Diabetes'],
-                  emergencyContactID: 102,
-                ),
-                Patient(
-                  pid: 'P003',
-                  fname: 'Ivan Tan',
-                  dateOfBirth: DateTime(1965, 3, 2),
-                  gender: 'Male',
-                  height: 180,
-                  weight: 85,
-                  bloodType: 'B+',
-                  allergies: [],
-                  chronicConditions: ['Asthma'],
-                  emergencyContactID: 103,
-                ),
-              ],
-            ),
+            PatientSearchTable(patients: filteredPatients),
           ],
         ),
       ),

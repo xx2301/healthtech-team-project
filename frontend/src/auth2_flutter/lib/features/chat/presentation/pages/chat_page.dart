@@ -64,39 +64,37 @@ class _ChatPageState extends State<ChatPage> {
         padding: EdgeInsets.fromLTRB(16, 8, 16, 16),
         child: Column(
           children: [
-            Row(
-              children: [
-                // Back button
-                IconButton(
-                  icon: Icon(Icons.arrow_back_ios_new, color: Colors.black87),
-                  onPressed: () {
-                    Navigator.of(context).maybePop();
-                  },
-                ),
+            SizedBox(
+  height: 50,
+  child: Stack(
+    alignment: Alignment.center,
+    children: [
+      // Centered Title
+      const Center(
+        child: Text(
+          'Chat',
+          style: TextStyle(
+            color: Colors.black87,
+            fontWeight: FontWeight.w600,
+            fontSize: 18,
+          ),
+        ),
+      ),
 
-                // Title
-                Expanded(
-                  child: Center(
-                    child: Text(
-                      'Chat',
-                      style: TextStyle(
-                        color: Colors.black87,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ),
-                ),
+      // Right-side button
+      Positioned(
+        right: 0,
+        child: IconButton(
+          icon: const Icon(Icons.add, color: Colors.black87),
+          onPressed: () {
+            // TODO: start new chat
+          },
+        ),
+      ),
+    ],
+  ),
+),
 
-                // Action button
-                IconButton(
-                  icon: Icon(Icons.add, color: Colors.black87),
-                  onPressed: () {
-                    // TODO: start new chat
-                  },
-                ),
-              ],
-            ),
 
             // search bar
             TextField(

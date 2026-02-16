@@ -2,6 +2,7 @@ import 'package:auth2_flutter/features/chat/presentation/pages/chat_page.dart';
 import 'package:auth2_flutter/features/devices/devices.dart';
 import 'package:auth2_flutter/features/patient/patient_search.dart';
 import 'package:auth2_flutter/features/report/presentation/pages/report_page.dart';
+import 'package:auth2_flutter/features/settings/pages/presentation/components/tile_pages/personal_info.dart';
 import 'package:auth2_flutter/features/settings/pages/settings_page.dart';
 
 import 'features/data/domain/presentation/components/loading.dart';
@@ -46,10 +47,11 @@ class MyApp extends StatelessWidget {
           '/chatpage':(context)=> ChatPage(),
           '/patientpage':(context)=> PatientSearch(),
           '/devicepage':(context)=> DevicesPage(),
+          '/personalinfopage':(context)=> PersonalInfo(),
         },
 
         //bloc consumer - auth
-        home: DevicesPage()
+        home: DevicesPage(),
         /*BlocConsumer<AuthCubit, AuthState>(
           builder: (context, state) {
             print(state);
@@ -75,7 +77,6 @@ class MyApp extends StatelessWidget {
             }
           },
         ), */
-        //theme: mainTheme,
       
       
       ),
