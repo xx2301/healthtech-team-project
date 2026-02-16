@@ -26,6 +26,9 @@ class MyApp extends StatelessWidget {
   //auth repo
   final authRepo = BackendAuthRepoImpl();
 
+  
+
+
   @override
   Widget build(BuildContext context) {
     return MultiBlocProvider(
@@ -77,7 +80,9 @@ class MyApp extends StatelessWidget {
             }
           },
         ), */
-      
+      theme: mainTheme,
+      darkTheme: darkTheme,
+      themeMode: ThemeMode.system
       
       ),
     );

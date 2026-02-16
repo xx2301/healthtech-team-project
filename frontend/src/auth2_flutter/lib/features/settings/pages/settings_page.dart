@@ -1,6 +1,7 @@
 import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/drawer.dart';
 import 'package:auth2_flutter/features/settings/pages/presentation/components/setting_tiles.dart';
+import 'package:auth2_flutter/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
@@ -107,15 +108,16 @@ class SettingsPage extends StatelessWidget {
                 ),
               ),
 
-              SettingsTile(
-                icon: Icons.dark_mode,
-                title: 'Dark Mode',
-                isLinkTile: false,
-                initialSwitchValue: true,
-                onSwitchChanged: (val) {
-                  // handle toggle
-                },
-              ),
+             SettingsTile(
+  icon: Icons.dark_mode,
+  title: 'Dark Mode',
+  isLinkTile: false,
+  initialSwitchValue: themeNotifier.value == ThemeMode.dark,
+  onSwitchChanged: (val) {
+    themeNotifier.value = val ? ThemeMode.dark : ThemeMode.light;
+  },
+),
+
 
               SettingsTile(
                 icon: Icons.phone_android,

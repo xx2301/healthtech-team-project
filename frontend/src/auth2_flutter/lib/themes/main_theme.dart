@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 
 ThemeData mainTheme = ThemeData(
+brightness: Brightness.light,
+    colorScheme: const ColorScheme.light(
+      primary: Color(0xFF2F7D63),
+      onPrimary: Colors.white,
+      surface: Colors.white,
+      onSurface: Colors.black,));
 
-   
-  
-  textTheme: const TextTheme(
-    bodyLarge: TextStyle(color: Colors.black),
-    bodyMedium: TextStyle(color: Colors.black),
-    bodySmall: TextStyle(color: Colors.black),
-    titleLarge: TextStyle(color: Colors.black),
-    titleMedium: TextStyle(color: Colors.black),
-    titleSmall: TextStyle(color: Colors.black),
-    headlineLarge: TextStyle(color: Colors.black),
-    headlineMedium: TextStyle(color: Colors.black),
-    headlineSmall: TextStyle(color: Colors.black),
-  ),
-  appBarTheme: AppBarTheme(backgroundColor: Colors.green.shade400, iconTheme: IconThemeData(color: Colors.white),),
-);
+ThemeData darkTheme = ThemeData(
+    brightness: Brightness.dark,
+    colorScheme: const ColorScheme.dark(
+      primary: Color(0xFF2F7D63),
+      onPrimary: Colors.white,
+      surface: Color(0xFF121212),
+      onSurface: Colors.white,
+    ));
