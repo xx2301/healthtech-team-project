@@ -184,28 +184,30 @@ class BackendAuthRepoImpl implements AuthRepo {
     String height,
   ) async {
     try {
+      final Map<String, dynamic> requestBody = {
+        'email': email,
+        'password': password,
+        'fullName': fullName,
+        'age': age,
+        'weight': weight,
+        'height': height,
+      };
+            
       final response = await _sendRequest(
         method: 'POST',
         endpoint: '/api/auth/register',
-        body: {
-          'email': email,
-          'password': password,
-          'fullName': fullName,
-          'age': int.tryParse(age),
-          'weight': double.tryParse(weight),
-          'height': double.tryParse(height),
-        },
+        body: requestBody,
       );
       
       if (response['success'] == true) {
         final userJson = response['user'];
         final token = response['token'];
-        
+
         await _saveAuthData(token, {
           ...userJson,
           'uid': userJson['_id'] ?? userJson['id'],
         });
-        
+
         return AppUser.fromBackendJson(userJson);
       } else {
         throw Exception(response['error'] ?? 'Registration failed');
@@ -245,6 +247,23 @@ class BackendAuthRepoImpl implements AuthRepo {
     }
   }
   
+  @override
+  Future<String> resetPassword(String token, String newPassword) async {
+    try {
+      final response = await _sendRequest(
+        method: 'POST',
+        endpoint: '/api/auth/reset-password',
+        body: {
+          'token': token,
+          'newPassword': newPassword,
+        },
+      );
+      return response['message'] ?? 'Password reset successful';
+    } catch (e) {
+      throw Exception('Failed to reset password: $e');
+    }
+  }
+
   @override
   Future<void> deleteAccount() async {
     try {

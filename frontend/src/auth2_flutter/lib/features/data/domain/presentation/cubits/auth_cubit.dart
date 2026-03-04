@@ -73,8 +73,13 @@ class AuthCubit extends Cubit<AuthState> {
   //logout
   Future<void> logout() async {
     emit(AuthLoading());
-    await authRepo.logout();
-    emit(Unauthenticated());
+    try {
+      await authRepo.logout();
+      emit(Unauthenticated());
+    } catch (e) {
+      emit(AuthError(e.toString()));
+      emit(Unauthenticated());
+    }
   }
 
   //forgot password
@@ -84,6 +89,17 @@ class AuthCubit extends Cubit<AuthState> {
       return message;
     } catch (e) {
       return e.toString();
+    }
+  }
+
+  Future<void> resetPassword(String token, String newPassword) async {
+    try {
+      emit(AuthLoading());
+      final message = await authRepo.resetPassword(token, newPassword);
+      emit(Unauthenticated()); 
+    } catch (e) {
+      emit(AuthError(e.toString()));
+      emit(Unauthenticated());
     }
   }
 

@@ -1,12 +1,24 @@
 import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/drawer.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubit.dart';
+import 'package:auth2_flutter/features/data/domain/entities/app_user.dart';
 
 class PersonalInfo extends StatefulWidget {
   const PersonalInfo({super.key});
 
   @override
   State<PersonalInfo> createState() => _PersonalInfoState();
+}
+
+String _formatDate(DateTime date) {
+  return '${date.day} ${_monthAbbr(date.month)} ${date.year}';
+}
+
+String _monthAbbr(int month) {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return months[month - 1];
 }
 
 class _PersonalInfoState extends State<PersonalInfo> {
@@ -113,6 +125,10 @@ class _PersonalInfoState extends State<PersonalInfo> {
 
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AuthCubit>().currentUser;
+
+    print('Current user: ${user?.toJson()}');
+
     return Scaffold(
       appBar: DefaultAppBar(),
       drawer: DefaultDrawer(),
@@ -136,29 +152,29 @@ class _PersonalInfoState extends State<PersonalInfo> {
                 infoRow(
                   icon: Icons.person_rounded,
                   title: "Name",
-                  value: "Joseph Wong",
+                  value: user?.fullName ?? 'Not set',
                 ),
                 infoRow(
                   icon: Icons.male_rounded,
                   title: "Gender",
-                  value: "Male",
+                  value: user?.gender ?? 'Not set',
                 ),
                 infoRow(
                   icon: Icons.cake_rounded,
                   title: "Age",
-                  value: "19 years old",
+                  value: user?.age != null ? '${user!.age} years old' : 'Not set',
                 ),
                 infoRow(
                   icon: Icons.food_bank,
                   title: "Weight",
-                  value: "62 kg",
-                  subtitle: "Last updated 1 Mar",
+                  value: user?.weight != null ? '${user!.weight} kg' : 'Not set',
+                  subtitle: user?.weightUpdatedAt != null ? 'Last updated ${_formatDate(user!.weightUpdatedAt!)}': null,
                 ),
                 infoRow(
                   icon: Icons.straighten,
                   title: "Height",
-                  value: "170 cm",
-                  subtitle: "Last updated 1 Mar",
+                  value: user?.height != null ? '${user!.height} cm' : 'Not set',
+                  subtitle: user?.heightUpdatedAt != null ? 'Last updated ${_formatDate(user!.heightUpdatedAt!)}': null,
                 ),
               ],
             ),

@@ -1,15 +1,20 @@
 import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/drawer.dart';
 import 'package:auth2_flutter/features/settings/pages/presentation/components/setting_tiles.dart';
-import 'package:auth2_flutter/main.dart';
+import 'package:auth2_flutter/themes/main_theme.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubit.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final themeNotifier = Provider.of<ThemeNotifier>(context);
+    final user = context.watch<AuthCubit>().currentUser;
+
     return Scaffold(
       appBar: DefaultAppBar(),
       drawer: DefaultDrawer(),
@@ -20,49 +25,51 @@ class SettingsPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-    children: [
-      CircleAvatar(
-        radius: 35,
-        backgroundColor: Color(0xFFB6D9B6), // soft green
-        child: Icon(
-          Icons.person,
-          size: 40,
-          color: Color(0xFF4F7F4F),
-        ),
-      ),
-      SizedBox(width: 12),
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                'Lim',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
+                children: [
+                  CircleAvatar(
+                    radius: 35,
+                    backgroundColor: Color(0xFFB6D9B6), //soft green
+                    child: Icon(
+                      Icons.person,
+                      size: 40,
+                      color: Color(0xFF4F7F4F),
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            user?.fullName ?? 'User',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            '🌿',
+                            style: TextStyle(fontSize: 16),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        user != null
+                            ? '${user.height ?? '?'} cm · ${user.weight ?? '?'} kg'
+                            : 'Login to see details',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              SizedBox(width: 6),
-              Text(
-                '🌿',
-                style: TextStyle(fontSize: 16),
-              ),
-            ],
-          ),
-          SizedBox(height: 2),
-          Text(
-            '162 cm · 42kg',
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.black54,
-            ),
-          ),
-        ],
-      ),
-    ],
-  ),
-                const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
               Text(
                 "Account",
@@ -108,16 +115,15 @@ class SettingsPage extends StatelessWidget {
                 ),
               ),
 
-             SettingsTile(
-  icon: Icons.dark_mode,
-  title: 'Dark Mode',
-  isLinkTile: false,
-  initialSwitchValue: themeNotifier.value == ThemeMode.dark,
-  onSwitchChanged: (val) {
-    themeNotifier.value = val ? ThemeMode.dark : ThemeMode.light;
-  },
-),
-
+              SettingsTile(
+                icon: Icons.dark_mode,
+                title: 'Dark Mode',
+                isLinkTile: false,
+                initialSwitchValue: Theme.of(context).brightness == Brightness.dark,
+                onSwitchChanged: (val) {
+                  themeNotifier.toggleTheme(val);
+                },
+              ),
 
               SettingsTile(
                 icon: Icons.phone_android,

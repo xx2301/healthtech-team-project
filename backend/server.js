@@ -6,8 +6,9 @@ const jwt = require('jsonwebtoken');
 const helmet = require('helmet');
 const { body, validationResult } = require('express-validator');
 require('dotenv').config();
+const nodemailer = require('nodemailer');
 
-const { User, Doctor, Patient,HealthMetric,MedicalRecord,EmergencyContact,DoctorPatientRelation,HealthGoal,SymptomLog,Device,HealthReport,Conversation,ChatMessage} = require('./models/index');
+const { User, Doctor, Patient, HealthMetric, MedicalRecord, EmergencyContact, DoctorPatientRelation, HealthGoal, SymptomLog, Device, HealthReport, Conversation, ChatMessage} = require('./models/index');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -467,6 +468,67 @@ app.post('/api/admin/login', [
   }
 });
 
+// send email to reset password
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'Email not found' });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    user.passwordResetToken = resetToken;
+    user.passwordResetExpires = Date.now() + 3600000; // 1 hour
+    await user.save();
+
+    // send email using nodemailer
+    const transporter = nodemailer.createTransport({
+      serviice: 'Gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+    const mailOptions = {
+      to: email,
+      from: process.env.EMAIL_USER,
+      subject: 'HealthTech Password Reset',
+      text: `You are receiving this email because you (or someone else) have requested a password reset for your account.\n\n ${resetLink}`,
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.json({ success: true, message: 'Password reset email sent' });
+  } catch (error) {
+    console.error('Error sending password reset email:', error);
+    res.status(500).json({ success: false, error: 'Failed to send password reset email' });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body;
+  try {
+    const user = await User.findOne({
+      passwordResetToken: token,
+      passwordResetExpires: { $gt: Date.now() }
+    });
+    if (!user) {
+      return res.status(400).json({ success: false, error: 'Invalid or expired token' });
+    }
+    user.password = newPassword;
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+    await user.save();
+    res.json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 app.post('/api/user/apply-for-doctor', authenticateToken, [
   body('medicalLicenseNumber').notEmpty().trim(),
   body('specialization').notEmpty().isIn([
@@ -841,7 +903,8 @@ app.post('/api/admin/approve-doctor/:doctorId', authenticateToken, requireAdmin,
     
     await User.findByIdAndUpdate(doctor.userId, {
       accountStatus: 'active',
-      doctorProfileId: doctor._id
+      doctorProfileId: doctor._id,
+      role: 'doctor'
     });
     
     res.json({
@@ -1116,6 +1179,36 @@ app.put('/api/admin/users/:userId/status', authenticateToken, requireAdmin, [
   } catch (error) {
     console.error('Update user status error:', error);
     res.status(500).json({ success: false, error: 'Failed to update user status' });
+  }
+});
+
+// get all patients (for doctors and admins)
+app.get('/api/patients/all', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const isDoctor = user.role === 'doctor' || (user.doctorProfileId && (await Doctor.findById(user.doctorProfileId))?.approvalStatus === 'approved');
+    const isAdmin = user.userType === 'admin' || user.role === 'admin' || user.role === 'super_admin';
+
+    if (!isDoctor && !isAdmin) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Only doctors and admins can access this resource' });
+    }
+
+    const patients = await Patient.find()
+      .populate('userId', 'fullName email age height weight gender dateOfBirth')
+      .select('-__v');
+
+    res.json({
+      success: true,
+      data: patients,
+      count: patients.length
+    });
+  } catch (error) {
+    console.error('Get patients list error:', error);
+    res.status(500).json({ success: false, error: 'Failed to get patients list' });
   }
 });
 

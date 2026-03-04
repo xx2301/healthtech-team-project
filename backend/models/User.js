@@ -26,11 +26,14 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  heightUpdatedAt: { type: Date, default: null },
+
   weight: {
     type: String,
     default: ''
   },
-  
+  weightUpdatedAt: { type: Date, default: null },
+
   userType: { 
     type: String, 
     enum: ['user', 'admin'], 
@@ -88,7 +91,8 @@ const userSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true },
   isVerified: { type: Boolean, default: false },
   lastLogin: Date,
-
+  passwordResetToken: String,
+  passwordResetExpires: Date,
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

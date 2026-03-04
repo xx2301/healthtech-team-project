@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubit.dart';
 
 class DefaultDrawer extends StatelessWidget {
   const DefaultDrawer({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AuthCubit>().currentUser;
+    final bool canAccessPatients = (user?.role == 'doctor' || user?.role == 'admin' || user?.role == 'super_admin');
+
     return Drawer(
         child: Column(
           children: [
@@ -50,14 +55,15 @@ class DefaultDrawer extends StatelessWidget {
               },
             ),
 
-            ListTile(
-              leading: Icon(Icons.people),
-              title: Text("P A T I E N T "),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/patientpage');
-              },
-            ), 
+            if (canAccessPatients)
+              ListTile(
+                leading: Icon(Icons.people),
+                title: Text("P A T I E N T "),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/patientpage');
+                },
+              ),
 
             ListTile(
               leading: Icon(Icons.computer),
@@ -66,7 +72,15 @@ class DefaultDrawer extends StatelessWidget {
                 Navigator.pop(context);
                 Navigator.pushNamed(context, '/devicepage');
               },
-            )
+            ),
+            ListTile(
+              leading: Icon(Icons.logout),
+              title: Text('L O G O U T'),
+              onTap: () {
+                Navigator.pop(context);
+                context.read<AuthCubit>().logout();
+              },
+            ),
           ],
         ),
       );

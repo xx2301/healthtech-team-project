@@ -4,6 +4,11 @@ import 'package:auth2_flutter/features/data/domain/presentation/components/drawe
 import 'package:auth2_flutter/features/patient/presentation/pSearchBar.dart';
 import 'package:auth2_flutter/features/patient/presentation/pTable.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubit.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PatientSearch extends StatefulWidget {
   const PatientSearch({super.key});
@@ -19,13 +24,20 @@ class _PatientSearchState extends State<PatientSearch> {
   String selectedStatus = 'Available';
   DateTime? selectedDate;
 
-  late final List<Patient> allPatients;
+  late final List<Patient> allPatients; //not used anymore
   List<Patient> filteredPatients = [];
+
+  bool _isLoading = true;
+  String? _error;
+  bool _hasPermission = true;
+  List<Patient> _allPatients = [];
 
   @override
   void initState() {
     super.initState();
-    allPatients = [
+    _checkPermissionAndFetch();
+  }
+    /*allPatients = [
       Patient(
         pid: 'P001',
         fname: 'Adam Lee',
@@ -65,6 +77,92 @@ class _PatientSearchState extends State<PatientSearch> {
     ];
 
     filteredPatients = List.of(allPatients);
+  }*/
+  Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token');
+  }
+
+  void _handleNoPermission(String message) {
+    setState(() {
+      _hasPermission = false;
+      _error = message;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+      Navigator.pushReplacementNamed(context, '/homepage');
+    });
+  }
+
+  Future<void> _checkPermissionAndFetch() async {
+    final authCubit = context.read<AuthCubit>();
+    final user = authCubit.currentUser;
+
+    if (user == null) {
+      _handleNoPermission('Not logged in');
+      return;
+    }
+
+    final canAccess = (user.role == 'doctor' || user.role == 'admin' || user.role == 'super_admin');
+    if (!canAccess) {
+      _handleNoPermission('You do not have permission to view patients.');
+      return;
+    }
+
+    await _fetchPatients();
+  }
+
+  Future<void> _fetchPatients() async {
+    setState(() => _isLoading = true);
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('No token found');
+
+      final response = await http.get(
+        Uri.parse('http://10.0.2.2:3001/api/patients/all'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body);
+        final List<dynamic> patientsJson = jsonData['data'];
+        final List<Patient> patients = patientsJson.map((json) {
+          final userInfo = json['userId'] ?? {};
+          return Patient(
+            pid: json['_id'] ?? json['patientCode'] ?? 'Unknown',
+            fname: userInfo['fullName'] ?? 'Unknown',
+            dateOfBirth: userInfo['dateOfBirth'] != null
+                ? DateTime.parse(userInfo['dateOfBirth'])
+                : DateTime.now(),
+            gender: userInfo['gender'] ?? 'Unknown',
+            height: (json['height'] as num?)?.toDouble() ?? 0,
+            weight: (json['weight'] as num?)?.toDouble() ?? 0,
+            bloodType: json['bloodType'] ?? 'Unknown',
+            allergies: (json['allergies'] as List?)?.cast<String>() ?? [],
+            chronicConditions: (json['chronicConditions'] as List?)?.cast<String>() ?? [],
+            emergencyContactID: json['emergencyContactId'] ?? 0,
+          );
+        }).toList();
+
+        setState(() {
+          _allPatients = patients;
+          filteredPatients = List.of(_allPatients);
+          _isLoading = false;
+        });
+      } else {
+        throw Exception('Failed to load patients: ${response.statusCode}');
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'Error: $e';
+        _isLoading = false;
+      });
+    }
   }
 
   void _resetFilters() {
@@ -75,7 +173,7 @@ class _PatientSearchState extends State<PatientSearch> {
     selectedStatus = 'Available';
 
     setState(() {
-      filteredPatients = List.of(allPatients);
+      filteredPatients = List.of(_allPatients);
     });
   }
 
@@ -84,9 +182,8 @@ class _PatientSearchState extends State<PatientSearch> {
     final idQ = pIDController.text.trim().toLowerCase();
 
     setState(() {
-      filteredPatients = allPatients.where((p) {
-        final matchesName =
-            nameQ.isEmpty || p.fname.toLowerCase().contains(nameQ);
+      filteredPatients = _allPatients.where((p) {  // 原来是 allPatients
+        final matchesName = nameQ.isEmpty || p.fname.toLowerCase().contains(nameQ);
         final matchesId = idQ.isEmpty || p.pid.toLowerCase().contains(idQ);
 
         // status: you currently don't have p.status, so we only filter if you add it later.
@@ -103,6 +200,30 @@ class _PatientSearchState extends State<PatientSearch> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_hasPermission) {
+      return Scaffold(
+        appBar: DefaultAppBar(),
+        drawer: DefaultDrawer(),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_isLoading) {
+      return Scaffold(
+        appBar: DefaultAppBar(),
+        drawer: DefaultDrawer(),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_error != null) {
+      return Scaffold(
+        appBar: DefaultAppBar(),
+        drawer: DefaultDrawer(),
+        body: Center(child: Text('Error: $_error')),
+      );
+    }
+
     return Scaffold(
       appBar: DefaultAppBar(),
       drawer: DefaultDrawer(),
