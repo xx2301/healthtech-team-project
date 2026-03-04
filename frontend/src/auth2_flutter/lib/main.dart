@@ -53,6 +53,10 @@ class ThemeNotifier extends ChangeNotifier {
   }
 }
 
+//dark light mode 
+  final ValueNotifier<ThemeMode> themeNotifier =
+    ValueNotifier(ThemeMode.light);
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(MyApp());
@@ -77,76 +81,54 @@ class MyApp extends StatelessWidget {
           BlocProvider<AuthCubit>(
           create: (context) =>
               AuthCubit(authRepo: authRepo)..checkAuth(),
-          ),
-        ],
-        child: Consumer<ThemeNotifier>(
-          builder: (context, themeNotifier, child) {
-            return MaterialApp(
-              debugShowCheckedModeBanner: false,
-              routes:{
-                '/homepage':(context)=> HomePage(),
-                '/settingspage':(context)=> SettingsPage(),
-                '/reportpage':(context)=> ReportPage(),
-                '/chatpage':(context)=> ChatPage(),
-                '/patientpage':(context)=> PatientSearch(),
-                '/devicepage':(context)=> DevicesPage(),
-                '/personalinfopage':(context)=> PersonalInfo(),
-              },
-
-                //bloc consumer - auth
-                /*home: DevicesPage(),
-                BlocConsumer<AuthCubit, AuthState>(
-                  builder: (context, state) {
-                    print(state);
-                    //unathenticated -> auth page (login/register)
-                    if (state is Unauthenticated) {
-                      return const AuthPage();
-                    }
-
-                    //authenticated -> home page
-                    if (state is Authenticated) {
-                      return const HomePage();
-                    }
-                    //loading
-                    else {
-                      return LoadingScreen();
-                    }
-                  },
-                  listener: (context, state) {
-                    if (state is AuthError) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(SnackBar(content: Text((state.message))));
-                    }
-                  },
-                ), */
-              theme: mainTheme,
-              darkTheme: darkTheme,
-              themeMode: themeNotifier.themeMode,
-              home: BlocConsumer<AuthCubit, AuthState>(
-                builder: (context, state) {
-                  print(state);
-                  if (state is Unauthenticated) {
-                    return const AuthPage();
-                  }
-                  if (state is Authenticated) {
-                    return const HomePage();
-                  } else {
-                    return LoadingScreen();
-                  }
-                },
-                listener: (context, state) {
-                  if (state is AuthError) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(state.message)),
-                    );
-                  }
-                },
-              ),
-            );
-          },
         ),
+      ],
+
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        routes:{
+          '/homepage':(context)=> HomePage(),
+          '/settingspage':(context)=> SettingsPage(),
+          '/reportpage':(context)=> ReportPage(),
+          '/chatpage':(context)=> ChatPage(),
+          '/patientpage':(context)=> PatientSearch(),
+          '/devicepage':(context)=> DevicesPage(),
+          '/personalinfopage':(context)=> PersonalInfo(),
+        },
+
+        //bloc consumer - auth
+        home: DevicesPage(),
+        /*BlocConsumer<AuthCubit, AuthState>(
+          builder: (context, state) {
+            print(state);
+            //unathenticated -> auth page (login/register)
+            if (state is Unauthenticated) {
+              return const AuthPage();
+            }
+
+            //authenticated -> home page
+            if (state is Authenticated) {
+              return const HomePage();
+            }
+            //loading
+            else {
+              return LoadingScreen();
+            }
+          },
+          listener: (context, state) {
+            if (state is AuthError) {
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text((state.message))));
+            }
+          },
+        ), */
+      theme: mainTheme,
+      darkTheme: darkTheme,
+      themeMode: ThemeMode.system
+      
       ),
     );
+  
   }
 }
