@@ -15,6 +15,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'features/data/domain/presentation/repos/backend_auth_repo_impl.dart';
 
+//dark light mode 
+  final ValueNotifier<ThemeMode> themeNotifier =
+    ValueNotifier(ThemeMode.light);
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(MyApp());
@@ -25,9 +29,6 @@ class MyApp extends StatelessWidget {
 
   //auth repo
   final authRepo = BackendAuthRepoImpl();
-
-  
-
 
   @override
   Widget build(BuildContext context) {
@@ -41,49 +42,54 @@ class MyApp extends StatelessWidget {
         ),
       ],
 
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        routes:{
-          '/homepage':(context)=> HomePage(),
-          '/settingspage':(context)=> SettingsPage(),
-          '/reportpage':(context)=> ReportPage(),
-          '/chatpage':(context)=> ChatPage(),
-          '/patientpage':(context)=> PatientSearch(),
-          '/devicepage':(context)=> DevicesPage(),
-          '/personalinfopage':(context)=> PersonalInfo(),
-        },
-
-        //bloc consumer - auth
-        home: DevicesPage(),
-        /*BlocConsumer<AuthCubit, AuthState>(
-          builder: (context, state) {
-            print(state);
-            //unathenticated -> auth page (login/register)
-            if (state is Unauthenticated) {
-              return const AuthPage();
-            }
-
-            //authenticated -> home page
-            if (state is Authenticated) {
-              return const HomePage();
-            }
-            //loading
-            else {
-              return LoadingScreen();
-            }
-          },
-          listener: (context, state) {
-            if (state is AuthError) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text((state.message))));
-            }
-          },
-        ), */
-      theme: mainTheme,
-      darkTheme: darkTheme,
-      themeMode: ThemeMode.system
-      
+      child: ValueListenableBuilder(
+        valueListenable: themeNotifier,
+        builder: (context, value, child) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            routes:{
+              '/homepage':(context)=> HomePage(),
+              '/settingspage':(context)=> SettingsPage(),
+              '/reportpage':(context)=> ReportPage(),
+              '/chatpage':(context)=> ChatPage(),
+              '/patientpage':(context)=> PatientSearch(),
+              '/devicepage':(context)=> DevicesPage(),
+              '/personalinfopage':(context)=> PersonalInfo(),
+            },
+          
+            
+            home:
+            BlocConsumer<AuthCubit, AuthState>(
+              builder: (context, state) {
+                print(state);
+                //unathenticated -> auth page (login/register)
+                if (state is Unauthenticated) {
+                  return const AuthPage();
+                }
+          
+                //authenticated -> home page
+                if (state is Authenticated) {
+                  return const HomePage();
+                }
+                //loading
+                else {
+                  return LoadingScreen();
+                }
+              },
+              listener: (context, state) {
+                if (state is AuthError) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text((state.message))));
+                }
+              },
+            ),
+          theme: mainTheme,
+          darkTheme: darkTheme,
+          themeMode: ThemeMode.system
+          
+          );
+        }
       ),
     );
   

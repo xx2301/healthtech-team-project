@@ -58,7 +58,7 @@ class _LoginPageState extends State<LoginPage> {
           //cancel button
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
+            child: const Text("Cancel", style: TextStyle(fontWeight: FontWeight.bold),),
           ),
 
           //reset button
@@ -82,7 +82,7 @@ class _LoginPageState extends State<LoginPage> {
                 );
               }
             },
-            child: const Text("Reset"),
+            child: const Text("Reset", style: TextStyle(fontWeight: FontWeight.bold),),
           ),
         ],
       ),
