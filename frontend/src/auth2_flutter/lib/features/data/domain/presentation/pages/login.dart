@@ -2,7 +2,6 @@
 
 //will be redirected to make account if there is no account
 
-import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/appbar2.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/my_button.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/my_textfield.dart';

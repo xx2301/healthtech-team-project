@@ -1,7 +1,6 @@
 import 'package:auth2_flutter/features/data/domain/entities/patient.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/drawer.dart';
-import 'package:auth2_flutter/features/patient/presentation/pSearchBar.dart';
 import 'package:auth2_flutter/features/patient/presentation/pTable.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -9,6 +8,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class PatientSearch extends StatefulWidget {
   const PatientSearch({super.key});
@@ -78,6 +79,7 @@ class _PatientSearchState extends State<PatientSearch> {
 
     filteredPatients = List.of(allPatients);
   }*/
+
   Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('auth_token');
@@ -114,6 +116,13 @@ class _PatientSearchState extends State<PatientSearch> {
     await _fetchPatients();
   }
 
+  String _getBaseUrl() {
+    if (kIsWeb) return 'http://localhost:3001';
+    if (Platform.isAndroid) return 'http://10.0.2.2:3001';
+    if (Platform.isIOS) return 'http://localhost:3001';
+    return 'http://localhost:3001'; // Windows, Linux, macOS
+  }
+
   Future<void> _fetchPatients() async {
     setState(() => _isLoading = true);
     try {
@@ -121,18 +130,31 @@ class _PatientSearchState extends State<PatientSearch> {
       if (token == null) throw Exception('No token found');
 
       final response = await http.get(
-        Uri.parse('http://10.0.2.2:3001/api/patients/all'),
+        Uri.parse('${_getBaseUrl()}/api/patients/all'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
 
+    if (mounted){
       if (response.statusCode == 200) {
         final jsonData = jsonDecode(response.body);
         final List<dynamic> patientsJson = jsonData['data'];
         final List<Patient> patients = patientsJson.map((json) {
           final userInfo = json['userId'] ?? {};
+
+          int? age;
+          if (json['age'] != null) {
+            if (json['age'] is int) {
+              age = json['age'];
+            } else if (json['age'] is num) {
+              age = json['age'].toInt();
+            } else {
+              age = int.tryParse(json['age'].toString());
+            }
+          }
+
           return Patient(
             pid: json['_id'] ?? json['patientCode'] ?? 'Unknown',
             fname: userInfo['fullName'] ?? 'Unknown',
@@ -146,6 +168,8 @@ class _PatientSearchState extends State<PatientSearch> {
             allergies: (json['allergies'] as List?)?.cast<String>() ?? [],
             chronicConditions: (json['chronicConditions'] as List?)?.cast<String>() ?? [],
             emergencyContactID: json['emergencyContactId'] ?? 0,
+            patientCode: json['patientCode'] ?? json['patient_code'] ?? '',
+            age: age,
           );
         }).toList();
 
@@ -155,13 +179,470 @@ class _PatientSearchState extends State<PatientSearch> {
           _isLoading = false;
         });
       } else {
-        throw Exception('Failed to load patients: ${response.statusCode}');
+        setState(() {
+          _error = 'Failed to load patients: ${response.statusCode}';
+          _isLoading = false;
+        });
       }
-    } catch (e) {
+    }
+  } catch (e) {
+    if (mounted) {
       setState(() {
         _error = 'Error: $e';
         _isLoading = false;
       });
+    }
+    }
+  }
+
+  Future<void> _showAddPatientDialog() async {
+    bool isNewUser = true;
+
+    final nameController = TextEditingController();
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+    final ageController = TextEditingController();
+    final heightController = TextEditingController();
+    final weightController = TextEditingController();
+    final genderController = TextEditingController(text: 'other');
+
+    return showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('Add New Patient'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SwitchListTile(
+                      title: Text('Create new user'),
+                      value: isNewUser,
+                      onChanged: (value) {
+                        setState(() => isNewUser = value);
+                      },
+                    ),
+                    const Divider(),
+                    
+                    if (isNewUser) ...[
+                      TextField(
+                        controller: nameController,
+                        decoration: InputDecoration(labelText: 'Full Name *'),
+                      ),
+                      TextField(
+                        controller: emailController,
+                        decoration: InputDecoration(labelText: 'Email *'),
+                        keyboardType: TextInputType.emailAddress,
+                      ),
+                      TextField(
+                        controller: passwordController,
+                        decoration: InputDecoration(labelText: 'Password (min 6 chars) *'),
+                        obscureText: true,
+                      ),
+                      TextField(
+                        controller: ageController,
+                        decoration: InputDecoration(labelText: 'Age'),
+                        keyboardType: TextInputType.number,
+                      ),
+                      TextField(
+                        controller: heightController,
+                        decoration: InputDecoration(labelText: 'Height (cm)'),
+                        keyboardType: TextInputType.number,
+                      ),
+                      TextField(
+                        controller: weightController,
+                        decoration: InputDecoration(labelText: 'Weight (kg)'),
+                        keyboardType: TextInputType.number,
+                      ),
+                      DropdownButtonFormField<String>(
+                        value: genderController.text,
+                        decoration: InputDecoration(labelText: 'Gender'),
+                        items: ['male', 'female', 'other', 'prefer_not_to_say']
+                            .map((gender) => DropdownMenuItem(
+                                  value: gender,
+                                  child: Text(gender),
+                                ))
+                            .toList(),
+                        onChanged: (value) => genderController.text = value!,
+                      ),
+                    ] else ...[
+                      TextField(
+                        controller: emailController,
+                        decoration: InputDecoration(
+                          labelText: 'Existing User Email *',
+                          hintText: 'Enter user email',
+                        ),
+                        keyboardType: TextInputType.emailAddress,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'User will be linked as patient.',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final email = emailController.text.trim();
+                    if (email.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Email is required')),
+                      );
+                      return;
+                    }
+                    if (isNewUser) {
+                      final name = nameController.text.trim();
+                      final password = passwordController.text.trim();
+                      if (name.isEmpty || password.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Name and password are required for new user')),
+                        );
+                        return;
+                      }
+                    }
+
+                    Navigator.pop(context);
+                    
+                    if (isNewUser) {
+                      await _addNewUserPatient(
+                        name: nameController.text.trim(),
+                        email: email,
+                        password: passwordController.text.trim(),
+                        age: ageController.text.trim(),
+                        height: heightController.text.trim(),
+                        weight: weightController.text.trim(),
+                        gender: genderController.text.trim(),
+                      );
+                    } else {
+                      await _linkExistingUserAsPatient(email);
+                    }
+                  },
+                  child: Text('Add'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _showEditPatientDialog(Patient patient) async {
+    final ageController = TextEditingController(text: patient.age?.toString() ?? '');
+    final heightController = TextEditingController(text: patient.height?.toString() ?? '');
+    final weightController = TextEditingController(text: patient.weight?.toString() ?? '');
+    String selectedBloodType = patient.bloodType ?? 'unknown';
+    /*ring selectedSmoking = patient.smokingStatus ?? 'never';
+    String selectedAlcohol = patient.alcoholConsumption ?? 'none';
+    String selectedExercise = patient.exerciseFrequency ?? 'sedentary';*/
+
+    // 注意：allergies 和 chronicConditions 在您的 Patient 类中是 List<String>，可以直接使用
+    final allergiesText = patient.allergies.join(', ');
+    final chronicConditionsText = patient.chronicConditions.join(', ');
+
+    return showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            String tempAllergies = allergiesText;
+            String tempChronic = chronicConditionsText;
+
+            return AlertDialog(
+              title: Text('Edit Patient: ${patient.fname}'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: ageController,
+                      decoration: const InputDecoration(labelText: 'Age'),
+                      keyboardType: TextInputType.number,
+                    ),
+                    TextField(
+                      controller: heightController,
+                      decoration: const InputDecoration(labelText: 'Height (cm)'),
+                      keyboardType: TextInputType.number,
+                    ),
+                    TextField(
+                      controller: weightController,
+                      decoration: const InputDecoration(labelText: 'Weight (kg)'),
+                      keyboardType: TextInputType.number,
+                    ),
+                    DropdownButtonFormField<String>(
+                      value: selectedBloodType,
+                      decoration: const InputDecoration(labelText: 'Blood Type'),
+                      items: const ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'unknown']
+                          .map((type) => DropdownMenuItem(value: type, child: Text(type)))
+                          .toList(),
+                      onChanged: (value) => setState(() => selectedBloodType = value!),
+                    ),
+                    TextField(
+                      decoration: InputDecoration(labelText: 'Allergies (comma separated)'),
+                      onChanged: (value) => tempAllergies = value,
+                    ),
+                    TextField(
+                      decoration: InputDecoration(labelText: 'Chronic Conditions (comma separated)'),
+                      onChanged: (value) => tempChronic = value,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel')),
+                ElevatedButton(
+                  onPressed: () async {
+                    List<String> allergiesList = tempAllergies
+                      .split(',')
+                      .map((s) => s.trim())
+                      .where((s) => s.isNotEmpty)
+                      .toList();
+                    List<String> chronicList = tempChronic
+                      .split(',')
+                      .map((s) => s.trim())
+                      .where((s) => s.isNotEmpty)
+                      .toList();
+
+                    final updatedData = {
+                      'age': int.tryParse(ageController.text),
+                      'height': double.tryParse(heightController.text),
+                      'weight': double.tryParse(weightController.text),
+                      'bloodType': selectedBloodType,
+                      'allergies': allergiesList,
+                      'chronicConditions': chronicList,
+                    };
+                    await _updatePatient(patient.pid, updatedData);
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _addNewUserPatient({
+    required String name,
+    required String email,
+    required String password,
+    required String age,
+    required String height,
+    required String weight,
+    required String gender,
+  }) async {
+    setState(() => _isLoading = true);
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('Not authenticated');
+
+      final registerBody = {
+        'fullName': name,
+        'email': email,
+        'password': password,
+        'age': age,
+        'height': height,
+        'weight': weight,
+        'gender': gender,
+      };
+
+      final registerResponse = await http.post(
+        Uri.parse('${_getBaseUrl()}/api/auth/register'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(registerBody),
+      );
+
+      if (registerResponse.statusCode != 201) {
+        final errorData = jsonDecode(registerResponse.body);
+        throw Exception(errorData['error'] ?? 'Registration failed');
+      }
+
+      final registerData = jsonDecode(registerResponse.body);
+      final userId = registerData['user']['_id'];
+
+      await _createPatientProfile(userId, weight, height, age: age);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _updatePatient(String patientId, Map<String, dynamic> data) async {
+    setState(() => _isLoading = true);
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('Not authenticated');
+
+      final response = await http.put(
+        Uri.parse('${_getBaseUrl()}/api/admin/patients/$patientId'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(data),
+      );
+
+      if (response.statusCode == 200) {
+        await _fetchPatients();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Patient updated successfully')),
+          );
+        }
+      } else {
+        final errorData = jsonDecode(response.body);
+        throw Exception(errorData['error'] ?? errorData['message'] ?? 'Update failed');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _linkExistingUserAsPatient(String email) async {
+    setState(() => _isLoading = true);
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('Not authenticated');
+
+      final lookupResponse = await http.get(
+        Uri.parse('${_getBaseUrl()}/api/admin/users?search=${Uri.encodeComponent(email)}'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (lookupResponse.statusCode != 200) {
+        throw Exception('Failed to lookup user');
+      }
+
+      final lookupData = jsonDecode(lookupResponse.body);
+      final List<dynamic> users = lookupData['data'];
+      if (users.isEmpty) {
+        throw Exception('User not found');
+      }
+
+      final user = users.first;
+      final userId = user['_id'];
+
+      if (user['patientProfileId'] != null) {
+        throw Exception('User already has a patient profile');
+      }
+
+      await _createPatientProfile(userId, null, null); //weight and height can be null
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _createPatientProfile(String userId, String? weight, String? height, {String? age}) async {
+    final token = await _getToken();
+    final patientBody = {
+      'userId': userId,
+      if (weight != null && weight.isNotEmpty)
+        'weight': double.tryParse(weight),
+      if (height != null && height.isNotEmpty)
+        'height': double.tryParse(height),
+      if (age != null && age.isNotEmpty)
+        'age': int.tryParse(age),
+      'bloodType': 'unknown',
+    };
+
+    final patientResponse = await http.post(
+      Uri.parse('${_getBaseUrl()}/api/admin/create-patient'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(patientBody),
+    );
+
+    if (patientResponse.statusCode != 201) {
+      String errorMsg = 'Failed to create patient profile';
+      try {
+        final errorData = jsonDecode(patientResponse.body);
+        errorMsg = errorData['error'] ?? errorMsg;
+      } catch (_) {}
+      throw Exception(errorMsg);
+    }
+
+    await _fetchPatients();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Patient added successfully')),
+      );
+    }
+  }
+
+  bool _userCanDelete() {
+    final authCubit = context.read<AuthCubit>();
+    final user = authCubit.currentUser;
+    return user?.role == 'admin' || user?.role == 'super_admin';
+  }
+
+  bool _userCanEdit() {
+    final authCubit = context.read<AuthCubit>();
+    final user = authCubit.currentUser;
+    return user?.role == 'doctor' || user?.role == 'admin' || user?.role == 'super_admin';
+  }
+
+  Future<void> _deletePatient(Patient patient) async {
+    setState(() => _isLoading = true);
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('Not authenticated');
+
+      final response = await http.delete(
+        Uri.parse('${_getBaseUrl()}/api/admin/patients/${patient.pid}'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _allPatients.removeWhere((p) => p.pid == patient.pid);
+          filteredPatients.removeWhere((p) => p.pid == patient.pid);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Patient deleted successfully')),
+        );
+      } else {
+        final errorData = jsonDecode(response.body);
+        throw Exception(errorData['message'] ?? 'Delete failed');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -200,6 +681,10 @@ class _PatientSearchState extends State<PatientSearch> {
 
   @override
   Widget build(BuildContext context) {
+    final user = context.read<AuthCubit>().currentUser;
+    final canEdit = user?.role == 'doctor' || user?.role == 'admin' || user?.role == 'super_admin';
+    final canDelete = user?.role == 'admin' || user?.role == 'super_admin';
+
     if (!_hasPermission) {
       return Scaffold(
         appBar: DefaultAppBar(),
@@ -338,7 +823,7 @@ class _PatientSearchState extends State<PatientSearch> {
               ),
             ),
 
-  const SizedBox(height: 10),
+            const SizedBox(height: 10),
   
             Text(
               "Patients",
@@ -354,7 +839,7 @@ class _PatientSearchState extends State<PatientSearch> {
                     foregroundColor: Colors.black,
                   ),
                   child: Text("+ Add Patient"),
-                  onPressed: () {},
+                  onPressed: _showAddPatientDialog,
                 ),
 
                 ElevatedButton(
@@ -369,8 +854,14 @@ class _PatientSearchState extends State<PatientSearch> {
 
             const SizedBox(height: 10),
 
-            PatientSearchTable(patients: filteredPatients),
-          ],
+            PatientSearchTable(
+              patients: filteredPatients,
+              onDelete: _deletePatient,
+              onEdit: _showEditPatientDialog,
+              canDelete: canDelete,
+              canEdit: canEdit,
+            )
+          ]
         ),
       ),
     );

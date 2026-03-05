@@ -3,6 +3,11 @@ import 'package:auth2_flutter/features/data/domain/presentation/components/drawe
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubit.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:auth2_flutter/features/data/domain/entities/app_user.dart';
 
 class PersonalInfo extends StatefulWidget {
@@ -123,6 +128,125 @@ class _PersonalInfoState extends State<PersonalInfo> {
     );
   }
 
+  Future<void> _showEditProfileDialog(BuildContext context, AppUser user) async {
+    final nameController = TextEditingController(text: user.fullName);
+    final ageController = TextEditingController(text: user.age?.toString() ?? '');
+    final heightController = TextEditingController(text: user.height?.toString() ?? '');
+    final weightController = TextEditingController(text: user.weight?.toString() ?? '');
+    String selectedGender = user.gender ?? 'prefer_not_to_say';
+
+    return showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            return AlertDialog(
+              title: const Text('Edit Profile'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(labelText: 'Full Name'),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: selectedGender,
+                      decoration: const InputDecoration(labelText: 'Gender'),
+                      items: const [
+                        DropdownMenuItem(value: 'male', child: Text('Male')),
+                        DropdownMenuItem(value: 'female', child: Text('Female')),
+                        DropdownMenuItem(value: 'other', child: Text('Other')),
+                        DropdownMenuItem(value: 'prefer_not_to_say', child: Text('Prefer not to say')),
+                      ],
+                      onChanged: (value) => setState(() => selectedGender = value!),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: ageController,
+                      decoration: const InputDecoration(labelText: 'Age'),
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: heightController,
+                      decoration: const InputDecoration(labelText: 'Height (cm)'),
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: weightController,
+                      decoration: const InputDecoration(labelText: 'Weight (kg)'),
+                      keyboardType: TextInputType.number,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final updatedData = {
+                      'fullName': nameController.text,
+                      'gender': selectedGender,
+                      'age': int.tryParse(ageController.text),
+                      'height': double.tryParse(heightController.text),
+                      'weight': double.tryParse(weightController.text),
+                    };
+                    await _updateUserProfile(updatedData);
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token');
+  }
+
+  String _getBaseUrl() {
+    if (kIsWeb) return 'http://localhost:3001';
+    if (Platform.isAndroid) return 'http://10.0.2.2:3001';
+    if (Platform.isIOS) return 'http://localhost:3001';
+    return 'http://localhost:3001'; // Windows, Linux, macOS
+  }
+
+  Future<void> _updateUserProfile(Map<String, dynamic> data) async {
+    final token = await _getToken();
+    if (token == null) return;
+
+    final response = await http.put(
+      Uri.parse('${_getBaseUrl()}/api/user/profile'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(data),
+    );
+
+    if (response.statusCode == 200) {
+      await context.read<AuthCubit>().refreshUser();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile updated successfully')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Update failed: ${response.body}')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthCubit>().currentUser;
@@ -147,7 +271,7 @@ class _PersonalInfoState extends State<PersonalInfo> {
             // ===== Card 1: Personal =====
             sectionCard(
               title: "Profile",
-              onEdit: () {},
+              onEdit: () => _showEditProfileDialog(context, user!),
               children: [
                 infoRow(
                   icon: Icons.person_rounded,

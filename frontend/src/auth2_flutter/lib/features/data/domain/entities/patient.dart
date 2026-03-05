@@ -3,26 +3,30 @@ class Patient {
   final String fname;
   final DateTime? dateOfBirth; // nullable in case backend sends null/invalid
   final String gender;
-  final int? age;
   final double? height; // cm (use double for flexibility)
   final double? weight; // kg
   final String? bloodType;
   final List<String> allergies;
   final List<String> chronicConditions;
   final int? emergencyContactID;
+  final String patientCode;
+  final int? age;
+  final DateTime? deletedAt;
 
   Patient({
     required this.pid,
     required this.fname,
     this.dateOfBirth,
     required this.gender,
-    this.age,
     this.height,
     this.weight,
     this.bloodType,
     List<String>? allergies,
     List<String>? chronicConditions,
     this.emergencyContactID,
+    required this.patientCode,
+    this.age,
+    this.deletedAt,
   })  : allergies = allergies ?? const [],
         chronicConditions = chronicConditions ?? const [];
 
@@ -55,18 +59,32 @@ class Patient {
       return int.tryParse(v.toString());
     }
 
+    int? age;
+    if (json['age'] != null) {
+      if (json['age'] is int) age = json['age'];
+      else if (json['age'] is num) age = json['age'].toInt();
+      else age = int.tryParse(json['age'].toString());
+    }
+
+    DateTime? deletedAt;
+    if (json['deletedAt'] != null) {
+      deletedAt = DateTime.tryParse(json['deletedAt'].toString());
+    }
+
     return Patient(
       pid: (json['_id'] ?? json['id'] ?? json['pid'] ?? '').toString(),
       fname: (json['fname'] ?? json['fullName'] ?? json['name'] ?? '').toString(),
       dateOfBirth: parseDob(json['dateOfBirth'] ?? json['dob']),
       gender: (json['gender'] ?? '').toString(),
       height: parseDouble(json['height']),
-      age: parseInt(json['age']),
       weight: parseDouble(json['weight']),
       bloodType: (json['bloodType'] ?? json['blood_type'])?.toString(),
       allergies: parseStringList(json['allergies']),
       chronicConditions: parseStringList(json['chronicConditions'] ?? json['chronic_conditions']),
       emergencyContactID: parseInt(json['emergencyContactID'] ?? json['emergency_contact_id']),
+      patientCode: (json['patientCode'] ?? json['patient_code'] ?? '').toString(),
+      age: parseInt(json['age']),
+      deletedAt: deletedAt,
     );
   }
 
@@ -84,6 +102,7 @@ class Patient {
       'allergies': allergies,
       'chronicConditions': chronicConditions,
       'emergencyContactID': emergencyContactID,
+      'patientCode': patientCode,
     };
   }
 
@@ -100,6 +119,7 @@ class Patient {
       'allergies': allergies,
       'chronicConditions': chronicConditions,
       'emergencyContactID': emergencyContactID,
+      'patientCode': patientCode,
     };
   }
 
@@ -136,11 +156,13 @@ class Patient {
       allergies: safeList(json['allergies']),
       chronicConditions: safeList(json['chronicConditions']),
       emergencyContactID: safeInt(json['emergencyContactID']),
+      patientCode: (json['patientCode'] ?? '').toString(),
+      age: safeInt(json['age']),
     );
   }
 }
 
-final List<Patient> allPatients = [
+/*final List<Patient> allPatients = [
   Patient(
     pid: 'P001',
     fname: 'Adam Lee',
@@ -177,5 +199,5 @@ final List<Patient> allPatients = [
     chronicConditions: ['Asthma'],
     emergencyContactID: 103,
   ),
-];
+];*/
 

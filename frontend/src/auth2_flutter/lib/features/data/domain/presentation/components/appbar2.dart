@@ -1,6 +1,4 @@
-import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubit.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 
 class Appbar2 extends StatelessWidget implements PreferredSizeWidget {
   const Appbar2({super.key});

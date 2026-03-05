@@ -631,7 +631,6 @@ app.post('/api/admin/create-patient', authenticateToken, requireAdmin, [
   
   try {
     const user = await User.findById(req.body.userId);
-    
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
@@ -643,18 +642,25 @@ app.post('/api/admin/create-patient', authenticateToken, requireAdmin, [
       });
     }
     
-    const patient = new Patient({
+    const patientData = {
       userId: user._id,
-      weight: req.body.weight,
-      height: req.body.height,
       bloodType: req.body.bloodType || 'unknown',
       careModeEnabled: false,
-      preferredUnitSystem: 'metric'
-    });
+      preferredUnitSystem: 'metric',
+      age: req.body.age !== undefined ? req.body.age : null,
+    };
+    if (req.body.weight !== undefined && req.body.weight !== null) {
+      patientData.weight = req.body.weight;
+    }
+    if (req.body.height !== undefined && req.body.height !== null) {
+      patientData.height = req.body.height;
+    }
     
+    const patient = new Patient(patientData);
     await patient.save();
     
     user.patientProfileId = patient._id;
+    user.role = 'patient';
     await user.save();
     
     res.status(201).json({
@@ -706,18 +712,25 @@ app.post('/api/doctor/create-patient', authenticateToken, [
       });
     }
     
-    const patient = new Patient({
+    const patientData = {
       userId: user._id,
-      weight: req.body.weight,
-      height: req.body.height,
       bloodType: req.body.bloodType || 'unknown',
       careModeEnabled: false,
-      preferredUnitSystem: 'metric'
-    });
+      preferredUnitSystem: 'metric',
+      age: user.age ? parseInt(user.age) : null,
+    };
+    if (req.body.weight !== undefined && req.body.weight !== null) {
+      patientData.weight = req.body.weight;
+    }
+    if (req.body.height !== undefined && req.body.height !== null) {
+      patientData.height = req.body.height;
+    }
     
+    const patient = new Patient(patientData);
     await patient.save();
     
     user.patientProfileId = patient._id;
+    user.role = 'patient';
     await user.save();
     
     const relation = new DoctorPatientRelation({
@@ -1039,7 +1052,10 @@ app.put('/api/user/profile', authenticateToken, [
   body('fullName').optional().trim().escape(),
   body('dateOfBirth').optional().isISO8601(),
   body('gender').optional().isIn(['male', 'female', 'other', 'prefer_not_to_say']),
-  body('phone').optional().trim()
+  body('phone').optional().trim(),
+  body('age').optional().isInt({ min: 0, max: 150 }),
+  body('height').optional().isFloat({ min: 0, max: 300 }),
+  body('weight').optional().isFloat({ min: 0, max: 500 }),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -1057,6 +1073,13 @@ app.put('/api/user/profile', authenticateToken, [
     if (req.body.gender) user.gender = req.body.gender;
     if (req.body.phone !== undefined) user.phone = req.body.phone;
     
+    if (req.body.age !== undefined) user.age = req.body.age.toString();
+    if (req.body.height !== undefined) user.height = req.body.height.toString();
+    if (req.body.weight !== undefined) user.weight = req.body.weight.toString();
+
+    if (req.body.height !== undefined) user.heightUpdatedAt = new Date();
+    if (req.body.weight !== undefined) user.weightUpdatedAt = new Date();
+
     user.updatedAt = new Date();
     await user.save();
 
@@ -1120,8 +1143,10 @@ app.get('/api/admin/users', authenticateToken, requireAdmin, async (req, res) =>
       if (user.patientProfileId) {
         const patient = await Patient.findById(user.patientProfileId)
           .select('patientCode bloodType')
-          .populate('primaryDoctor', 'specialization')
-          .populate('primaryDoctor.userId', 'fullName');
+          .populate({
+            path: 'primaryDoctor',
+            populate: { path: 'userId', select: 'fullName' }
+          });
         userObj.patientDetails = patient;
       }
       
@@ -1261,12 +1286,19 @@ app.get('/api/admin/patients', authenticateToken, requireAdmin, async (req, res)
 });
 
 app.put('/api/admin/patients/:patientId', authenticateToken, requireAdmin, [
+  body('age').optional().isInt({ min: 0, max: 150 }),
   body('weight').optional().isFloat({ min: 0, max: 500 }),
   body('height').optional().isFloat({ min: 0, max: 300 }),
   body('bloodType').optional().isIn(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'unknown']),
   body('careModeEnabled').optional().isBoolean(),
   body('preferredUnitSystem').optional().isIn(['metric', 'imperial']),
-  body('primaryDoctor').optional().isMongoId()
+  body('primaryDoctor').optional().isMongoId(),
+  body('allergies').optional().isArray(),
+  body('chronicConditions').optional().isArray(),
+  body('smokingStatus').optional().isIn(['never', 'former', 'current']),
+  body('alcoholConsumption').optional().isIn(['none', 'light', 'moderate', 'heavy']),
+  body('exerciseFrequency').optional().isIn(['sedentary', 'light', 'moderate', 'active', 'very_active']),
+  body('medicalHistorySummary').optional().isString(),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -1275,26 +1307,61 @@ app.put('/api/admin/patients/:patientId', authenticateToken, requireAdmin, [
   
   try {
     const patient = await Patient.findById(req.params.patientId);
-    
     if (!patient) {
       return res.status(404).json({ success: false, error: 'Patient not found' });
     }
-    
-    const updates = req.body;
-    Object.keys(updates).forEach(key => {
-      if (['weight', 'height', 'bloodType', 'careModeEnabled', 'preferredUnitSystem', 'primaryDoctor'].includes(key)) {
-        patient[key] = updates[key];
+  
+    const allowedUpdates = [
+      'age', 'weight', 'height', 'bloodType', 'careModeEnabled',
+      'preferredUnitSystem', 'primaryDoctor',
+      'smokingStatus', 'alcoholConsumption', 'exerciseFrequency',
+      'medicalHistorySummary'
+    ];
+
+    allowedUpdates.forEach(field => {
+      if (req.body[field] !== undefined) {
+        patient[field] = req.body[field];
       }
     });
-    
+
+    if (req.body.allergies !== undefined) {
+      patient.allergies = req.body.allergies.map(allergen => ({
+        allergen: allergen,
+        severity: 'unknown',
+        isActive: true
+      }));
+    }
+
+    if (req.body.chronicConditions !== undefined) {
+      patient.chronicConditions = req.body.chronicConditions.map(condition => ({
+        condition: condition,
+        status: 'active',
+        medications: []
+      }));
+    }
+
     await patient.save();
-    
+
+    const userUpdates = {};
+    if (req.body.age !== undefined) userUpdates.age = req.body.age.toString();
+    if (req.body.height !== undefined) userUpdates.height = req.body.height.toString();
+    if (req.body.weight !== undefined) userUpdates.weight = req.body.weight.toString();
+
+
+    if (Object.keys(userUpdates).length > 0) {
+      await User.findByIdAndUpdate(patient.userId, userUpdates);
+    }
+
+    const updatedPatient = await Patient.findById(patient._id)
+      .populate('userId', 'fullName email age height weight')
+      .populate('primaryDoctor', 'specialization');
+
     res.json({
       success: true,
-      message: 'Patient profile updated successfully',
-      data: patient
+      message: 'Patient updated successfully',
+      data: updatedPatient
     });
-    
+
   } catch (error) {
     console.error('Update patient error:', error);
     res.status(500).json({ success: false, error: 'Failed to update patient' });
@@ -1308,18 +1375,28 @@ app.delete('/api/admin/patients/:patientId', authenticateToken, requireAdmin, as
     if (!patient) {
       return res.status(404).json({ success: false, error: 'Patient not found' });
     }
-    
-    await User.findByIdAndUpdate(patient.userId, {
-      patientProfileId: null
-    });
-    
+
+    await Doctor.updateMany(
+      { assignedPatients: req.params.patientId },
+      { $pull: { assignedPatients: req.params.patientId } }
+    );
+
+    const user = await User.findById(patient.userId);
+    if (user) {
+      user.patientProfileId = null;
+      if (!user.doctorProfileId && user.role === 'patient') {
+        user.role = 'user';
+      }
+      await user.save();
+    }
+
     await Patient.findByIdAndDelete(req.params.patientId);
-    
+
     res.json({
       success: true,
-      message: 'Patient profile deleted successfully'
+      message: 'Patient profile deleted successfully, user role updated if needed'
     });
-    
+
   } catch (error) {
     console.error('Delete patient error:', error);
     res.status(500).json({ success: false, error: 'Failed to delete patient' });

@@ -4,6 +4,12 @@ import '../../entities/app_user.dart';
 import 'auth_states.dart';
 import '../../repos/auth_repo.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:auth2_flutter/features/data/domain/entities/app_user.dart';
 
 class AuthCubit extends Cubit<AuthState> {
   final AuthRepo authRepo;
@@ -79,6 +85,36 @@ class AuthCubit extends Cubit<AuthState> {
     } catch (e) {
       emit(AuthError(e.toString()));
       emit(Unauthenticated());
+    }
+  }
+
+  Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token');
+  }
+
+  String _getBaseUrl() {
+    if (kIsWeb) return 'http://localhost:3001';
+    if (Platform.isAndroid) return 'http://10.0.2.2:3001';
+    if (Platform.isIOS) return 'http://localhost:3001';
+    return 'http://localhost:3001';
+  }
+  
+  Future<void> refreshUser() async {
+    final token = await _getToken();
+    if (token == null) return;
+    final response = await http.get(
+      Uri.parse('${_getBaseUrl()}/auth/me'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode == 200) {
+      final jsonData = jsonDecode(response.body);
+      final userData = jsonData['user'];
+      if (userData != null) {
+        final user = AppUser.fromBackendJson(userData);
+        _currentUser = user;
+        emit(Authenticated(user));
+      }
     }
   }
 

@@ -3,13 +3,21 @@ import 'package:flutter/material.dart';
 
 class PatientSearchTable extends StatelessWidget {
   final List<Patient> patients;
+  final Function(Patient) onDelete;
+  final Function(Patient) onEdit;
+  final bool canDelete;
+  final bool canEdit;
 
   const PatientSearchTable({
     super.key,
     required this.patients,
+    required this.onDelete,
+    required this.onEdit,
+    this.canDelete = false,
+    this.canEdit = false,
   });
 
-  Widget _dataRow(Patient p) {
+  Widget _dataRow(BuildContext context, Patient p) {
     final String status = "Available"; // change to p.status if exists
 
     return Container(
@@ -33,7 +41,7 @@ class PatientSearchTable extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  "ID: ${p.pid}",
+                  "ID: ${p.patientCode}",
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.black.withOpacity(0.6),
@@ -45,7 +53,7 @@ class PatientSearchTable extends StatelessWidget {
           Expanded(
             flex: 1,
             child: Text(
-              (p.age ?? 0).toString(),
+              p.age?.toString() ?? '-',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
@@ -58,10 +66,55 @@ class PatientSearchTable extends StatelessWidget {
           ),
           Expanded(
             flex: 1,
-            child: Text(
-              status,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(status),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (canEdit)
+                    IconButton(
+                      icon: Icon(Icons.edit, color: Colors.blue[400], size: 20),
+                      onPressed: () => onEdit(p),
+                      constraints: BoxConstraints(),
+                      padding: EdgeInsets.zero,
+                    ),
+                    if (canDelete)
+                    IconButton(
+                      icon: Icon(Icons.delete_outline, color: Colors.red[400], size: 20),
+                      onPressed: () => _confirmDelete(context, p),
+                      constraints: const BoxConstraints(),
+                      padding: EdgeInsets.zero,
+                    ),
+                  ],
+                ),
+              ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, Patient patient) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Patient'),
+        content: Text('Are you sure you want to delete ${patient.fname}? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            onPressed: () {
+              Navigator.pop(ctx);
+              onDelete(patient);
+            },
+            child: const Text('Delete'),
           ),
         ],
       ),
@@ -70,7 +123,7 @@ class PatientSearchTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    TextStyle headerStyle = TextStyle(
+    final headerStyle = TextStyle(
       fontSize: 11,
       fontWeight: FontWeight.w800,
       color: Colors.black.withOpacity(0.65),
@@ -94,9 +147,8 @@ class PatientSearchTable extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-
           // Data Rows
-          ...patients.map((p) => _dataRow(p)).toList(),
+          ...patients.map((p) => _dataRow(context, p)).toList(),
         ],
       ),
     );

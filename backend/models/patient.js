@@ -17,18 +17,25 @@ const patientSchema = new mongoose.Schema({
     }
   },
   
+  age: {
+    type: Number,
+    min: 0,
+    max: 150,
+    default: null
+  },
+
   weight: {
     type: Number,
     min: 0,
     max: 500,
-    set: v => parseFloat(v.toFixed(1))
+    set: v => v != null ? parseFloat(v.toFixed(1)) : v
   },
   
   height: {
     type: Number,
     min: 0,
     max: 300,
-    set: v => parseFloat(v.toFixed(1))
+    set: v => v != null ? parseFloat(v.toFixed(1)) : v
   },
   
   bloodType: {
@@ -109,14 +116,24 @@ const patientSchema = new mongoose.Schema({
     permissions: [String],
     grantedDate: Date,
     expiresDate: Date
-  }]
+  }],
+  deletedAt: {
+    type: Date,
+    default: null
+  }
 }, {
   timestamps: true
 });
 
-patientSchema.virtual('age').get(function() {
-  //get birthday by associated User
-  return null; //populate userId is required for calculation.
+/*patientSchema.virtual('age').get(function() {
+  return null;
+});*/
+
+patientSchema.pre(/^find/, function() {
+  this.where({ deletedAt: null });
+});
+patientSchema.pre('countDocuments', function() {
+  this.where({ deletedAt: null });
 });
 
 patientSchema.virtual('bmi').get(function() {

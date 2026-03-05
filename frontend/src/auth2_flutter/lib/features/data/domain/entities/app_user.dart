@@ -46,8 +46,8 @@ class AppUser {
       height: json['height']?.toString() ?? '',
       weight: json['weight']?.toString() ?? '',
       gender: json['gender'] ?? 'other',
-      weightUpdatedAt: json['weightUpdatedAt'] != null ? DateTime.parse(json['weightUpdatedAt']) : null,
-      heightUpdatedAt: json['heightUpdatedAt'] != null ? DateTime.parse(json['heightUpdatedAt']) : null,
+      weightUpdatedAt: json['weightUpdatedAt'] != null ? DateTime.tryParse(json['weightUpdatedAt']) : null,
+      heightUpdatedAt: json['heightUpdatedAt'] != null ? DateTime.tryParse(json['heightUpdatedAt']) : null,
       role: json['role'] ?? 'user',
     );
   }
