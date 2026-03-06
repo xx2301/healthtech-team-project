@@ -19,6 +19,17 @@ app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.use((req, res, next) => {
+  console.log('=== REQUEST LOG ===');
+  console.log('Method:', req.method);
+  console.log('URL:', req.url);
+  console.log('Content-Type:', req.headers['content-type']);
+  console.log('Body:', req.body);
+  console.log('=== END REQUEST LOG ===');
+  next();
+});
+
+
 const mongoURI = process.env.MONGODB_URI || 'mongodb://admin:simplepassword@localhost:27017/healthtech?authSource=admin';
 
 mongoose.connect(mongoURI, {
@@ -465,6 +476,37 @@ app.post('/api/admin/login', [
       success: false, 
       error: 'Login failed' 
     });
+  }
+});
+
+// user change password by themselves
+app.put('/api/user/password', authenticateToken, [
+  body('oldPassword').notEmpty(),
+  body('newPassword').isLength({ min: 6 })
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+
+  try {
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const isMatch = await user.comparePassword(req.body.oldPassword);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, error: 'Current password is incorrect' });
+    }
+
+    user.password = req.body.newPassword;
+    await user.save();
+
+    res.json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ success: false, error: 'Failed to change password' });
   }
 });
 
@@ -1567,79 +1609,60 @@ app.get('/api/user/basic-info', authenticateToken, async (req, res) => {
 
 app.get('/api/health-metrics', authenticateToken, async (req, res) => {
   try {
-    const { 
-      startDate, 
-      endDate, 
-      metricType,
-      limit = 100,
-      page = 1 
-    } = req.query;
-    
+    const { startDate, endDate, metricType, patientId: requestedPatientId, userId: requestedUserId, search, limit = 100, page = 1 } = req.query;
     let query = {};
-    
-    if (req.user.userType === 'patient') {
-      query.patientId = req.user._id;
-      query.userId = req.user._id;
-    }
-    
-    if (req.user.userType === 'doctor') {
-      const relations = await DoctorPatientRelation.find({ 
-        doctorId: req.user._id,
-        status: 'active'
-      }).select('patientId');
-      
-      const patientIds = relations.map(r => r.patientId);
-      
-      if (patientIds.length === 0) {
-        return res.status(200).json({
-          success: true,
-          data: [],
-          pagination: { total: 0, page, limit }
-        });
+
+    const user = await User.findById(req.user.userId);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+
+    if (user.userType === 'admin' || user.role === 'admin' || user.role === 'super_admin') {
+      if (requestedUserId) {
+        query.userId = requestedUserId;
+      } else if (requestedPatientId) {
+        query.patientId = requestedPatientId;
+      } else if (search) {
+        console.log('Admin search for:', search);
+        const users = await User.find({
+          $or: [
+            { fullName: { $regex: search, $options: 'i' } },
+            { email: { $regex: search, $options: 'i' } }
+          ]
+        }).select('_id');
+        console.log('Found users:', users.map(u => ({ id: u._id, fullName: u.fullName, email: u.email })));
+        const userIds = users.map(u => u._id);
+        console.log('User IDs:', userIds);
+        query.userId = { $in: userIds };
       }
-      
+    } else if (user.userType === 'patient' || user.userType === 'user') {
+      query.userId = user._id;
+    } else if (user.userType === 'doctor') {
+      const relations = await DoctorPatientRelation.find({ doctorId: user._id, status: 'active' }).select('patientId');
+      const patientIds = relations.map(r => r.patientId);
+      if (patientIds.length === 0) {
+        return res.json({ success: true, data: [], pagination: { total: 0, page: parseInt(page), limit: parseInt(limit), pages: 0 } });
+      }
       query.patientId = { $in: patientIds };
+    } else {
+      return res.status(403).json({ success: false, error: 'Access denied' });
     }
-    
+
     if (startDate || endDate) {
       query.timestamp = {};
       if (startDate) query.timestamp.$gte = new Date(startDate);
       if (endDate) query.timestamp.$lte = new Date(endDate);
     }
-    
-    if (metricType) {
-      query.metricType = metricType;
-    }
-    
+    if (metricType) query.metricType = metricType;
+
     const skip = (page - 1) * limit;
-    
     const [metrics, total] = await Promise.all([
-      HealthMetric.find(query)
-        .sort({ timestamp: -1 })
-        .skip(skip)
-        .limit(parseInt(limit))
-        .populate('patient', 'fullName patientCode')
-        .populate('doctor', 'fullName specialization'),
+      HealthMetric.find(query).sort({ timestamp: -1 }).skip(skip).limit(parseInt(limit)),
       HealthMetric.countDocuments(query)
     ]);
-    
-    res.status(200).json({
-      success: true,
-      data: metrics,
-      pagination: {
-        total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        pages: Math.ceil(total / limit)
-      }
-    });
-    
+
+    res.json({ success: true, data: metrics, pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / limit) } });
   } catch (error) {
     console.error('Fetch health metrics error:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to fetch health metrics' 
-    });
+    res.status(500).json({ success: false, error: 'Failed to fetch health metrics' });
   }
 });
 
@@ -1661,53 +1684,35 @@ app.post('/api/health-metrics', authenticateToken, [
   }
   
   try {
-    const { 
-      metricType, 
-      value, 
-      unit, 
-      timestamp,
-      source = 'manual',
-      deviceId,
-      notes 
-    } = req.body;
-    
-    let patientId;
-    
-    if (req.user.userType === 'patient') {
-      patientId = req.user._id;
+    const { metricType, value, unit, timestamp, source = 'manual', deviceId, notes } = req.body;
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    let patientId = null;
+
+    if (req.user.userType === 'patient' || (user.patientProfileId && req.user.userType === 'user')) {
+      patientId = user.patientProfileId || null;
     } else if (req.user.userType === 'doctor') {
       if (!req.body.patientId) {
-        return res.status(400).json({
-          success: false,
-          error: 'Patient ID is required for doctors'
-        });
+        return res.status(400).json({ success: false, error: 'Patient ID is required for doctors' });
       }
-      
       const relation = await DoctorPatientRelation.findOne({
         doctorId: req.user._id,
         patientId: req.body.patientId,
         status: 'active',
         'permissions.viewHealthMetrics': true
       });
-      
       if (!relation) {
-        return res.status(403).json({
-          success: false,
-          error: 'No permission to add health metrics for this patient'
-        });
+        return res.status(403).json({ success: false, error: 'No permission to add health metrics for this patient' });
       }
-      
       patientId = req.body.patientId;
-    } else {
-      return res.status(403).json({
-        success: false,
-        error: 'Permission denied'
-      });
     }
-    
+
     const healthMetric = new HealthMetric({
       patientId,
-      userId: req.user._id,
+      userId: user._id,
       metricType,
       value,
       unit,
@@ -1718,25 +1723,12 @@ app.post('/api/health-metrics', authenticateToken, [
       qualityScore: 100,
       isAbnormal: false
     });
-    
+
     await healthMetric.save();
-    
-    if (healthMetric.isAbnormal) {
-      await notifyAbnormalMetric(healthMetric);
-    }
-    
-    res.status(201).json({
-      success: true,
-      message: 'Health metric recorded successfully',
-      data: healthMetric
-    });
-    
+    res.status(201).json({ success: true, message: 'Health metric recorded successfully', data: healthMetric });
   } catch (error) {
     console.error('Save health metric error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to save health metric'
-    });
+    res.status(500).json({ success: false, error: 'Failed to save health metric' });
   }
 });
 
@@ -2301,40 +2293,87 @@ app.post('/api/debug/check-request', (req, res) => {
   });
 });
 
+// simulate health data
+app.post('/api/dev/simulate-health-data', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const now = new Date();
+    const metrics = [];
+
+    for (let hour = 0; hour < 12; hour++) {
+      const date = new Date(now);
+      date.setHours(now.getHours() - hour);
+      let heartRate = 60 + Math.floor(Math.random() * 40);
+      metrics.push({
+        userId: user._id,
+        patientId: null,
+        metricType: 'heart_rate',
+        value: heartRate,
+        unit: 'bpm',
+        source: 'device',
+        deviceName: 'Heart Monitor',
+        timestamp: date,
+        isAbnormal: heartRate < 50 || heartRate > 120,
+      });
+    }
+
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      
+      let steps = Math.floor(Math.random() * 7000) + 5000;
+      if (i === 3 && Math.random() > 0.5) steps = 1000000;
+      metrics.push({
+        userId: user._id,
+        patientId: null,
+        metricType: 'steps',
+        value: steps,
+        unit: 'steps',
+        source: 'device',
+        deviceName: 'Smart Watch',
+        timestamp: date,
+        isAbnormal: steps > 50000,
+      });
+
+      const calories = 1500 + Math.floor(Math.random() * 500);
+      metrics.push({
+        userId: user._id,
+        patientId: null,
+        metricType: 'calories_burned',
+        value: calories,
+        unit: 'kcal',
+        source: 'device',
+        deviceName: 'Smart Watch',
+        timestamp: date,
+      });
+
+      const sleep = 6 + (Math.random() * 2);
+      metrics.push({
+        userId: user._id,
+        patientId: null,
+        metricType: 'sleep_duration',
+        value: sleep,
+        unit: 'hours',
+        source: 'device',
+        deviceName: 'Sleep Tracker',
+        timestamp: date,
+      });
+    }
+
+    await HealthMetric.insertMany(metrics, { ordered: false });
+    res.json({ success: true, message: `Generated ${metrics.length} metrics` });
+  } catch (error) {
+    console.error('Simulate data error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
     error: 'Portal not found'
-  });
-});
-
-app.use((req, res, next) => {
-  console.log('=== REQUEST LOG ===');
-  console.log('Method:', req.method);
-  console.log('URL:', req.url);
-  console.log('Content-Type:', req.headers['content-type']);
-  
-  let data = '';
-  req.on('data', chunk => {
-    data += chunk.toString();
-  });
-  
-  req.on('end', () => {
-    console.log('Raw body:', data);
-    console.log('Body type:', typeof data);
-    console.log('=== END REQUEST LOG ===');
-    
-    if (data && data !== 'null') {
-      try {
-        req.body = JSON.parse(data);
-      } catch (e) {
-        req.body = data;
-      }
-    } else {
-      req.body = {};
-    }
-    
-    next();
   });
 });
 

@@ -145,6 +145,12 @@ class SettingsPage extends StatelessWidget {
                 isLinkTile: true,
                 routeName: '/homepage',
               ),
+              SettingsTile(
+                icon: Icons.lock,
+                title: 'Change Password',
+                isLinkTile: true,
+                routeName: '/change-password',
+              ),
 
               const SizedBox(height: 10),
 

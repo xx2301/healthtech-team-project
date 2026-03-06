@@ -9,6 +9,7 @@ import 'features/data/domain/presentation/cubits/auth_cubit.dart';
 import 'features/data/domain/presentation/cubits/auth_states.dart';
 import 'features/data/domain/presentation/pages/auth_page.dart';
 import 'features/data/domain/presentation/pages/reset_password_page.dart';
+import 'features/data/domain/presentation/pages/change_password_page.dart';
 import 'features/home/presentation/pages/home_page.dart';
 import 'themes/main_theme.dart';
 import 'package:flutter/material.dart';
@@ -51,6 +52,7 @@ class MyApp extends StatelessWidget {
                 '/devicepage': (context) => DevicesPage(),
                 '/personalinfopage': (context) => PersonalInfo(),
                 '/reset-password': (context) => const ResetPasswordPage(),
+                '/change-password': (context) => const ChangePasswordPage(),
               },
               theme: mainTheme,
               darkTheme: darkTheme,

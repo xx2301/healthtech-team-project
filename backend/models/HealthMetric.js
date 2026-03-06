@@ -4,7 +4,7 @@ const healthMetricSchema = new mongoose.Schema({
   patientId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Patient',
-    required: true
+    // required: true
   },
   
   userId: {
@@ -89,13 +89,12 @@ const healthMetricSchema = new mongoose.Schema({
   timestamps: true
 });
 
+healthMetricSchema.index({ userId: 1, metricType: 1, timestamp: -1 });
 healthMetricSchema.index({ patientId: 1, metricType: 1, timestamp: -1 });
 healthMetricSchema.index({ userId: 1 });
 healthMetricSchema.index({ deviceId: 1 });
 healthMetricSchema.index({ timestamp: 1 });
 healthMetricSchema.index({ metricType: 1, isAbnormal: 1 });
-
-healthMetricSchema.index({ patientId: 1, timestamp: -1, metricType: 1 });
 
 healthMetricSchema.pre('save', function(next) {
   if (!this.unit) {
