@@ -43,6 +43,15 @@ class _ReportPageState extends State<ReportPage> {
 
   final _searchController = TextEditingController();
 
+  double _stepsChangePercent = 0.0;
+  double _heartRateChangePercent = 0.0;
+  double _caloriesChangePercent = 0.0;
+  double _sleepChangePercent = 0.0;
+  bool _hasStepsChange = false;
+  bool _hasHeartRateChange = false;
+  bool _hasCaloriesChange = false;
+  bool _hasSleepChange = false;
+
   @override
   void initState() {
     super.initState();
@@ -73,51 +82,87 @@ class _ReportPageState extends State<ReportPage> {
       _isAdmin = user?.role == 'admin' || user?.role == 'super_admin';
 
       final now = DateTime.now();
-      final startDate = DateTime(now.year, now.month, now.day - 6);
-      final endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
-      final queryParams = {
-        'startDate': startDate.toIso8601String(),
-        'endDate': endDate.toIso8601String(),
+      final thisWeekStart = DateTime(now.year, now.month, now.day - 6);
+      final thisWeekEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+      final lastWeekStart = DateTime(now.year, now.month, now.day - 13);
+      final lastWeekEnd = DateTime(now.year, now.month, now.day - 7, 23, 59, 59);
+
+      final baseParams = {
         'limit': '500',
+        if (_searchName.isNotEmpty) 'search': _searchName,
+        if (specificUserId != null) 'userId': specificUserId,
       };
 
-      if (specificUserId != null) {
-        queryParams['userId'] = specificUserId;
-        _viewingUserName = 'your own data'; //after will overwrite
-        _viewingAll = false;
-      } else if (_searchName.isNotEmpty) {
-        queryParams['search'] = _searchName;
-        _viewingUserName = _searchName;
-        _viewingAll = false;
-      } else {
-        _viewingUserName = 'all users';
-        _viewingAll = true;
-      }
-
-      final url = Uri.parse('${_getBaseUrl()}/api/health-metrics')
-          .replace(queryParameters: queryParams);
-
-      final response = await http.get(
-        url,
+      final thisWeekParams = {
+        ...baseParams,
+        'startDate': thisWeekStart.toIso8601String(),
+        'endDate': thisWeekEnd.toIso8601String(),
+      };
+      final thisWeekUrl = Uri.parse('${_getBaseUrl()}/api/health-metrics')
+          .replace(queryParameters: thisWeekParams);
+      final thisWeekResponse = await http.get(
+        thisWeekUrl,
         headers: {'Authorization': 'Bearer $token'},
       );
 
-      if (response.statusCode == 200) {
-        final jsonData = jsonDecode(response.body);
-        final List<dynamic> data = jsonData['data'] ?? [];
-        final metrics = data.map((e) => HealthMetric.fromJson(e)).toList();
-        
-        _calculateStats(metrics);
-        _prepareChartData(metrics);
+      final lastWeekParams = {
+        ...baseParams,
+        'startDate': lastWeekStart.toIso8601String(),
+        'endDate': lastWeekEnd.toIso8601String(),
+      };
+      final lastWeekUrl = Uri.parse('${_getBaseUrl()}/api/health-metrics')
+          .replace(queryParameters: lastWeekParams);
+      final lastWeekResponse = await http.get(
+        lastWeekUrl,
+        headers: {'Authorization': 'Bearer $token'},
+      );
 
-        final now = DateTime.now();
+      if (thisWeekResponse.statusCode == 200 && lastWeekResponse.statusCode == 200) {
+        final thisWeekData = jsonDecode(thisWeekResponse.body)['data'] ?? [];
+        final lastWeekData = jsonDecode(lastWeekResponse.body)['data'] ?? [];
+
+        final thisWeekMetrics = thisWeekData.map<HealthMetric?>((e) {
+          try {
+            return HealthMetric.fromJson(e as Map<String, dynamic>);
+          } catch (err) {
+            print('Error parsing thisWeek metric: $err');
+            return null;
+          }
+        }).whereType<HealthMetric>().toList();
+
+        final lastWeekMetrics = lastWeekData.map<HealthMetric?>((e) {
+          try {
+            return HealthMetric.fromJson(e as Map<String, dynamic>);
+          } catch (err) {
+            print('Error parsing lastWeek metric: $err');
+            return null;
+          }
+        }).whereType<HealthMetric>().toList();
+
+        _calculateStats(thisWeekMetrics);
+        _prepareChartData(thisWeekMetrics);
+
+        _calculateChangePercentages(thisWeekMetrics, lastWeekMetrics);
+
         final start = DateTime(now.year, now.month, now.day - 6);
         _reportPeriod = '${_formatDate(start)} - ${_formatDate(now)}';
         _generatedDate = _formatDate(now);
 
+        if (specificUserId != null) {
+          _viewingUserName = 'your own data';
+          _viewingAll = false;
+        } else if (_searchName.isNotEmpty) {
+          _viewingUserName = _searchName;
+          _viewingAll = false;
+        } else {
+          _viewingUserName = 'all users';
+          _viewingAll = true;
+        }
+
         setState(() {
-          _metrics = metrics;
+          _metrics = thisWeekMetrics;
           _isLoading = false;
         });
       } else {
@@ -180,6 +225,52 @@ class _ReportPageState extends State<ReportPage> {
           .where((m) => m.timestamp.isAfter(dayStart) && m.timestamp.isBefore(dayEnd))
           .fold<double>(0, (sum, m) => sum + (m.value as num).toDouble());
       _sleepDataPoints[i] = daySleep;
+    }
+  }
+
+  void _calculateChangePercentages(List<HealthMetric> thisWeek, List<HealthMetric> lastWeek) {
+    double thisSteps = thisWeek.where((m) => m.metricType == 'steps' && !m.isAbnormal).fold<double>(
+        0, (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0));
+    double lastSteps = lastWeek.where((m) => m.metricType == 'steps' && !m.isAbnormal).fold<double>(
+        0, (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0));
+    if (lastSteps > 0) {
+      _stepsChangePercent = ((thisSteps - lastSteps) / lastSteps) * 100;
+      _hasStepsChange = true;
+    } else {
+      _hasStepsChange = false;
+    }
+
+    final thisHeart = thisWeek.where((m) => m.metricType == 'heart_rate' && !m.isAbnormal).toList();
+    final lastHeart = lastWeek.where((m) => m.metricType == 'heart_rate' && !m.isAbnormal).toList();
+    if (thisHeart.isNotEmpty && lastHeart.isNotEmpty) {
+      double thisAvg = thisHeart.fold<double>(0, (sum, m) => sum + (m.value as num).toDouble()) / thisHeart.length;
+      double lastAvg = lastHeart.fold<double>(0, (sum, m) => sum + (m.value as num).toDouble()) / lastHeart.length;
+      _heartRateChangePercent = ((thisAvg - lastAvg) / lastAvg) * 100;
+      _hasHeartRateChange = true;
+    } else {
+      _hasHeartRateChange = false;
+    }
+
+    double thisCal = thisWeek.where((m) => m.metricType == 'calories_burned').fold<double>(
+        0, (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0));
+    double lastCal = lastWeek.where((m) => m.metricType == 'calories_burned').fold<double>(
+        0, (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0));
+    if (lastCal > 0) {
+      _caloriesChangePercent = ((thisCal - lastCal) / lastCal) * 100;
+      _hasCaloriesChange = true;
+    } else {
+      _hasCaloriesChange = false;
+    }
+
+    double thisSleep = thisWeek.where((m) => m.metricType == 'sleep_duration').fold<double>(
+        0, (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0));
+    double lastSleep = lastWeek.where((m) => m.metricType == 'sleep_duration').fold<double>(
+        0, (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0));
+    if (lastSleep > 0) {
+      _sleepChangePercent = ((thisSleep - lastSleep) / lastSleep) * 100;
+      _hasSleepChange = true;
+    } else {
+      _hasSleepChange = false;
     }
   }
 
@@ -613,10 +704,15 @@ class _ReportPageState extends State<ReportPage> {
                           Container(
                             padding: EdgeInsets.only(left: 5, right: 5),
                             decoration: BoxDecoration(
-                              color: Colors.green[100],
+                              color: (_hasStepsChange && _stepsChangePercent >= 0) ? Colors.green[100] : Colors.red[100],
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Text("+5%"),
+                            child: Text(
+                              _hasStepsChange
+                                  ? '${_stepsChangePercent >= 0 ? '+' : ''}${_stepsChangePercent.toStringAsFixed(1)}%'
+                                  : '—',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
                           ),
                         ],
                       ),
@@ -709,12 +805,17 @@ class _ReportPageState extends State<ReportPage> {
 
                           // steps progress status
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5),
+                            padding: EdgeInsets.only(left: 5, right: 5),
                             decoration: BoxDecoration(
-                              color: Colors.green[100],
+                              color: (_hasHeartRateChange && _heartRateChangePercent >= 0) ? Colors.green[100] : Colors.red[100],
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Text("+10%"),
+                            child: Text(
+                              _hasHeartRateChange
+                                  ? '${_heartRateChangePercent >= 0 ? '+' : ''}${_heartRateChangePercent.toStringAsFixed(1)}%'
+                                  : '—',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
                           ),
                         ],
                       ),
@@ -776,14 +877,18 @@ class _ReportPageState extends State<ReportPage> {
 
                           // steps progress status
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5),
+                            padding: EdgeInsets.only(left: 5, right: 5),
                             decoration: BoxDecoration(
-                              color: Colors.green[100],
+                              color: (_hasCaloriesChange && _caloriesChangePercent >= 0) ? Colors.green[100] : Colors.red[100],
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Text("+10%"),
-                          ),
-                        ],
+                            child: Text(
+                              _hasCaloriesChange
+                                  ? '${_caloriesChangePercent >= 0 ? '+' : ''}${_caloriesChangePercent.toStringAsFixed(1)}%'
+                                  : '—',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                          ),                        ],
                       ),
                       Text(
                         _totalCalories.toString(),
@@ -860,12 +965,17 @@ class _ReportPageState extends State<ReportPage> {
                           
                           // steps progress status
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5),
+                            padding: EdgeInsets.only(left: 5, right: 5),
                             decoration: BoxDecoration(
-                              color: Colors.red[100],
+                              color: (_hasSleepChange && _sleepChangePercent >= 0) ? Colors.green[100] : Colors.red[100],
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Text("-10%"),
+                            child: Text(
+                              _hasSleepChange
+                                  ? '${_sleepChangePercent >= 0 ? '+' : ''}${_sleepChangePercent.toStringAsFixed(1)}%'
+                                  : '—',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
                           ),
                         ],
                       ),
