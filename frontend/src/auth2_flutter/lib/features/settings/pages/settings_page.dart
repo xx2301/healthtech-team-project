@@ -62,7 +62,7 @@ class SettingsPage extends StatelessWidget {
                             : 'Login to see details',
                         style: TextStyle(
                           fontSize: 13,
-                          color: Colors.black54,
+                          
                         ),
                       ),
                     ],

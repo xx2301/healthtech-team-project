@@ -42,38 +42,39 @@ class _SettingsTileState extends State<SettingsTile> {
     return Container(
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(
-            color: Colors.grey.shade400,
-            width: 0.7,
-          ),
+          bottom: BorderSide(color: Colors.grey.shade400, width: 0.7),
         ),
       ),
       child: ListTile(
-        leading: Icon(widget.icon, color: Colors.black87),
-        title: Text(
-          widget.title,
-          style: TextStyle(fontSize: 15),
-        ),
+        leading: Icon(widget.icon),
+        title: Text(widget.title, style: TextStyle(fontSize: 15)),
         subtitle: widget.subtitle == null
             ? null
             : Text(
                 widget.subtitle!,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.black54,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.black54),
               ),
         trailing: widget.isLinkTile
             ? Icon(Icons.chevron_right)
             : Switch(
                 value: _switchValue,
+
                 activeThumbColor: Colors.white,
                 activeTrackColor: Colors.green,
+
                 inactiveThumbColor: Colors.white,
+                inactiveTrackColor: Colors.grey.shade300,
+
+                trackOutlineColor: MaterialStateProperty.all(
+                  Colors.transparent,
+                ),
+                overlayColor: MaterialStateProperty.all(Colors.transparent),
+
                 onChanged: (val) {
                   setState(() {
                     _switchValue = val;
                   });
+
                   if (widget.onSwitchChanged != null) {
                     widget.onSwitchChanged!(val);
                   }
@@ -90,4 +91,3 @@ class _SettingsTileState extends State<SettingsTile> {
     );
   }
 }
-

@@ -1,3 +1,5 @@
+import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/components/drawer.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -67,43 +69,80 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Change Password')),
+      appBar: DefaultAppBar(),
+      drawer: DefaultDrawer(),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Text(
+                      "Change Password",
+                      style: TextStyle(
+                        fontSize: 30,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
               TextFormField(
                 controller: _oldPasswordController,
                 obscureText: true,
-                decoration: const InputDecoration(labelText: 'Current Password'),
+                decoration: const InputDecoration(labelText: 'Current password'),
                 validator: (value) => value == null || value.isEmpty ? 'Please enter current password' : null,
               ),
+               const SizedBox(height: 10),
               TextFormField(
                 controller: _newPasswordController,
                 obscureText: true,
-                decoration: const InputDecoration(labelText: 'New Password'),
+                decoration: const InputDecoration(labelText: 'New password'),
                 validator: (value) {
                   if (value == null || value.isEmpty) return 'Please enter new password';
                   if (value.length < 6) return 'Password must be at least 6 characters';
                   return null;
                 },
               ),
+               const SizedBox(height: 10),
               TextFormField(
                 controller: _confirmPasswordController,
                 obscureText: true,
-                decoration: const InputDecoration(labelText: 'Confirm New Password'),
+                decoration: const InputDecoration(labelText: 'Re-enter new Password'),
                 validator: (value) {
                   if (value != _newPasswordController.text) return 'Passwords do not match';
                   return null;
                 },
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _changePassword,
-                child: _isLoading ? const CircularProgressIndicator() : const Text('Change Password'),
+              GestureDetector(
+  onTap: _isLoading ? null : _changePassword,
+  child: Container(
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: _isLoading ? Colors.grey : Colors.green,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Center(
+      child: _isLoading
+          ? const SizedBox(
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 3,
               ),
+            )
+          : const Text(
+              "Update Password",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: Colors.white,
+              ),
+            ),
+    ),
+  ),
+),
             ],
           ),
         ),
