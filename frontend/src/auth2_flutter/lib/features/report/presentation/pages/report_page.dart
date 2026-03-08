@@ -52,6 +52,10 @@ class _ReportPageState extends State<ReportPage> {
   bool _hasCaloriesChange = false;
   bool _hasSleepChange = false;
 
+  DateTime? _selectedStartDate;
+  DateTime? _selectedEndDate;
+  final ValueNotifier<Color?> _periodCardHoverColor = ValueNotifier(null);
+
   @override
   void initState() {
     super.initState();
@@ -69,6 +73,8 @@ class _ReportPageState extends State<ReportPage> {
     if (Platform.isAndroid) return 'http://10.0.2.2:3001';
     if (Platform.isIOS) return 'http://localhost:3001';
     return 'http://localhost:3001';
+    // return http://192.168.0.3:3001'; // Connect wifi ip
+    // return 'http://172.20.10.2:3001'; // Connect hotspot ip
   }
 
   Future<void> _fetchHealthData({String? specificUserId}) async {
@@ -83,11 +89,18 @@ class _ReportPageState extends State<ReportPage> {
 
       final now = DateTime.now();
 
-      final thisWeekStart = DateTime(now.year, now.month, now.day - 6);
-      final thisWeekEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      DateTime start, end;
+      if (_selectedStartDate != null && _selectedEndDate != null) {
+        start = _selectedStartDate!;
+        end = _selectedEndDate!;
+      } else {
+        start = DateTime(now.year, now.month, now.day - 6);
+        end = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      }
 
-      final lastWeekStart = DateTime(now.year, now.month, now.day - 13);
-      final lastWeekEnd = DateTime(now.year, now.month, now.day - 7, 23, 59, 59);
+      final rangeLength = end.difference(start).inDays + 1;
+      final lastWeekStart = DateTime(start.year, start.month, start.day - rangeLength);
+      final lastWeekEnd = DateTime(end.year, end.month, end.day - rangeLength, 23, 59, 59);
 
       final baseParams = {
         'limit': '500',
@@ -95,15 +108,15 @@ class _ReportPageState extends State<ReportPage> {
         if (specificUserId != null) 'userId': specificUserId,
       };
 
-      final thisWeekParams = {
+      final mainParams = {
         ...baseParams,
-        'startDate': thisWeekStart.toIso8601String(),
-        'endDate': thisWeekEnd.toIso8601String(),
+        'startDate': start.toIso8601String(),
+        'endDate': end.toIso8601String(),
       };
-      final thisWeekUrl = Uri.parse('${_getBaseUrl()}/api/health-metrics')
-          .replace(queryParameters: thisWeekParams);
-      final thisWeekResponse = await http.get(
-        thisWeekUrl,
+      final mainUrl = Uri.parse('${_getBaseUrl()}/api/health-metrics')
+          .replace(queryParameters: mainParams);
+      final mainResponse = await http.get(
+        mainUrl,
         headers: {'Authorization': 'Bearer $token'},
       );
 
@@ -119,15 +132,15 @@ class _ReportPageState extends State<ReportPage> {
         headers: {'Authorization': 'Bearer $token'},
       );
 
-      if (thisWeekResponse.statusCode == 200 && lastWeekResponse.statusCode == 200) {
-        final thisWeekData = jsonDecode(thisWeekResponse.body)['data'] ?? [];
+      if (mainResponse.statusCode == 200 && lastWeekResponse.statusCode == 200) {
+        final mainData = jsonDecode(mainResponse.body)['data'] ?? [];
         final lastWeekData = jsonDecode(lastWeekResponse.body)['data'] ?? [];
 
-        final thisWeekMetrics = thisWeekData.map<HealthMetric?>((e) {
+        final mainMetrics = mainData.map<HealthMetric?>((e) {
           try {
             return HealthMetric.fromJson(e as Map<String, dynamic>);
           } catch (err) {
-            print('Error parsing thisWeek metric: $err');
+            print('Error parsing main metric: $err');
             return null;
           }
         }).whereType<HealthMetric>().toList();
@@ -141,13 +154,12 @@ class _ReportPageState extends State<ReportPage> {
           }
         }).whereType<HealthMetric>().toList();
 
-        _calculateStats(thisWeekMetrics);
-        _prepareChartData(thisWeekMetrics);
+        _calculateStats(mainMetrics);
+        _prepareChartData(mainMetrics);
 
-        _calculateChangePercentages(thisWeekMetrics, lastWeekMetrics);
+        _calculateChangePercentages(mainMetrics, lastWeekMetrics);
 
-        final start = DateTime(now.year, now.month, now.day - 6);
-        _reportPeriod = '${_formatDate(start)} - ${_formatDate(now)}';
+        _reportPeriod = '${_formatDate(start)} - ${_formatDate(end)}';
         _generatedDate = _formatDate(now);
 
         if (specificUserId != null) {
@@ -162,7 +174,7 @@ class _ReportPageState extends State<ReportPage> {
         }
 
         setState(() {
-          _metrics = thisWeekMetrics;
+          _metrics = mainMetrics;
           _isLoading = false;
         });
       } else {
@@ -304,6 +316,25 @@ class _ReportPageState extends State<ReportPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e')),
       );
+    }
+  }
+  Future<void> _selectDateRange() async {
+    final now = DateTime.now();
+    print('firstDate: ${DateTime(2020)}'); // to check
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: now,
+      initialDateRange: _selectedStartDate != null && _selectedEndDate != null
+          ? DateTimeRange(start: _selectedStartDate!, end: _selectedEndDate!)
+          : null,
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedStartDate = picked.start;
+        _selectedEndDate = picked.end;
+      });
+      _fetchHealthData();
     }
   }
 
@@ -553,6 +584,18 @@ class _ReportPageState extends State<ReportPage> {
                           ),
                         ),
                         const SizedBox(width: 8),
+                        IconButton(
+                          icon: Icon(Icons.refresh),
+                          onPressed: () {
+                            setState(() {
+                              _selectedStartDate = null;
+                              _selectedEndDate = null;
+                            });
+                            _fetchHealthData();
+                          },
+                          tooltip: 'Reset to last 7 days',
+                        ),
+                        const SizedBox(width: 8),
                         if (kDebugMode)
                           ElevatedButton(
                             onPressed: _generateSimulatedData, // test only
@@ -655,10 +698,31 @@ class _ReportPageState extends State<ReportPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 0),
                     children: [
                       // Report Info Card Duration
-                      InfoCards(
-                        title: "Report Period",
-                        subtitle: _reportPeriod,
+                      MouseRegion(
+                        onEnter: (_) => _periodCardHoverColor.value = Colors.grey[300], // mouse on it colour
+                        onExit: (_) => _periodCardHoverColor.value = null,
+                        child: ValueListenableBuilder<Color?>(
+                          valueListenable: _periodCardHoverColor,
+                          builder: (context, hoverColor, child) {
+                            return GestureDetector(
+                              onTap: _selectDateRange,
+                              child: InfoCards(
+                                title: "Report Period",
+                                subtitle: _reportPeriod,
+                                backgroundColor: hoverColor ?? const Color(0xFFE6F2E6), // default
+                              ),
+                            );
+                          },
+                        ),
                       ),
+
+                      /*GestureDetector(
+                        onTap: _selectDateRange,
+                        child: InfoCards(
+                          title: "Report Period",
+                          subtitle: _reportPeriod,
+                        ),
+                      ),*/
 
                       // Report Info Card Creation Date
                       InfoCards(
@@ -1073,6 +1137,7 @@ class _ReportPageState extends State<ReportPage> {
 
   @override
   void dispose() {
+    _periodCardHoverColor.dispose();
     _searchController.dispose();
     super.dispose();
   }

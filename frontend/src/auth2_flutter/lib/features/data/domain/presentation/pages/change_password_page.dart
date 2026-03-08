@@ -26,6 +26,8 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
 
   String _getBaseUrl() {
     return 'http://localhost:3001';
+    // return http://192.168.0.3:3001'; // Connect wifi ip
+    // return 'http://172.20.10.2:3001'; // Connect hotspot ip
   }
 
   Future<void> _changePassword() async {
