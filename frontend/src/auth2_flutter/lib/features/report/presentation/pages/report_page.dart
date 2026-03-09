@@ -73,7 +73,7 @@ class _ReportPageState extends State<ReportPage> {
     if (Platform.isAndroid) return 'http://10.0.2.2:3001';
     if (Platform.isIOS) return 'http://localhost:3001';
     return 'http://localhost:3001';
-    // return http://192.168.0.3:3001'; // Connect wifi ip
+    // return 'http://192.168.0.3:3001'; // Connect wifi ip
     // return 'http://172.20.10.2:3001'; // Connect hotspot ip
   }
 
