@@ -1,5 +1,3 @@
-import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
-import 'package:auth2_flutter/features/data/domain/presentation/components/drawer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubit.dart';
@@ -27,6 +25,65 @@ String _monthAbbr(int month) {
 }
 
 class _PersonalInfoState extends State<PersonalInfo> {
+  Map<String, dynamic>? _fullProfile;
+  bool _isLoadingMedical = false;
+  String? _medicalError;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchFullProfile();
+  }
+
+  Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token');
+  }
+
+  String _getBaseUrl() {
+    if (kIsWeb) return 'http://localhost:3001';
+    if (Platform.isAndroid) return 'http://10.0.2.2:3001';
+    if (Platform.isIOS) return 'http://localhost:3001';
+    return 'http://localhost:3001';
+  }
+
+  Future<void> _fetchFullProfile() async {
+    setState(() {
+      _isLoadingMedical = true;
+    });
+
+    final token = await _getToken();
+    if (token == null) {
+      setState(() {
+        _isLoadingMedical = false;
+        _medicalError = 'Not authenticated';
+      });
+      return;
+    }
+
+    try {
+      final response = await http.get(
+        Uri.parse('${_getBaseUrl()}/api/user/full-profile'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        setState(() {
+          _fullProfile = json['data'];
+          _isLoadingMedical = false;
+        });
+      } else {
+        throw Exception('Failed to load full profile: ${response.statusCode}');
+      }
+    } catch (e) {
+      setState(() {
+        _medicalError = e.toString();
+        _isLoadingMedical = false;
+      });
+    }
+  }
+
   Widget infoRow({
     required IconData icon,
     required String title,
@@ -117,6 +174,13 @@ class _PersonalInfoState extends State<PersonalInfo> {
                 icon: const Icon(Icons.edit, size: 20),
                 splashRadius: 18,
               ),
+              const SizedBox(width: 4), 
+              IconButton(
+                onPressed: _showColorPickerDialog,
+                icon: const Icon(Icons.color_lens, size: 20),
+                splashRadius: 18,
+                tooltip: 'Change avatar color',
+              ),
             ],
           ),
           const SizedBox(height: 6),
@@ -190,13 +254,35 @@ class _PersonalInfoState extends State<PersonalInfo> {
                 ),
                 ElevatedButton(
                   onPressed: () async {
-                    final updatedData = {
-                      'fullName': nameController.text,
-                      'gender': selectedGender,
-                      'age': int.tryParse(ageController.text),
-                      'height': double.tryParse(heightController.text),
-                      'weight': double.tryParse(weightController.text),
-                    };
+                    final currentUser = context.read<AuthCubit>().currentUser;
+                    final Map<String, dynamic> updatedData = {};
+
+                    if (nameController.text != currentUser?.fullName) {
+                      updatedData['fullName'] = nameController.text;
+                    }
+                    if (selectedGender != currentUser?.gender) {
+                      updatedData['gender'] = selectedGender;
+                    }
+                    final newAge = int.tryParse(ageController.text);
+                    if (newAge != null && newAge.toString() != currentUser?.age) {
+                      updatedData['age'] = newAge;
+                    }
+                    final newHeight = double.tryParse(heightController.text);
+                    if (newHeight != null && newHeight.toString() != currentUser?.height) {
+                      updatedData['height'] = newHeight;
+                    }
+                    final newWeight = double.tryParse(weightController.text);
+                    if (newWeight != null && newWeight.toString() != currentUser?.weight) {
+                      updatedData['weight'] = newWeight;
+                    }
+
+                    if (updatedData.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('No changes detected')),
+                      );
+                      return;
+                    }
+
                     await _updateUserProfile(updatedData);
                     Navigator.pop(ctx);
                   },
@@ -210,21 +296,9 @@ class _PersonalInfoState extends State<PersonalInfo> {
     );
   }
 
-  Future<String?> _getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('auth_token');
-  }
-
-  String _getBaseUrl() {
-    if (kIsWeb) return 'http://localhost:3001';
-    if (Platform.isAndroid) return 'http://10.0.2.2:3001';
-    if (Platform.isIOS) return 'http://localhost:3001';
-    return 'http://localhost:3001'; // Windows, Linux, macOS
-    // return 'http://192.168.0.3:3001'; // Connect wifi ip
-    // return 'http://172.20.10.2:3001'; // Connect hotspot ip
-  }
-
   Future<void> _updateUserProfile(Map<String, dynamic> data) async {
+    if (data.isEmpty) return;
+    
     final token = await _getToken();
     if (token == null) return;
 
@@ -249,6 +323,131 @@ class _PersonalInfoState extends State<PersonalInfo> {
     }
   }
 
+  Future<void> _showColorPickerDialog() async {
+    final List<Color> colors = [
+      Colors.blue,
+      Colors.red,
+      Colors.green,
+      Colors.purple,
+      Colors.orange,
+      Colors.teal,
+      Colors.pink,
+      Colors.indigo,
+    ];
+    return showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Choose Avatar Color'),
+        content: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: colors.map((color) {
+            return GestureDetector(
+              onTap: () async {
+                final colorInt = color.value;
+                await _updateAvatarColor(colorInt);
+                Navigator.pop(ctx);
+              },
+              child: CircleAvatar(
+                backgroundColor: color,
+                radius: 24,
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _updateAvatarColor(int colorInt) async {
+    final token = await _getToken();
+    if (token == null) return;
+    final response = await http.put(
+      Uri.parse('${_getBaseUrl()}/api/user/profile'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'avatarColor': colorInt}),
+    );
+    if (response.statusCode == 200) {
+      await context.read<AuthCubit>().refreshUser();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Avatar color updated')),
+      );
+    }
+  }
+
+  Widget? _buildMedicalRecordCard() {
+    if (_isLoadingMedical) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_medicalError != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Center(child: Text('Error loading medical data: $_medicalError')),
+      );
+    }
+    if (_fullProfile == null) return null;
+
+    final patient = _fullProfile!['patient'];
+    final assignedDoctors = _fullProfile!['assignedDoctors'] as List? ?? [];
+    final hasDoctor = assignedDoctors.isNotEmpty && assignedDoctors[0] != null;
+
+    if (!hasDoctor) return null;
+
+    // fetch first doctor
+    final doctor = assignedDoctors[0]['doctorId'] ?? {};
+    final lastVisit = patient?['lastVisit'] ?? 'Not available';
+    final avgHeartRate = patient?['avgHeartRate'] ?? '70';
+    final avgSteps = patient?['avgSteps'] ?? '8,000';
+    final avgSleep = patient?['avgSleep'] ?? '7';
+
+    return Column(
+      children: [
+        const SizedBox(height: 12),
+        sectionCard(
+          title: "Medical Record",
+          onEdit: () {},
+          children: [
+            infoRow(
+              icon: Icons.local_hospital_rounded,
+              title: "Doctor",
+              value: doctor['fullName'] ?? 'Unknown',
+              subtitle: doctor['specialization'] ?? '',
+            ),
+            infoRow(
+              icon: Icons.event_rounded,
+              title: "Last doctor visit",
+              value: lastVisit,
+            ),
+            infoRow(
+              icon: Icons.favorite_rounded,
+              title: "Average heart rate",
+              value: "$avgHeartRate bpm",
+              subtitle: "Last updated 1 Mar",
+            ),
+            infoRow(
+              icon: Icons.directions_walk_rounded,
+              title: "Average daily steps",
+              value: avgSteps,
+              subtitle: "Last updated 1 Mar",
+            ),
+            infoRow(
+              icon: Icons.nightlight_round,
+              title: "Average sleep duration",
+              value: "$avgSleep hours",
+              subtitle: "Last updated 1 Mar",
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthCubit>().currentUser;
@@ -256,18 +455,24 @@ class _PersonalInfoState extends State<PersonalInfo> {
     print('Current user: ${user?.toJson()}');
 
     return Scaffold(
-      appBar: DefaultAppBar(),
-      drawer: DefaultDrawer(),
+      appBar: AppBar(
+        title: const Text(
+          "Personal Information",
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+        backgroundColor: const Color(0xFFF5F6F8),
+        elevation: 0,
+      ),
       backgroundColor: const Color(0xFFF5F6F8),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(15),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              "Personal Information",
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24),
-            ),
             const SizedBox(height: 14),
 
             // ===== Card 1: Personal =====
@@ -308,40 +513,7 @@ class _PersonalInfoState extends State<PersonalInfo> {
             const SizedBox(height: 12),
 
             // ===== Card 2: Medical Record =====
-            sectionCard(
-              title: "Medical Record",
-              onEdit: () {},
-              children: [
-                infoRow(
-                  icon: Icons.local_hospital_rounded,
-                  title: "Doctor",
-                  value: "Guru Priya",
-                ),
-                infoRow(
-                  icon: Icons.event_rounded,
-                  title: "Last doctor visit",
-                  value: "19/11/2022",
-                ),
-                infoRow(
-                  icon: Icons.favorite_rounded,
-                  title: "Average heart rate",
-                  value: "70 bpm",
-                  subtitle: "Last updated 1 Mar",
-                ),
-                infoRow(
-                  icon: Icons.directions_walk_rounded,
-                  title: "Average daily steps",
-                  value: "8,000",
-                  subtitle: "Last updated 1 Mar",
-                ),
-                infoRow(
-                  icon: Icons.nightlight_round,
-                  title: "Average sleep duration",
-                  value: "7 hours",
-                  subtitle: "Last updated 1 Mar",
-                ),
-              ],
-            ),
+            if (_buildMedicalRecordCard() != null) _buildMedicalRecordCard()!,
           ],
         ),
       ),

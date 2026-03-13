@@ -9,6 +9,7 @@ class AppUser {
   final DateTime? weightUpdatedAt;
   final DateTime? heightUpdatedAt;
   final String role;
+  final int? avatarColor;
 
   AppUser({
     required this.uid,
@@ -21,6 +22,7 @@ class AppUser {
     this.weightUpdatedAt,
     this.heightUpdatedAt,
     required this.role,
+    this.avatarColor,
   });
 
   // convert json to app user
@@ -49,6 +51,7 @@ class AppUser {
       weightUpdatedAt: json['weightUpdatedAt'] != null ? DateTime.tryParse(json['weightUpdatedAt']) : null,
       heightUpdatedAt: json['heightUpdatedAt'] != null ? DateTime.tryParse(json['heightUpdatedAt']) : null,
       role: json['role'] ?? 'user',
+      avatarColor: json['avatarColor'] != null ? json['avatarColor'] as int : null,
     );
   }
 
@@ -72,6 +75,7 @@ class AppUser {
       'height': height,
       'weight': weight,
       'gender': gender,
+      if (avatarColor != null) 'avatarColor': avatarColor,
     };
   }
 }

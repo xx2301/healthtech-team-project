@@ -1122,6 +1122,12 @@ app.put('/api/user/profile', authenticateToken, [
     if (req.body.height !== undefined) user.heightUpdatedAt = new Date();
     if (req.body.weight !== undefined) user.weightUpdatedAt = new Date();
 
+    console.log('Received avatarColor:', req.body.avatarColor);
+    if (req.body.avatarColor !== undefined) {
+      user.avatarColor = req.body.avatarColor;
+      console.log('Saved avatarColor to user');
+    }
+
     user.updatedAt = new Date();
     await user.save();
 
@@ -1816,6 +1822,103 @@ app.post('/api/medical-records', authenticateToken, requireRole('doctor'), [
   }
 });
 
+// Get medical records (available to doctors and admin)
+app.get('/api/medical-records', authenticateToken, async (req, res) => {
+  try {
+    const { startDate, endDate, visitType, search, page = 1, limit = 20 } = req.query;
+    const user = await User.findById(req.user.userId);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+
+    let query = {};
+    const skip = (page - 1) * limit;
+
+    if (user.userType === 'doctor' || user.role === 'doctor') {
+      const relations = await DoctorPatientRelation.find({
+        doctorId: user._id,
+        status: 'active'
+      }).select('patientId');
+      const patientIds = relations.map(r => r.patientId);
+      if (patientIds.length === 0) {
+        return res.json({
+          success: true,
+          data: [],
+          pagination: { total: 0, page: parseInt(page), limit: parseInt(limit), pages: 0 }
+        });
+      }
+      query.patientId = { $in: patientIds };
+    } else if (user.userType === 'admin' || user.role === 'super_admin') {
+      if (search) {
+        const users = await User.find({
+          fullName: { $regex: search, $options: 'i' }
+        }).select('_id');
+        const userIds = users.map(u => u._id);
+        const patients = await Patient.find({ userId: { $in: userIds } }).select('_id');
+        const patientIds = patients.map(p => p._id);
+        if (patientIds.length === 0) {
+          return res.json({
+            success: true,
+            data: [],
+            pagination: { total: 0, page: parseInt(page), limit: parseInt(limit), pages: 0 }
+          });
+        }
+        query.patientId = { $in: patientIds };
+      }
+    } else {
+      return res.status(403).json({ success: false, error: 'Access denied' });
+    }
+
+    if (startDate || endDate) {
+      query.visitDate = {};
+      if (startDate) query.visitDate.$gte = new Date(startDate);
+      if (endDate) query.visitDate.$lte = new Date(endDate);
+    }
+    if (visitType) query.visitType = visitType;
+
+    const [records, total] = await Promise.all([
+      MedicalRecord.find(query)
+        .populate('patientId', 'userId')
+        .populate('doctorId', 'specialization')
+        .populate('doctorId.userId', 'fullName')
+        .sort({ visitDate: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .exec(),
+      MedicalRecord.countDocuments(query)
+    ]);
+
+    const enhancedRecords = await Promise.all(records.map(async record => {
+      const recordObj = record.toObject();
+      if (record.patientId && record.patientId.userId) {
+        const patientUser = await User.findById(record.patientId.userId).select('fullName');
+        recordObj.patientName = patientUser ? patientUser.fullName : 'Unknown';
+      } else {
+        recordObj.patientName = 'Unknown';
+      }
+      if (record.doctorId && record.doctorId.userId) {
+        recordObj.doctorName = record.doctorId.userId.fullName || 'Unknown';
+        recordObj.doctorSpecialization = record.doctorId.specialization;
+      } else {
+        recordObj.doctorName = 'Unknown';
+      }
+      return recordObj;
+    }));
+
+    res.json({
+      success: true,
+      data: enhancedRecords,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Fetch medical records error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch medical records' });
+  }
+});
+
 app.get('/api/patients/medical-records', authenticateToken, async (req, res) => {
   try {
     const { patientId } = req.params;
@@ -2165,7 +2268,7 @@ app.get('/api/symptom-logs', authenticateToken, requireRole('patient'), async (r
   }
 });
 
-app.post('/api/health-goals', authenticateToken, requireRole('patient'), [
+app.post('/api/health-goals', authenticateToken, [
   body('goalType').notEmpty(),
   body('targetValue').isNumeric(),
   body('targetDate').isISO8601()
@@ -2176,12 +2279,18 @@ app.post('/api/health-goals', authenticateToken, requireRole('patient'), [
   }
   
   try {
-    const { goalType, targetValue, targetDate, startDate, frequency, priority, description } = req.body;
+    const { goalType, targetValue, targetDate, startDate, frequency, priority, description, title } = req.body;
     
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
     const healthGoal = new HealthGoal({
-      patientId: req.user.userId,
-      userId: req.user.userId,
+      patientId: user.patientProfileId || null,
+      userId: user._id,
       goalType,
+      title: title || `${goalType} goal`,
       targetValue: parseFloat(targetValue),
       currentValue: 0,
       startDate: startDate ? new Date(startDate) : new Date(),
@@ -2206,27 +2315,65 @@ app.post('/api/health-goals', authenticateToken, requireRole('patient'), [
   }
 });
 
-app.get('/api/health-goals', authenticateToken, requireRole('patient'), async (req, res) => {
+app.get('/api/health-goals', authenticateToken, async (req, res) => {
   try {
     const { isActive } = req.query;
-    
-    let query = { patientId: req.user.userId };
+    const query = { userId: req.user.userId };
     if (isActive !== undefined) {
       query.isActive = isActive === 'true';
     }
-    
-    const goals = await HealthGoal.find(query)
-      .sort({ priority: 1, targetDate: 1 })
-      .exec();
-    
-    res.status(200).json({
-      success: true,
-      data: goals,
-      count: goals.length
-    });
+    const goals = await HealthGoal.find(query).sort({ priority: 1, targetDate: 1 });
+    res.json({ success: true, data: goals, count: goals.length });
   } catch (error) {
     console.error('Fetch health goals error:', error);
     res.status(500).json({ success: false, error: 'Failed to retrieve health goals' });
+  }
+});
+
+app.put('/api/health-goals/:goalId', authenticateToken, async (req, res) => {
+  try {
+    const goalId = req.params.goalId;
+    const userId = req.user.userId;
+
+    const goal = await HealthGoal.findOne({ _id: goalId, userId });
+    if (!goal) {
+      return res.status(404).json({ success: false, error: 'Goal not found or not owned by you' });
+    }
+
+    const allowedUpdates = [
+      'targetValue',
+      'title',
+      'description',
+      'targetDate',
+      'priority',
+      'isActive',
+      'frequency',
+      'notes',
+      'category',
+      'reminders'
+    ];
+
+    allowedUpdates.forEach(field => {
+      if (req.body[field] !== undefined) {
+        goal[field] = req.body[field];
+      }
+    });
+
+    if (req.body.targetValue !== undefined) {
+      goal.progressPercentage = (goal.currentValue / goal.targetValue) * 100;
+    }
+
+    goal.lastUpdated = new Date();
+    await goal.save();
+
+    res.json({
+      success: true,
+      message: 'Health goal updated successfully',
+      data: goal
+    });
+  } catch (error) {
+    console.error('Update health goal error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update health goal' });
   }
 });
 

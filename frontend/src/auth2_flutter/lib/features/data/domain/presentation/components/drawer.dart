@@ -73,6 +73,17 @@ class DefaultDrawer extends StatelessWidget {
                 Navigator.pushNamed(context, '/devicepage');
               },
             ),
+
+            if (user?.role == 'doctor' || user?.role == 'admin' || user?.role == 'super_admin')
+              ListTile(
+                leading: Icon(Icons.folder_shared),
+                title: Text('M E D I C A L   R E C O R D S'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/medicalrecords');
+                },
+              ),
+
             ListTile(
               leading: Icon(Icons.logout),
               title: Text('L O G O U T'),

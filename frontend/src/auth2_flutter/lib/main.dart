@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 import 'features/data/domain/presentation/repos/backend_auth_repo_impl.dart';
+import 'features/medical_record/presentation/pages/medical_records_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,6 +54,7 @@ class MyApp extends StatelessWidget {
                 '/personalinfopage': (context) => PersonalInfo(),
                 '/reset-password': (context) => const ResetPasswordPage(),
                 '/change-password': (context) => const ChangePasswordPage(),
+                '/medicalrecords': (context) => const MedicalRecordsPage(),
               },
               theme: mainTheme,
               darkTheme: darkTheme,

@@ -83,6 +83,11 @@ const userSchema = new mongoose.Schema({
     default: 'other'
   },
 
+    avatarColor: {
+    type: Number,
+    default: null
+  },
+
   phone: String,
   
   profilePicture: String,

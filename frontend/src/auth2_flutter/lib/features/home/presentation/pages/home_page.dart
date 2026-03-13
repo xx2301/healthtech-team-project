@@ -6,6 +6,30 @@ import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubi
 import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_states.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:auth2_flutter/features/data/domain/entities/health_metric.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+class MetricConfig {
+  final String type;
+  final String title;
+  final IconData icon;
+  final Color color;
+  final String unit;
+  final String dataKey;
+
+  const MetricConfig(this.type, this.title, this.icon, this.color, this.unit, this.dataKey);
+}
+
+const List<MetricConfig> allMetrics = [
+  MetricConfig('steps', 'Steps', Icons.directions_walk, Colors.green, 'steps', 'todaySteps'),
+  MetricConfig('heart_rate', 'Heart Rate', Icons.monitor_heart, Colors.red, 'bpm', 'avgHeartRate'),
+  MetricConfig('calories', 'Calories', Icons.local_fire_department, Colors.orange, 'kcal', 'todayCalories'),
+  MetricConfig('sleep', 'Sleep', Icons.bedtime, Colors.purple, 'hrs', 'todaySleep'),
+];
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -15,6 +39,181 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  // max limit is 6
+  List<String> _selectedMetricTypes = [];
+
+  final String _storageKey = 'selected_metrics';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSelectedMetrics();
+  }
+
+  Future<void> _loadSelectedMetrics() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getStringList(_storageKey);
+    setState(() {
+      if (saved != null && saved.isNotEmpty) {
+        // filter out expired metrics
+        _selectedMetricTypes = saved.where((type) => allMetrics.any((m) => m.type == type)).toList();
+      } else {
+        _selectedMetricTypes = ['steps', 'heart_rate', 'calories', 'sleep']; //defalut metrics
+      }
+    });
+  }
+
+  Future<void> _saveSelectedMetrics() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_storageKey, _selectedMetricTypes);
+  }
+
+  void _addMetric(String type) {
+    if (_selectedMetricTypes.length >= 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Can display up to 6 indicators')),
+      );
+      return;
+    }
+    if (!_selectedMetricTypes.contains(type)) {
+      setState(() {
+        _selectedMetricTypes.add(type);
+      });
+      _saveSelectedMetrics();
+    }
+  }
+
+  void _removeMetric(String type) {
+    setState(() {
+      _selectedMetricTypes.remove(type);
+    });
+    _saveSelectedMetrics();
+  }
+
+  List<MetricConfig> get _availableMetrics =>
+      allMetrics.where((m) => !_selectedMetricTypes.contains(m.type)).toList();
+
+  Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token');
+  }
+
+  String _getBaseUrl() {
+    if (kIsWeb) return 'http://localhost:3001';
+    if (Platform.isAndroid) return 'http://10.0.2.2:3001';
+    if (Platform.isIOS) return 'http://localhost:3001';
+    return 'http://localhost:3001';
+  }
+
+  Future<Map<String, dynamic>> _fetchHomeData() async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final now = DateTime.now();
+
+    // today range
+    final startDate = DateTime(now.year, now.month, now.day);
+    final endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+    // last 7 days range
+    final weekStart = DateTime(now.year, now.month, now.day - 6);
+    final weekEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+    // get todays data
+    final todayUrl = Uri.parse('${_getBaseUrl()}/api/health-metrics').replace(queryParameters: {
+      'startDate': startDate.toIso8601String(),
+      'endDate': endDate.toIso8601String(),
+      'limit': '500',
+    });
+    final todayResponse = await http.get(todayUrl, headers: {'Authorization': 'Bearer $token'});
+    if (todayResponse.statusCode != 200) throw Exception('Failed to load today metrics');
+
+    // get last 7 days data
+    final weekUrl = Uri.parse('${_getBaseUrl()}/api/health-metrics').replace(queryParameters: {
+      'startDate': weekStart.toIso8601String(),
+      'endDate': weekEnd.toIso8601String(),
+      'limit': '500',
+    });
+    final weekResponse = await http.get(weekUrl, headers: {'Authorization': 'Bearer $token'});
+    if (weekResponse.statusCode != 200) throw Exception('Failed to load week metrics');
+
+    // analyze today data
+    final todayData = jsonDecode(todayResponse.body)['data'] as List;
+    final todayMetrics = todayData.map((e) => HealthMetric.fromJson(e)).toList();
+
+    final weekData = jsonDecode(weekResponse.body)['data'] as List;
+    final weekMetrics = weekData.map((e) => HealthMetric.fromJson(e)).toList();
+
+    int todaySteps = 0;
+    double avgHeartRate = 0;
+    int todayCalories = 0;
+    double todaySleep = 0;
+
+    final stepsMetricsToday = todayMetrics.where((m) => m.metricType == 'steps').toList();
+    todaySteps = stepsMetricsToday.fold(0, (sum, m) => sum + (m.value as num).toInt());
+
+    final heartMetricsToday = todayMetrics.where((m) => m.metricType == 'heart_rate').toList();
+    if (heartMetricsToday.isNotEmpty) {
+      avgHeartRate = heartMetricsToday.fold<double>(0, (sum, m) => sum + (m.value as num).toDouble()) / heartMetricsToday.length;
+    }
+
+    final calorieMetricsToday = todayMetrics.where((m) => m.metricType == 'calories_burned').toList();
+    todayCalories = calorieMetricsToday.fold(0, (sum, m) => sum + (m.value as num).toInt());
+
+    final sleepMetricsToday = todayMetrics.where((m) => m.metricType == 'sleep_duration').toList();
+    todaySleep = sleepMetricsToday.fold(0.0, (sum, m) => sum + (m.value as num).toDouble());
+
+    int stepsGoal = 6700; // default value
+    try {
+      final goalsUrl = Uri.parse('${_getBaseUrl()}/api/health-goals');
+      final goalsResponse = await http.get(goalsUrl, headers: {'Authorization': 'Bearer $token'});
+      if (goalsResponse.statusCode == 200) {
+        final goalsData = jsonDecode(goalsResponse.body)['data'] as List;
+        final stepsGoalObj = goalsData.firstWhere((g) => g['goalType'] == 'steps', orElse: () => null);
+        if (stepsGoalObj != null) {
+          stepsGoal = stepsGoalObj['targetValue']?.toInt() ?? stepsGoal;
+        }
+      }
+    } catch (e) {
+      print('Error fetching goals: $e');
+    }
+
+    final stepsMetricsWeek = weekMetrics.where((m) => m.metricType == 'steps' && !m.isAbnormal).toList();
+    List<bool> weeklyDailyStatus = List.filled(7, false);
+    for (int i = 0; i < 7; i++) {
+      final day = DateTime(now.year, now.month, now.day - (6 - i));
+      final dayStart = DateTime(day.year, day.month, day.day);
+      final dayEnd = DateTime(day.year, day.month, day.day, 23, 59, 59);
+      final daySteps = stepsMetricsWeek
+          .where((m) => m.timestamp.isAfter(dayStart) && m.timestamp.isBefore(dayEnd))
+          .fold<int>(0, (sum, m) => sum + (m.value as num).toInt());
+      weeklyDailyStatus[i] = daySteps >= stepsGoal;
+    }
+
+    double stepsProgress = stepsGoal > 0 ? todaySteps / stepsGoal : 0;
+    if (stepsProgress > 1.0) stepsProgress = 1.0;
+
+    bool isGoalAchievedToday = todaySteps >= stepsGoal;
+
+    return {
+      'todaySteps': todaySteps,
+      'avgHeartRate': avgHeartRate,
+      'todayCalories': todayCalories,
+      'todaySleep': todaySleep,
+      'stepsGoal': stepsGoal,
+      'stepsProgress': stepsProgress,
+      'isGoalAchievedToday': isGoalAchievedToday,
+      'weeklyDailyStatus': weeklyDailyStatus,
+    };
+  }
+
+  String _getTimeOfDay() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return "morning";
+    if (hour < 17) return "afternoon";
+    return "evening";
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<AuthCubit, AuthState>(
@@ -28,501 +227,631 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildHealthCard({
+    required String title,
+    required dynamic value,
+    required String unit,
+    required IconData icon,
+    required Color color,
+    double? progress, // unused now (percentage)
+    VoidCallback? onRemove,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Stack(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // percentage on top right of health card
+                  /*Icon(icon, color: color, size: 28),
+                  if (progress != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.7),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        "${(progress * 100).toInt()}%",
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color),
+                      ),
+                    ),*/
+                ],
+              ),
+              const Spacer(),
+              Text(
+                "$value $unit",
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                title,
+                style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+              ),
+            ],
+          ),
+          if (onRemove != null)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: GestureDetector(
+                onTap: onRemove,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.8),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close, size: 16, color: Colors.grey),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Color _getAvatarColor(AppUser user) {
+    if (user.avatarColor != null) {
+      return Color(user.avatarColor!);
+    }
+
+    final hash = user.uid.hashCode.abs();
+    return HSLColor.fromAHSL(1.0, (hash % 360).toDouble(), 0.6, 0.7).toColor();
+  }
+
   Widget _buildContentBasedOnAuthState(BuildContext context, AuthState authState) {
     if (authState is AuthLoading) {
-      return Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator());
     } else if (authState is Authenticated) {
-      return _buildAuthenticatedContent(context, authState.user); 
+      return _buildAuthenticatedContent(context, authState.user);
     } else if (authState is Unauthenticated) {
       return _buildUnauthenticatedContent(context);
     } else if (authState is AuthError) {
       return _buildErrorContent(authState.message);
     } else {
-      return Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator());
     }
   }
 
   Widget _buildAuthenticatedContent(BuildContext context, AppUser user) {
-    return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.all(15.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Health Tech",
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue[800],
-              ),
-            ),
-            
-            const SizedBox(height: 10),
-            
-            Row(
-              children: [
-                Text(
-                  "Good afternoon, ",
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: Colors.grey[700],
-                  ),
-                ),
-                
-                //dynamic name
-                Text(
-                  user.fullName?.isNotEmpty == true 
-                      ? user.fullName!
-                      : user.email.split('@')[0],
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue[900],
-                  ),
-                ),
-              ],
-            ),
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _fetchHomeData(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        } else if (snapshot.hasError) {
+          return Center(child: Text('Error loading data: ${snapshot.error}'));
+        } else if (!snapshot.hasData) {
+          return const Center(child: Text('No data available'));
+        }
 
-            if (user.age != null || user.height != null || user.weight != null)
-              Container(
-                margin: EdgeInsets.only(top: 10),
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.green[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.shade100, width: 1),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        final data = snapshot.data!;
+        final todaySteps = data['todaySteps'] as int;
+        final avgHeartRate = data['avgHeartRate'] as double;
+        final todayCalories = data['todayCalories'] as int;
+        final todaySleep = data['todaySleep'] as double;
+        final stepsGoal = data['stepsGoal'] as int;
+        final stepsProgress = data['stepsProgress'] as double;
+        final isGoalAchievedToday = data['isGoalAchievedToday'] as bool;
+        final weeklyDailyStatus = data['weeklyDailyStatus'] as List<bool>;
+
+        return SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    if (user.age != null && user.age!.isNotEmpty)
-                      _buildUserInfoItem("Age", "${user.age} yrs"),
-                    if (user.height != null && user.height!.isNotEmpty)
-                      _buildUserInfoItem("Height", "${user.height} cm"),
-                    if (user.weight != null && user.weight!.isNotEmpty)
-                      _buildUserInfoItem("Weight", "${user.weight} kg"),
+                    Text(
+                      "Health Tech",
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue[800],
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.pushNamed(context, '/personalinfopage');
+                      },
+                      child: CircleAvatar(
+                        backgroundColor: _getAvatarColor(user),
+                        child: Text(
+                          user.fullName?.isNotEmpty == true
+                              ? user.fullName![0].toUpperCase()
+                              : user.email[0].toUpperCase(),
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-              ),
-            
-            const SizedBox(height: 20),
-            
-            Row(
-              children: [
+                const SizedBox(height: 8),
+
                 Text(
-                  "Health details",
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  "Good ${_getTimeOfDay()}, ${user.fullName?.isNotEmpty == true ? user.fullName!.split(' ')[0] : user.email.split('@')[0]}",
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
                 ),
-                const SizedBox(width: 10),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: 14,
-                  color: Colors.grey[600],
-                ),
-              ],
-            ),
-            
-            const SizedBox(height: 20),
-
-            //weather
-            Text("Weather is Sunny, perfect for a walk!"),
-
-            const SizedBox(height: 20),
-
-            //progress header
-            Text("Today’s Progress: 75%"),
-
-            //steps progress bar
-            LinearProgressIndicator(
-              value: 0.75,
-              valueColor: AlwaysStoppedAnimation(Colors.black),
-            ),
-
-            const SizedBox(height: 10),
-
-            //progress report
-            Text("Great! You’re close to hitting your step goal."),
-
-            const SizedBox(height: 20),
-
-            //Health Grid
-            Text(
-              "My Health",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
-            ),
-
-            const SizedBox(height: 10),
-
-            GridView.count(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              shrinkWrap: true, // let it size to content
-              physics:
-                const NeverScrollableScrollPhysics(), // disable its own scrolling
-            //health cards
-            children: [
-              //steps card
-              HealthCards(
-                title: "Steps",
-                icon: Icons.directions_walk,
-                hasProgressCircle: true,
-                value: 2000,
-                unit: 'steps',
-                progress: 0.7,
-              ),
-
-              //heart card
-              HealthCards(
-                title: "Heart Rate",
-                icon: Icons.monitor_heart,
-                hasProgressCircle: false,
-                value: 72,
-                unit: 'bpm',
-              ),
-
-              //calories card
-              HealthCards(
-                title: "Calories",
-                icon: Icons.local_fire_department,
-                hasProgressCircle: true,
-                value: 342,
-                unit: 'Kcal',
-                progress: 0.5,
-              ),
-
-              //sleep card
-              HealthCards(
-                title: "Sleep",
-                icon: Icons.bedtime,
-                hasProgressCircle: true,
-                value: 8,
-                unit: 'hours',
-                progress: 0.2,
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-            // Progress Grid
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
+                const SizedBox(height: 4),
                 Text(
-                  "My Progress",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+                  "Let's stay healthy today!",
+                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                 ),
+                const SizedBox(height: 16),
 
-                // view more button -> report page
-                GestureDetector(
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushNamed(context, '/reportpage');
-                  },
-                  child: Text("View All >")
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 10),
-
-            // Goal card
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
+                if (user.age != null || user.height != null || user.weight != null)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        if (user.age != null && user.age!.isNotEmpty)
+                          _buildUserInfoItem("Age", "${user.age} yrs", Icons.cake),
+                        if (user.height != null && user.height!.isNotEmpty)
+                          _buildUserInfoItem("Height", "${user.height} cm", Icons.straighten),
+                        if (user.weight != null && user.weight!.isNotEmpty)
+                          _buildUserInfoItem("Weight", "${user.weight} kg", Icons.monitor_weight),
+                      ],
+                    ),
                   ),
-                ],
-              ),
+                const SizedBox(height: 24),
 
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.blue.shade50, Colors.white],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Today's Progress",
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.grey[800]),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isGoalAchievedToday ? Colors.green[100] : Colors.orange[100],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              isGoalAchievedToday ? "Goal Met" : "${(stepsGoal - todaySteps)} steps left",
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: isGoalAchievedToday ? Colors.green[800] : Colors.orange[800],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            "${(stepsProgress * 100).toInt()}%",
+                            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            "of daily goal",
+                            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: LinearProgressIndicator(
+                          value: stepsProgress,
+                          backgroundColor: Colors.grey[300],
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade400),
+                          minHeight: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                
+                /*Row(
+                  children: [
+                    Text(
+                      "Good afternoon, ",
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                    
+                    //dynamic name
+                    Text(
+                      user.fullName?.isNotEmpty == true 
+                          ? user.fullName!
+                          : user.email.split('@')[0],
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue[900],
+                      ),
+                    ),
+                  ],
+                ),
+
+                if (user.age != null || user.height != null || user.weight != null)
+                  Container(
+                    margin: const EdgeInsets.only(top: 10),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green.shade100, width: 1),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        if (user.age != null && user.age!.isNotEmpty)
+                          _buildUserInfoItem("Age", "${user.age} yrs"),
+                        if (user.height != null && user.height!.isNotEmpty)
+                          _buildUserInfoItem("Height", "${user.height} cm"),
+                        if (user.weight != null && user.weight!.isNotEmpty)
+                          _buildUserInfoItem("Weight", "${user.weight} kg"),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 20),
+            
+                Row(
+                  children: [
+                    Text(
+                      "Health details",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Icon(
+                      Icons.arrow_forward_ios,
+                      size: 14,
+                      color: Colors.grey[600],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                //weather
+                Text("Weather is Sunny, perfect for a walk!"),
+
+                const SizedBox(height: 20),
+
+                //progress header
+                Text("Today's Progress: ${(stepsProgress * 100).toInt()}%"),
+
+                //steps progress bar
+                Text("$todaySteps / $stepsGoal steps"), 
+                LinearProgressIndicator(
+                  value: stepsProgress,
+                  valueColor: const AlwaysStoppedAnimation(Colors.black),
+                ),
+
+                const SizedBox(height: 10),
+
+                //progress report
+                Text(progressMessage),
+
+                const SizedBox(height: 20),*/
+
+                // My Health 标题
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      "My Health",
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    if (_availableMetrics.isNotEmpty && _selectedMetricTypes.length < 6)
+                      IconButton(
+                        icon: const Icon(Icons.add_circle_outline, color: Colors.blue),
+                        onPressed: () => _showAddMetricDialog(context),
+                      )
+                    else if (_selectedMetricTypes.length >= 6)
+                      const Text(
+                        'Limit reached',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                if (_selectedMetricTypes.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    alignment: Alignment.center,
+                    child: const Text('No health cards yet, click + to add'),
+                  )
+                else
+                  GridView.count(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    shrinkWrap: true, // let it size to content
+                    physics: const NeverScrollableScrollPhysics(), // disable its own scrolling
+                    childAspectRatio: 1.1,
+                    //health cards
+                    children: _selectedMetricTypes.map((type) {
+                      final config = allMetrics.firstWhere((c) => c.type == type);
+                      dynamic value = data[config.dataKey];
+
+                      if (config.type == 'heart_rate' && value is double) {
+                        value = value.toInt();
+                      } else if (config.type == 'sleep' && value is double) {
+                        value = value.toStringAsFixed(1);
+                      }
+
+                      if (value == null) value = '--';
+                      return _buildHealthCard(
+                        title: config.title,
+                        value: value,
+                        unit: config.unit,
+                        icon: config.icon,
+                        color: config.color,
+                        progress: config.type == 'steps' ? stepsProgress : null, // Only the steps show the progress percentage
+                        onRemove: () => _removeMetric(type),
+                      );
+                    }).toList(),
+                  ),
+                const SizedBox(height: 24),
+
+                // Progress Grid
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      "My Progress",
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+
+                    // view more button -> report page
+                    GestureDetector(
+                      onTap: () {
+                        // Navigator.pop(context);
+                        Navigator.pushNamed(context, '/reportpage');
+                      },
+                      child: Row(
+                        children: const [
+                          Text("View All", style: TextStyle(color: Colors.blue)),
+                          SizedBox(width: 4),
+                          Icon(Icons.arrow_forward_ios, size: 14, color: Colors.blue),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Goal card
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
                         "Your Weekly Goals",
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                       ),
-
-                      Text(
-                        "Last 7 days",
-                        style: TextStyle(color: Colors.grey, fontSize: 10),
-                        textAlign: TextAlign.left,
-                      ),
-
-                      Center(
-                        child: Column(
-                          children: [
-                            Text(
-                              "3/7",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 20,
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: List.generate(7, (index) {
+                          final isAchieved = weeklyDailyStatus[index];
+                          return Column(
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isAchieved ? Colors.green[100] : Colors.red[100],
+                                ),
+                                child: Icon(
+                                  isAchieved ? Icons.check : Icons.watch_later_outlined,
+                                  color: isAchieved ? Colors.green[700] : Colors.grey[600],
+                                  size: 24,
+                                ),
                               ),
-                            ),
-
-                            Text(
-                              "Achieved",
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 10,
+                              const SizedBox(height: 8),
+                              Text(
+                                ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][index],
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: isAchieved ? FontWeight.w600 : FontWeight.normal,
+                                  color: isAchieved ? Colors.green[700] : Colors.grey[600],
+                                ),
                               ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
+                            ],
+                          );
+                        }),
                       ),
                     ],
                   ),
-
-                  SizedBox(width: 12),
-
-                  // week goal progression
-
-                  Row(
-                    children: [
-                      Column(
-                        children: [
-                          Icon(Icons.check, color: Colors.green),
-                          Text("Mon", style: TextStyle(fontSize: 10)),
-                        ],
-                      ),
-
-                      SizedBox(width: 5),
-
-                      Column(
-                        children: [
-                          Icon(Icons.check, color: Colors.green),
-                          Text("Tues", style: TextStyle(fontSize: 10)),
-                        ],
-                      ),
-
-                      SizedBox(width: 5),
-
-                      Column(
-                        children: [
-                          Icon(Icons.check, color: Colors.green),
-                          Text("Wed", style: TextStyle(fontSize: 10)),
-                        ],
-                      ),
-
-                      SizedBox(width: 5),
-
-                      Column(
-                        children: [
-                          Icon(
-                            Icons.watch_later_outlined,
-                            color: Colors.yellow,
-                          ),
-                          Text("Thurs", style: TextStyle(fontSize: 10)),
-                        ],
-                      ),
-
-                      SizedBox(width: 5),
-
-                      Column(
-                        children: [
-                          Icon(
-                            Icons.watch_later_outlined,
-                            color: Colors.yellow,
-                          ),
-                          Text("Fri", style: TextStyle(fontSize: 10)),
-                        ],
-                      ),
-
-                      SizedBox(width: 5),
-
-                      Column(
-                        children: [
-                          Icon(Icons.check, color: Colors.green),
-                          Text("Sat", style: TextStyle(fontSize: 10)),
-                        ],
-                      ),
-
-                      SizedBox(width: 5),
-
-                      Column(
-                        children: [
-                          Icon(Icons.close, color: Colors.red),
-                          Text("Sun", style: TextStyle(fontSize: 10)),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-
-            const SizedBox(height: 20),
-
-            // sleep progression card
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "Sleep Duration",
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-
-                      Text(
-                        "Last 7 days",
-                        style: TextStyle(color: Colors.grey, fontSize: 10),
-                        textAlign: TextAlign.left,
-                      ),
-
-                      Center(
-                        child: Column(
-                          children: [
-                            Text(
-                              "3/7",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 20,
-                              ),
-                            ),
-                            Text(
-                              "Achieved",
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 10,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
+            // const SizedBox(height: 20),
+                // sleep progression card
+                /*Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
-
-                  SizedBox(width: 12),
-
-                  // sleep progress per day 
-
-                  Row(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.check, color: Colors.green),
-                          Text("Mon", style: TextStyle(fontSize: 10)),
-                        ],
-                      ),
-
-                      SizedBox(width: 5),
-
-                      Column(
-                        children: [
-                          Icon(Icons.check, color: Colors.green),
-                          Text("Tues", style: TextStyle(fontSize: 10)),
-                        ],
-                      ),
-
-                      SizedBox(width: 5),
-
-                      Column(
-                        children: [
-                          Icon(Icons.check, color: Colors.green),
-                          Text("Wed", style: TextStyle(fontSize: 10)),
-                        ],
-                      ),
-
-                      SizedBox(width: 5),
-
-                      Column(
-                        children: [
-                          Icon(
-                            Icons.watch_later_outlined,
-                            color: Colors.yellow,
+                          Text(
+                            "Sleep Duration",
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          Text("Thurs", style: TextStyle(fontSize: 10)),
-                        ],
-                      ),
 
-                      SizedBox(width: 5),
-
-                      Column(
-                        children: [
-                          Icon(
-                            Icons.watch_later_outlined,
-                            color: Colors.yellow,
+                          Text(
+                            "Last 7 days",
+                            style: TextStyle(color: Colors.grey, fontSize: 10),
+                            // textAlign: TextAlign.left,
                           ),
-                          Text("Fri", style: TextStyle(fontSize: 10)),
+                          const SizedBox(height: 8),
+
+                          Center(
+                            child: Column(
+                              children: [
+                                Text(
+                                  "${(totalSleep / 7).toStringAsFixed(1)} hrs",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 20,
+                                  ),
+                                ),
+                                Text(
+                                  "Daily Avg",
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 10,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
 
-                      SizedBox(width: 5),
+                      SizedBox(width: 12),
 
-                      Column(
-                        children: [
-                          Icon(Icons.check, color: Colors.green),
-                          Text("Sat", style: TextStyle(fontSize: 10)),
-                        ],
-                      ),
+                      // sleep progress per day 
 
-                      SizedBox(width: 5),
-
-                      Column(
-                        children: [
-                          Icon(Icons.close, color: Colors.red),
-                          Text("Sun", style: TextStyle(fontSize: 10)),
-                        ],
+                      Row(
+                        children: List.generate(7, (index) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 2),
+                            child: Column(
+                              children: [
+                                Icon(Icons.bedtime, color: Colors.blue[200], size: 20),
+                                const SizedBox(height: 2),
+                                Text(
+                                  ['M','T','W','T','F','S','S'][index],
+                                  style: const TextStyle(fontSize: 8),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
                       ),
                     ],
                   ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ), 
+                ),*/
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildUserInfoItem(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
+  void _showAddMetricDialog(BuildContext context) {
+    final available = _availableMetrics;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add health indicators'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: available.length,
+            itemBuilder: (_, index) {
+              final metric = available[index];
+              return ListTile(
+                leading: Icon(metric.icon, color: metric.color),
+                title: Text(metric.title),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _addMetric(metric.type);
+                },
+              );
+            },
           ),
         ),
-        SizedBox(height: 2),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserInfoItem(String label, String value, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, size: 20, color: Colors.blue[700]),
+        const SizedBox(height: 4),
         Text(
           value,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: Colors.green[700],
-          ),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        Text(
+          label,
+          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
         ),
       ],
     );
@@ -534,22 +863,22 @@ class _HomePageState extends State<HomePage> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.health_and_safety, size: 80, color: Colors.grey),
-          SizedBox(height: 20),
-          Text(
+          const SizedBox(height: 20),
+          const Text(
             'Welcome to HealthTech',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
-          SizedBox(height: 10),
-          Text(
+          const SizedBox(height: 10),
+          const Text(
             'Please log in to access your health dashboard',
             style: TextStyle(color: Colors.grey),
           ),
-          SizedBox(height: 30),
+          const SizedBox(height: 30),
           ElevatedButton(
             onPressed: () {
               Navigator.pushNamed(context, '/login');
             },
-            child: Text('Log In'),
+            child: const Text('Log In'),
           ),
         ],
       ),
@@ -561,19 +890,19 @@ class _HomePageState extends State<HomePage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.error_outline, color: Colors.red, size: 50),
-          SizedBox(height: 20),
+          const Icon(Icons.error_outline, color: Colors.red, size: 50),
+          const SizedBox(height: 20),
           Text(
             'Error: $errorMessage',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.red),
+            style: const TextStyle(color: Colors.red),
           ),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
           ElevatedButton(
             onPressed: () {
               context.read<AuthCubit>().checkAuth();
             },
-            child: Text('Retry'),
+            child: const Text('Retry'),
           ),
         ],
       ),

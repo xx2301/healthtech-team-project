@@ -4,7 +4,7 @@ const healthGoalSchema = new mongoose.Schema({
   patientId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Patient',
-    required: true
+    required: false
   },
   
   userId: {
@@ -16,7 +16,10 @@ const healthGoalSchema = new mongoose.Schema({
   goalType: {
     type: String,
     required: true,
-    enum: ['weight_loss', 'fitness', 'nutrition', 'medication', 'sleep', 'other']
+    enum: [
+      'steps', 'calories_burned', 'heart_rate', 'sleep_duration',
+      'weight_loss', 'fitness', 'nutrition', 'medication', 'other'
+    ]
   },
   
   title: {

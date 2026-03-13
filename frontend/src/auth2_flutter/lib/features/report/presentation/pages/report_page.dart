@@ -41,6 +41,11 @@ class _ReportPageState extends State<ReportPage> {
   String _viewingUserName = ''; 
   bool _viewingAll = true;
 
+  bool get _canEditGoal {
+    if (!_isAdmin) return true;
+    return !_viewingAll && _viewingUserName == 'your own data';
+  }
+
   final _searchController = TextEditingController();
 
   double _stepsChangePercent = 0.0;
@@ -55,6 +60,10 @@ class _ReportPageState extends State<ReportPage> {
   DateTime? _selectedStartDate;
   DateTime? _selectedEndDate;
   final ValueNotifier<Color?> _periodCardHoverColor = ValueNotifier(null);
+
+  int _stepsGoal = 6700;
+  int _caloriesGoal = 12700;
+  int _goalsAchievedDays = 3;
 
   @override
   void initState() {
@@ -120,6 +129,36 @@ class _ReportPageState extends State<ReportPage> {
         headers: {'Authorization': 'Bearer $token'},
       );
 
+      // fetch goals
+      try {
+        final goalsResponse = await http.get(
+          Uri.parse('${_getBaseUrl()}/api/health-goals'),
+          headers: {'Authorization': 'Bearer $token'},
+        );
+        if (goalsResponse.statusCode == 200) {
+          final goalsJson = jsonDecode(goalsResponse.body);
+          final List<dynamic> goalsData = goalsJson['data'] ?? [];
+          
+          final stepsGoalObj = goalsData.firstWhere(
+            (g) => g['goalType'] == 'steps',
+            orElse: () => null,
+          );
+          if (stepsGoalObj != null) {
+            _stepsGoal = stepsGoalObj['targetValue']?.toInt() ?? _stepsGoal;
+          }
+          
+          final caloriesGoalObj = goalsData.firstWhere(
+            (g) => g['goalType'] == 'calories_burned',
+            orElse: () => null,
+          );
+          if (caloriesGoalObj != null) {
+            _caloriesGoal = caloriesGoalObj['targetValue']?.toInt() ?? _caloriesGoal;
+          }
+        }
+      } catch (e) {
+        print('Error fetching goals: $e');
+      }
+
       final lastWeekParams = {
         ...baseParams,
         'startDate': lastWeekStart.toIso8601String(),
@@ -158,6 +197,20 @@ class _ReportPageState extends State<ReportPage> {
         _prepareChartData(mainMetrics);
 
         _calculateChangePercentages(mainMetrics, lastWeekMetrics);
+
+        int achievedDays = 0;
+        final stepsMetrics = mainMetrics.where((m) => m.metricType == 'steps' && !m.isAbnormal).toList();
+
+        final Map<DateTime, int> dailySteps = {};
+        for (var metric in stepsMetrics) {
+          final day = DateTime(metric.timestamp.year, metric.timestamp.month, metric.timestamp.day);
+          dailySteps[day] = (dailySteps[day] ?? 0) + (metric.value is num ? (metric.value as num).toInt() : 0);
+        }
+
+        for (var steps in dailySteps.values) {
+          if (steps >= _stepsGoal) achievedDays++;
+        }
+        _goalsAchievedDays = achievedDays;
 
         _reportPeriod = '${_formatDate(start)} - ${_formatDate(end)}';
         _generatedDate = _formatDate(now);
@@ -453,6 +506,108 @@ class _ReportPageState extends State<ReportPage> {
     );
   }
 
+  Future<void> _showEditGoalDialog(String goalType, int currentValue) async {
+    final TextEditingController controller = TextEditingController(text: currentValue.toString());
+    return showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text('Edit ${goalType == 'steps' ? 'Steps' : 'Calories'} Goal'),
+          content: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'New goal value'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final newValue = int.tryParse(controller.text);
+                if (newValue == null || newValue <= 0) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('Please enter a valid number')),
+                  );
+                  return;
+                }
+                Navigator.pop(ctx);
+                await _updateGoal(goalType, newValue);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _updateGoal(String goalType, int newValue) async {
+    final token = await _getToken();
+    if (token == null) return;
+
+    try {
+      final getResponse = await http.get(
+        Uri.parse('${_getBaseUrl()}/api/health-goals'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (getResponse.statusCode == 200) {
+        final jsonData = jsonDecode(getResponse.body);
+        final List<dynamic> goals = jsonData['data'] ?? [];
+        final existingGoal = goals.firstWhere(
+          (g) => g['goalType'] == goalType,
+          orElse: () => null,
+        );
+
+        if (existingGoal != null) {
+          final updateResponse = await http.put(
+            Uri.parse('${_getBaseUrl()}/api/health-goals/${existingGoal['_id']}'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'targetValue': newValue}),
+          );
+          if (updateResponse.statusCode == 200) {
+            _fetchHealthData();
+          } else {
+            throw Exception('Failed to update goal');
+          }
+        } else {
+          final now = DateTime.now();
+          final createResponse = await http.post(
+            Uri.parse('${_getBaseUrl()}/api/health-goals'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'goalType': goalType,
+              'targetValue': newValue,
+              'targetDate': now.add(const Duration(days: 30)).toIso8601String(), // dafault after 30 days
+              'title': goalType == 'steps' ? 'Steps Goal' : 'Calories Goal',
+            }),
+          );
+          if (createResponse.statusCode == 201) {
+            _fetchHealthData();
+          } else {
+            throw Exception('Failed to create goal');
+          }
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to fetch existing goal: ${getResponse.statusCode}')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error updating goal: $e')),
+      );
+    }
+  }
+
   Future<void> _addHealthMetric(Map<String, dynamic> data) async {
     setState(() => _isLoading = true);
     try {
@@ -519,6 +674,15 @@ class _ReportPageState extends State<ReportPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildGoalColumn(int goalValue) {
+    return Column(
+      children: [
+        Text(goalValue.toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
+        const Text("Goal", style: TextStyle(fontSize: 10)),
+      ],
     );
   }
 
@@ -733,7 +897,7 @@ class _ReportPageState extends State<ReportPage> {
                       // Report Info Card Goals Achieved
                       InfoCards(
                         title: "Goals Acheived", 
-                        subtitle: "3/7 Days"
+                        subtitle: "$_goalsAchievedDays/7 Days",
                       ),
                     ],
                   ),
@@ -826,19 +990,13 @@ class _ReportPageState extends State<ReportPage> {
                                 ),
                             ],
                           ),
-                          Column(
-                            children: const [
-                              // total steps goal
-                              Text(
-                                "6,700", // stay static
-                                style: TextStyle(fontWeight: FontWeight.bold)
-                                ),
-                              Text(
-                                "Goal", 
-                                style: TextStyle(fontSize: 10)
-                                ),
-                            ],
-                          ),
+                          if (_canEditGoal)
+                            GestureDetector(
+                              onTap: () => _showEditGoalDialog('steps', _stepsGoal),
+                              child: _buildGoalColumn(_stepsGoal),
+                            )
+                          else 
+                            _buildGoalColumn(_stepsGoal),
                         ],
                       ),
                     ],
@@ -952,7 +1110,8 @@ class _ReportPageState extends State<ReportPage> {
                                   : '—',
                               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                             ),
-                          ),                        ],
+                          ),
+                        ],
                       ),
                       Text(
                         _totalCalories.toString(),
@@ -987,24 +1146,19 @@ class _ReportPageState extends State<ReportPage> {
                               Text("Last Week", style: TextStyle(fontSize: 10)),
                             ],
                           ),
-                          Column(
-                            children: const [
-                              Text(
-                                "12,700", 
-                                style: TextStyle(fontWeight: FontWeight.bold)
-                                ),
-                              Text(
-                                "Goal", 
-                                style: TextStyle(fontSize: 10)
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                          if (_canEditGoal)
+                            GestureDetector(
+                              onTap: () => _showEditGoalDialog('calories_burned', _caloriesGoal),
+                              child: _buildGoalColumn(_caloriesGoal),
+                            )
+                          else
+                            _buildGoalColumn(_caloriesGoal),
+                        ],
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 10),
+                ),
+                const SizedBox(height: 10),
 
                 // sleep card
                 Container(
@@ -1095,8 +1249,8 @@ class _ReportPageState extends State<ReportPage> {
                       const Text("Weekly Progress", style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       Row(
-                        children: const [
-                          Text("3/7", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                        children: [
+                          Text("$_goalsAchievedDays/7", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
                           SizedBox(width: 10),
                           Text("Goals Achieved This Week", style: TextStyle(fontSize: 10)),
                         ],
