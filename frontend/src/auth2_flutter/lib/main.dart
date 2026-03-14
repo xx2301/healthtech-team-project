@@ -17,6 +17,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 import 'features/data/domain/presentation/repos/backend_auth_repo_impl.dart';
 import 'features/medical_record/presentation/pages/medical_records_page.dart';
+import 'package:auth2_flutter/features/report/presentation/pages/metric_detail_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,6 +56,13 @@ class MyApp extends StatelessWidget {
                 '/reset-password': (context) => const ResetPasswordPage(),
                 '/change-password': (context) => const ChangePasswordPage(),
                 '/medicalrecords': (context) => const MedicalRecordsPage(),
+                '/metric-detail': (context) {
+                  final args = ModalRoute.of(context)!.settings.arguments as Map;
+                  return MetricDetailPage(
+                    metricType: args['metricType'],
+                    title: args['title'],
+                  );
+                },
               },
               theme: mainTheme,
               darkTheme: darkTheme,

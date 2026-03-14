@@ -7,6 +7,8 @@ const helmet = require('helmet');
 const { body, validationResult } = require('express-validator');
 require('dotenv').config();
 const nodemailer = require('nodemailer');
+const { startAutoSimulate } = require('./services/autoSimulateService');
+const deviceRoutes = require('./routes/devices');
 
 const { User, Doctor, Patient, HealthMetric, MedicalRecord, EmergencyContact, DoctorPatientRelation, HealthGoal, SymptomLog, Device, HealthReport, Conversation, ChatMessage} = require('./models/index');
 
@@ -104,6 +106,8 @@ const requireRole = (...roles) => {
     next();
   };
 };
+
+app.use('/api/devices', deviceRoutes);
 
 app.get('/', (req, res) => {
   res.send(`
@@ -2449,70 +2453,65 @@ app.post('/api/dev/simulate-health-data', authenticateToken, async (req, res) =>
     const now = new Date();
     const metrics = [];
 
-    for (let hour = 0; hour < 12; hour++) {
-      const date = new Date(now);
-      date.setHours(now.getHours() - hour);
-      let heartRate = 60 + Math.floor(Math.random() * 40);
-      metrics.push({
-        userId: user._id,
-        patientId: null,
-        metricType: 'heart_rate',
-        value: heartRate,
-        unit: 'bpm',
-        source: 'device',
-        deviceName: 'Heart Monitor',
-        timestamp: date,
-        isAbnormal: heartRate < 50 || heartRate > 120,
-      });
-    }
+    const heartRate = 60 + Math.floor(Math.random() * 40); // 60-100 bpm
+    metrics.push({
+      userId: user._id,
+      patientId: null,
+      metricType: 'heart_rate',
+      value: heartRate,
+      unit: 'bpm',
+      source: 'device',
+      deviceName: 'Heart Monitor',
+      timestamp: now,
+      isAbnormal: heartRate < 50 || heartRate > 120,
+    });
 
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
-      
-      let steps = Math.floor(Math.random() * 7000) + 5000;
-      if (i === 3 && Math.random() > 0.5) steps = 1000000;
-      metrics.push({
-        userId: user._id,
-        patientId: null,
-        metricType: 'steps',
-        value: steps,
-        unit: 'steps',
-        source: 'device',
-        deviceName: 'Smart Watch',
-        timestamp: date,
-        isAbnormal: steps > 50000,
-      });
+    const stepsDelta = Math.floor(Math.random() * 20); // 0-19 steps
+    metrics.push({
+      userId: user._id,
+      patientId: null,
+      metricType: 'steps',
+      value: stepsDelta,
+      unit: 'steps',
+      source: 'device',
+      deviceName: 'Smart Watch',
+      timestamp: now,
+      isAbnormal: stepsDelta > 100,
+    });
 
-      const calories = 1500 + Math.floor(Math.random() * 500);
-      metrics.push({
-        userId: user._id,
-        patientId: null,
-        metricType: 'calories_burned',
-        value: calories,
-        unit: 'kcal',
-        source: 'device',
-        deviceName: 'Smart Watch',
-        timestamp: date,
-      });
+    const caloriesDelta = 1 + Math.random() * 4; // 1-5 kcal
+    metrics.push({
+      userId: user._id,
+      patientId: null,
+      metricType: 'calories_burned',
+      value: caloriesDelta,
+      unit: 'kcal',
+      source: 'device',
+      deviceName: 'Smart Watch',
+      timestamp: now,
+    });
 
-      const sleep = 6 + (Math.random() * 2);
-      metrics.push({
-        userId: user._id,
-        patientId: null,
-        metricType: 'sleep_duration',
-        value: sleep,
-        unit: 'hours',
-        source: 'device',
-        deviceName: 'Sleep Tracker',
-        timestamp: date,
-      });
-    }
+    const glucose = 4.0 + Math.random() * 3.0; // 4-7 mmol/L
+    metrics.push({
+      userId: user._id,
+      patientId: null,
+      metricType: 'glucose',
+      value: glucose,
+      unit: 'mmol/L',
+      source: 'device',
+      deviceName: 'CGM',
+      timestamp: now,
+      isAbnormal: glucose < 3.5 || glucose > 7.8,
+    });
 
     await HealthMetric.insertMany(metrics, { ordered: false });
-    res.json({ success: true, message: `Generated ${metrics.length} metrics` });
+
+    res.json({
+      success: true,
+      message: `Generated ${metrics.length} real-time metrics for user ${user.email}`,
+    });
   } catch (error) {
-    console.error('Simulate data error:', error);
+    console.error('Simulate live data error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -2539,4 +2538,11 @@ app.listen(PORT, () => {
   console.log(`📊 Health Check: http://localhost:${PORT}/api/health`);
   console.log(`📝 Register: POST http://localhost:${PORT}/api/auth/register`);
   console.log(`🔐 Login: POST http://localhost:${PORT}/api/auth/login`);
+
+  // Only start auto-simulation in development mode to prevent unintended data generation in production
+  if (process.env.NODE_ENV !== 'production') {
+    startAutoSimulate();
+  } else {
+    console.log('Production mode: auto-simulate disabled.');
+  }
 });

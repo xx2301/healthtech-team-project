@@ -1,7 +1,6 @@
 import 'package:auth2_flutter/features/data/domain/entities/app_user.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/drawer.dart';
-import 'package:auth2_flutter/features/data/domain/presentation/components/health_cards.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubit.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_states.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +11,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:async';
 
 class MetricConfig {
   final String type;
@@ -29,6 +29,8 @@ const List<MetricConfig> allMetrics = [
   MetricConfig('heart_rate', 'Heart Rate', Icons.monitor_heart, Colors.red, 'bpm', 'avgHeartRate'),
   MetricConfig('calories', 'Calories', Icons.local_fire_department, Colors.orange, 'kcal', 'todayCalories'),
   MetricConfig('sleep', 'Sleep', Icons.bedtime, Colors.purple, 'hrs', 'todaySleep'),
+  MetricConfig('glucose', 'Glucose', Icons.bloodtype, Colors.teal, 'mmol/L', 'todayAvgGlucose'),
+  MetricConfig('blood_pressure', 'Blood Pressure', Icons.monitor_heart_outlined, Colors.blue, 'mmHg', 'bloodPressure'),
 ];
 
 class HomePage extends StatefulWidget {
@@ -44,10 +46,54 @@ class _HomePageState extends State<HomePage> {
 
   final String _storageKey = 'selected_metrics';
 
+  Map<String, dynamic>? _homeData;
+  bool _isLoading = true;
+  String? _errorMessage;
+  Timer? _refreshTimer;
+
   @override
   void initState() {
     super.initState();
     _loadSelectedMetrics();
+    _loadHomeData();
+    _startAutoRefresh();
+  }
+
+  void _startAutoRefresh() {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted) {
+        _loadHomeData();
+      }
+    });
+  }
+
+  Future<void> _loadHomeData() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      final data = await _fetchHomeData();
+      if (mounted) {
+        setState(() {
+          _homeData = data;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadSelectedMetrics() async {
@@ -137,12 +183,69 @@ class _HomePageState extends State<HomePage> {
     final weekResponse = await http.get(weekUrl, headers: {'Authorization': 'Bearer $token'});
     if (weekResponse.statusCode != 200) throw Exception('Failed to load week metrics');
 
-    // analyze today data
+    // parse data
     final todayData = jsonDecode(todayResponse.body)['data'] as List;
     final todayMetrics = todayData.map((e) => HealthMetric.fromJson(e)).toList();
 
     final weekData = jsonDecode(weekResponse.body)['data'] as List;
     final weekMetrics = weekData.map((e) => HealthMetric.fromJson(e)).toList();
+
+    final deviceStatus = await _fetchDeviceStatusMap();
+
+    bool stepsDeviceError = false;
+    bool heartRateDeviceError = false;
+    bool caloriesDeviceError = false;
+    bool sleepDeviceError = false;
+    bool glucoseDeviceError = false;
+    bool bpDeviceError = false;
+
+    // steps
+    final stepDeviceIds = todayMetrics
+        .where((m) => m.metricType == 'steps')
+        .map((m) => m.deviceId)
+        .whereType<String>()
+        .toSet();
+    stepsDeviceError = stepDeviceIds.any((id) => deviceStatus[id] == true);
+
+    // heart rate
+    final heartDeviceIds = todayMetrics
+        .where((m) => m.metricType == 'heart_rate')
+        .map((m) => m.deviceId)
+        .whereType<String>()
+        .toSet();
+    heartRateDeviceError = heartDeviceIds.any((id) => deviceStatus[id] == true);
+
+    // calories
+    final calorieDeviceIds = todayMetrics
+        .where((m) => m.metricType == 'calories_burned')
+        .map((m) => m.deviceId)
+        .whereType<String>()
+        .toSet();
+    caloriesDeviceError = calorieDeviceIds.any((id) => deviceStatus[id] == true);
+
+    // sleep
+    final sleepDeviceIds = todayMetrics
+        .where((m) => m.metricType == 'sleep_duration')
+        .map((m) => m.deviceId)
+        .whereType<String>()
+        .toSet();
+    sleepDeviceError = sleepDeviceIds.any((id) => deviceStatus[id] == true);
+
+    // glucose
+    final glucoseDeviceIds = todayMetrics
+        .where((m) => m.metricType == 'glucose')
+        .map((m) => m.deviceId)
+        .whereType<String>()
+        .toSet();
+    glucoseDeviceError = glucoseDeviceIds.any((id) => deviceStatus[id] == true);
+
+    // blood pressure
+    final bpDeviceIds = todayMetrics
+        .where((m) => m.metricType == 'blood_pressure')
+        .map((m) => m.deviceId)
+        .whereType<String>()
+        .toSet();
+    bpDeviceError = bpDeviceIds.any((id) => deviceStatus[id] == true);
 
     int todaySteps = 0;
     double avgHeartRate = 0;
@@ -162,6 +265,29 @@ class _HomePageState extends State<HomePage> {
 
     final sleepMetricsToday = todayMetrics.where((m) => m.metricType == 'sleep_duration').toList();
     todaySleep = sleepMetricsToday.fold(0.0, (sum, m) => sum + (m.value as num).toDouble());
+
+    double avgGlucose = 0;
+    int? latestSystolic;
+    int? latestDiastolic;
+
+    final glucoseMetrics = todayMetrics.where((m) => m.metricType == 'glucose').toList();
+    if (glucoseMetrics.isNotEmpty) {
+      avgGlucose = glucoseMetrics.map((m) => m.value as double).reduce((a, b) => a + b) / glucoseMetrics.length;
+    }
+
+    // get latest data for blood pressure
+    final bpMetrics = todayMetrics.where((m) => m.metricType == 'blood_pressure').toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+    String bloodPressure = '--/--';
+    if (bpMetrics.isNotEmpty) {
+      final value = bpMetrics.first.value;
+      if (value is Map) {
+        final systolic = value['systolic']?.toString() ?? '?';
+        final diastolic = value['diastolic']?.toString() ?? '?';
+        bloodPressure = '$systolic/$diastolic';
+      }
+    }
 
     int stepsGoal = 6700; // default value
     try {
@@ -204,7 +330,40 @@ class _HomePageState extends State<HomePage> {
       'stepsProgress': stepsProgress,
       'isGoalAchievedToday': isGoalAchievedToday,
       'weeklyDailyStatus': weeklyDailyStatus,
+      'todayAvgGlucose': avgGlucose,
+      'bloodPressure': bloodPressure,
+      'stepsDeviceError': stepsDeviceError,
+      'heartRateDeviceError': heartRateDeviceError,
+      'caloriesDeviceError': caloriesDeviceError,
+      'sleepDeviceError': sleepDeviceError,
+      'glucoseDeviceError': glucoseDeviceError,
+      'bpDeviceError': bpDeviceError,
     };
+  }
+
+  Future<Map<String, bool>> _fetchDeviceStatusMap() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return {};
+      final response = await http.get(
+        Uri.parse('${_getBaseUrl()}/api/devices'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        final devices = json['data'] as List;
+        final Map<String, bool> statusMap = {};
+        for (var d in devices) {
+          final id = d['_id'] as String;
+          final status = d['status'] as String? ?? 'online';
+          statusMap[id] = (status == 'error' || status == 'offline');
+        }
+        return statusMap;
+      }
+    } catch (e) {
+      print('Error fetching device status: $e');
+    }
+    return {};
   }
 
   String _getTimeOfDay() {
@@ -235,65 +394,97 @@ class _HomePageState extends State<HomePage> {
     required Color color,
     double? progress, // unused now (percentage)
     VoidCallback? onRemove,
+    required String metricType,
+    bool isDeviceError = false,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // percentage on top right of health card
-                  /*Icon(icon, color: color, size: 28),
-                  if (progress != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.7),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        "${(progress * 100).toInt()}%",
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color),
-                      ),
-                    ),*/
-                ],
-              ),
-              const Spacer(),
-              Text(
-                "$value $unit",
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              Text(
-                title,
-                style: TextStyle(fontSize: 14, color: Colors.grey[700]),
-              ),
-            ],
-          ),
-          if (onRemove != null)
-            Positioned(
-              top: 0,
-              right: 0,
-              child: GestureDetector(
-                onTap: onRemove,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.8),
-                    shape: BoxShape.circle,
+    return GestureDetector(
+      onTap: () {
+        Navigator.pushNamed(
+          context,
+          '/metric-detail',
+          arguments: {
+            'metricType': metricType,
+            'title': title,
+          },
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Stack(
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // percentage on top right of health card
+                    /*Icon(icon, color: color, size: 28),
+                    if (progress != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          "${(progress * 100).toInt()}%",
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color),
+                        ),
+                      ),*/
+                  ],
+                ),
+                const Spacer(),
+                Text(
+                  "$value $unit",
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  title,
+                  style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                ),
+              ],
+            ),
+            if (onRemove != null)
+              Positioned(
+                top: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: onRemove,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.8),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.close, size: 16, color: Colors.grey),
                   ),
-                  child: const Icon(Icons.close, size: 16, color: Colors.grey),
                 ),
               ),
-            ),
-        ],
+
+            // Device error logo
+            if (isDeviceError)
+              Positioned(
+                top: 0,
+                left: 0,
+                child: Tooltip(
+                  message: 'Device error detected',
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.warning, size: 16, color: Colors.white),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -322,26 +513,25 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildAuthenticatedContent(BuildContext context, AppUser user) {
-    return FutureBuilder<Map<String, dynamic>>(
-      future: _fetchHomeData(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        } else if (snapshot.hasError) {
-          return Center(child: Text('Error loading data: ${snapshot.error}'));
-        } else if (!snapshot.hasData) {
-          return const Center(child: Text('No data available'));
-        }
+    if (_isLoading && _homeData == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_errorMessage != null) {
+      return Center(child: Text('Error: $_errorMessage'));
+    }
+    if (_homeData == null) {
+      return const Center(child: Text('No data available'));
+    }
 
-        final data = snapshot.data!;
-        final todaySteps = data['todaySteps'] as int;
-        final avgHeartRate = data['avgHeartRate'] as double;
-        final todayCalories = data['todayCalories'] as int;
-        final todaySleep = data['todaySleep'] as double;
-        final stepsGoal = data['stepsGoal'] as int;
-        final stepsProgress = data['stepsProgress'] as double;
-        final isGoalAchievedToday = data['isGoalAchievedToday'] as bool;
-        final weeklyDailyStatus = data['weeklyDailyStatus'] as List<bool>;
+    final data = _homeData!;
+    final todaySteps = data['todaySteps'] as int;
+    final avgHeartRate = data['avgHeartRate'] as double;
+    final todayCalories = data['todayCalories'] as int;
+    final todaySleep = data['todaySleep'] as double;
+    final stepsGoal = data['stepsGoal'] as int;
+    final stepsProgress = data['stepsProgress'] as double;
+    final isGoalAchievedToday = data['isGoalAchievedToday'] as bool;
+    final weeklyDailyStatus = data['weeklyDailyStatus'] as List<bool>;
 
         return SingleChildScrollView(
           child: Padding(
@@ -613,13 +803,33 @@ class _HomePageState extends State<HomePage> {
                       final config = allMetrics.firstWhere((c) => c.type == type);
                       dynamic value = data[config.dataKey];
 
-                      if (config.type == 'heart_rate' && value is double) {
-                        value = value.toInt();
-                      } else if (config.type == 'sleep' && value is double) {
-                        value = value.toStringAsFixed(1);
+                      if (config.type == 'heart_rate' && value is double) value = value.toInt();
+                      else if (config.type == 'sleep' && value is double) value = value.toStringAsFixed(1);
+                      else if (config.type == 'glucose' && value is double) value = value.toStringAsFixed(1);
+                      if (value == null) value = '--';
+
+                      bool isDeviceError = false;
+                      switch (config.type) {
+                        case 'steps':
+                          isDeviceError = data['stepsDeviceError'] ?? false;
+                          break;
+                        case 'heart_rate':
+                          isDeviceError = data['heartRateDeviceError'] ?? false;
+                          break;
+                        case 'calories':
+                          isDeviceError = data['caloriesDeviceError'] ?? false;
+                          break;
+                        case 'sleep':
+                          isDeviceError = data['sleepDeviceError'] ?? false;
+                          break;
+                        case 'glucose':
+                          isDeviceError = data['glucoseDeviceError'] ?? false;
+                          break;
+                        case 'blood_pressure':
+                          isDeviceError = data['bpDeviceError'] ?? false;
+                          break;
                       }
 
-                      if (value == null) value = '--';
                       return _buildHealthCard(
                         title: config.title,
                         value: value,
@@ -628,6 +838,8 @@ class _HomePageState extends State<HomePage> {
                         color: config.color,
                         progress: config.type == 'steps' ? stepsProgress : null, // Only the steps show the progress percentage
                         onRemove: () => _removeMetric(type),
+                        metricType: config.type,
+                        isDeviceError: isDeviceError,
                       );
                     }).toList(),
                   ),
@@ -708,18 +920,14 @@ class _HomePageState extends State<HomePage> {
                                   fontSize: 12,
                                   fontWeight: isAchieved ? FontWeight.w600 : FontWeight.normal,
                                   color: isAchieved ? Colors.green[700] : Colors.grey[600],
-                                ),
-                              ),
-                            ],
-                          );
-                        }),
-                      ),
-                    ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
                   ),
-                ),
-              ],
-            ),
-            // const SizedBox(height: 20),
+                ],
+              ),
                 // sleep progression card
                 /*Container(
                   padding: const EdgeInsets.all(12),
@@ -800,9 +1008,10 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
                 ),*/
-          ),
-        );
-      },
+            ),
+          ],
+        ),
+      ),
     );
   }
 

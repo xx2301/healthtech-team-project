@@ -32,6 +32,11 @@ class _ReportPageState extends State<ReportPage> {
   int _totalCalories = 0;
   double _totalSleepHours = 0;
 
+  double _avgGlucose = 0;
+  int _systolic = 0;
+  int _diastolic = 0;
+  String _bloodPressure = '--/--';
+
   String _reportPeriod = '';
   String _generatedDate = '';
 
@@ -56,6 +61,11 @@ class _ReportPageState extends State<ReportPage> {
   bool _hasHeartRateChange = false;
   bool _hasCaloriesChange = false;
   bool _hasSleepChange = false;
+  bool _hasGlucoseChange = false;
+  double _glucoseChangePercent = 0.0;
+  bool _hasBpChange = false;
+  double _systolicChangePercent = 0.0;
+  double _diastolicChangePercent = 0.0;
 
   DateTime? _selectedStartDate;
   DateTime? _selectedEndDate;
@@ -195,7 +205,6 @@ class _ReportPageState extends State<ReportPage> {
 
         _calculateStats(mainMetrics);
         _prepareChartData(mainMetrics);
-
         _calculateChangePercentages(mainMetrics, lastWeekMetrics);
 
         int achievedDays = 0;
@@ -270,6 +279,29 @@ class _ReportPageState extends State<ReportPage> {
     final sleepMetrics = metrics.where((m) => m.metricType == 'sleep_duration').toList();
     _totalSleepHours = sleepMetrics.fold<double>(
         0, (sum, m) => sum + (m.value as num).toDouble());
+    
+    final glucoseMetrics = metrics.where((m) => m.metricType == 'glucose').toList();
+    if (glucoseMetrics.isNotEmpty) {
+      _avgGlucose = glucoseMetrics.fold<double>(
+          0, (sum, m) => sum + (m.value as num).toDouble()) / glucoseMetrics.length;
+    } else {
+      _avgGlucose = 0;
+    }
+
+    final bpMetrics = metrics.where((m) => m.metricType == 'blood_pressure').toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    if (bpMetrics.isNotEmpty) {
+      final val = bpMetrics.first.value;
+      if (val is Map) {
+        _systolic = (val['systolic'] as num?)?.toInt() ?? 0;
+        _diastolic = (val['diastolic'] as num?)?.toInt() ?? 0;
+        _bloodPressure = '$_systolic/$_diastolic';
+      } else {
+        _bloodPressure = '--/--';
+      }
+    } else {
+      _bloodPressure = '--/--';
+    }
   }
 
   void _prepareChartData(List<HealthMetric> metrics) {
@@ -337,6 +369,63 @@ class _ReportPageState extends State<ReportPage> {
     } else {
       _hasSleepChange = false;
     }
+
+    // Glucose Change
+    double thisGlucose = 0;
+    int glucoseCount = 0;
+    for (var m in thisWeek) {
+      if (m.metricType == 'glucose') {
+        thisGlucose += (m.value as num).toDouble();
+        glucoseCount++;
+      }
+    }
+    double lastGlucose = 0;
+    int lastGlucoseCount = 0;
+    for (var m in lastWeek) {
+      if (m.metricType == 'glucose') {
+        lastGlucose += (m.value as num).toDouble();
+        lastGlucoseCount++;
+      }
+    }
+    double thisGlucoseAvg = glucoseCount > 0 ? thisGlucose / glucoseCount : 0;
+    double lastGlucoseAvg = lastGlucoseCount > 0 ? lastGlucose / lastGlucoseCount : 0;
+    if (lastGlucoseAvg > 0) {
+      _glucoseChangePercent = ((thisGlucoseAvg - lastGlucoseAvg) / lastGlucoseAvg) * 100;
+      _hasGlucoseChange = true;
+    } else {
+      _hasGlucoseChange = false;
+    }
+
+    // BP Avg
+    double thisSystolicSum = 0, thisDiastolicSum = 0;
+    int thisBpCount = 0;
+    for (var m in thisWeek) {
+      if (m.metricType == 'blood_pressure' && m.value is Map) {
+        thisSystolicSum += (m.value['systolic'] as num).toDouble();
+        thisDiastolicSum += (m.value['diastolic'] as num).toDouble();
+        thisBpCount++;
+      }
+    }
+    double lastSystolicSum = 0, lastDiastolicSum = 0;
+    int lastBpCount = 0;
+    for (var m in lastWeek) {
+      if (m.metricType == 'blood_pressure' && m.value is Map) {
+        lastSystolicSum += (m.value['systolic'] as num).toDouble();
+        lastDiastolicSum += (m.value['diastolic'] as num).toDouble();
+        lastBpCount++;
+      }
+    }
+    double thisSystolicAvg = thisBpCount > 0 ? thisSystolicSum / thisBpCount : 0;
+    double thisDiastolicAvg = thisBpCount > 0 ? thisDiastolicSum / thisBpCount : 0;
+    double lastSystolicAvg = lastBpCount > 0 ? lastSystolicSum / lastBpCount : 0;
+    double lastDiastolicAvg = lastBpCount > 0 ? lastDiastolicSum / lastBpCount : 0;
+    if (lastSystolicAvg > 0) {
+      _systolicChangePercent = ((thisSystolicAvg - lastSystolicAvg) / lastSystolicAvg) * 100;
+      _diastolicChangePercent = ((thisDiastolicAvg - lastDiastolicAvg) / lastDiastolicAvg) * 100;
+      _hasBpChange = true;
+    } else {
+      _hasBpChange = false;
+    }
   }
 
   String _formatDate(DateTime date) {
@@ -371,9 +460,9 @@ class _ReportPageState extends State<ReportPage> {
       );
     }
   }
+
   Future<void> _selectDateRange() async {
     final now = DateTime.now();
-    print('firstDate: ${DateTime(2020)}'); // to check
     final DateTimeRange? picked = await showDateRangePicker(
       context: context,
       firstDate: DateTime(2020),
@@ -393,7 +482,7 @@ class _ReportPageState extends State<ReportPage> {
 
   Future<void> _showAddMetricDialog() async {
     final metricTypes = [
-      'steps', 'heart_rate', 'blood_pressure', 'blood_glucose',
+      'steps', 'heart_rate', 'blood_pressure', 'glucose',
       'weight', 'height', 'body_temperature', 'oxygen_saturation',
       'sleep_duration', 'calories_burned', 'water_intake', 'respiratory_rate'
     ];
@@ -1225,6 +1314,162 @@ class _ReportPageState extends State<ReportPage> {
                         ],
                       ),
                     ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.pushNamed(
+                        context,
+                        '/metric-detail',
+                        arguments: {
+                          'metricType': 'glucose',
+                          'title': 'Glucose',
+                        },
+                      );
+                    },
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text("Glucose", style: TextStyle(fontWeight: FontWeight.bold)),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5),
+                              decoration: BoxDecoration(
+                                color: _hasGlucoseChange && _glucoseChangePercent >= 0 ? Colors.green[100] : Colors.red[100],
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                _hasGlucoseChange
+                                    ? '${_glucoseChangePercent >= 0 ? '+' : ''}${_glucoseChangePercent.toStringAsFixed(1)}%'
+                                    : '—',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${_avgGlucose.toStringAsFixed(1)} mmol/L',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+                        ),
+                        const Text("Average glucose this week", style: TextStyle(fontSize: 10)),
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              children: [
+                                Text(
+                                  '${_avgGlucose.toStringAsFixed(1)}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                const Text("Avg", style: TextStyle(fontSize: 10)),
+                              ],
+                            ),
+                            Column(
+                              children: const [
+                                Text("3.9–7.8", style: TextStyle(fontWeight: FontWeight.bold)),
+                                Text("Normal Range", style: TextStyle(fontSize: 10)),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.pushNamed(
+                        context,
+                        '/metric-detail',
+                        arguments: {
+                          'metricType': 'blood_pressure',
+                          'title': 'Blood Pressure',
+                        },
+                      );
+                    },
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text("Blood Pressure", style: TextStyle(fontWeight: FontWeight.bold)),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5),
+                              decoration: BoxDecoration(
+                                color: _hasBpChange ? Colors.green[100] : Colors.red[100],
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                _hasBpChange
+                                    ? '${_systolicChangePercent >= 0 ? '+' : ''}${_systolicChangePercent.toStringAsFixed(1)}%'
+                                    : '—',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _bloodPressure,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+                        ),
+                        const Text("Latest reading", style: TextStyle(fontSize: 10)),
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              children: [
+                                Text(
+                                  '$_systolic / $_diastolic',
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                const Text("Today", style: TextStyle(fontSize: 10)),
+                              ],
+                            ),
+                            Column(
+                              children: const [
+                                Text("<120/80", style: TextStyle(fontWeight: FontWeight.bold)),
+                                Text("Optimal", style: TextStyle(fontSize: 10)),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
