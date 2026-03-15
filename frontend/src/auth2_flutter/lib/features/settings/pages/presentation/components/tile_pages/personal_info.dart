@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:auth2_flutter/features/data/domain/entities/app_user.dart';
+import 'dart:async';
 
 class PersonalInfo extends StatefulWidget {
   const PersonalInfo({super.key});
@@ -28,11 +29,21 @@ class _PersonalInfoState extends State<PersonalInfo> {
   Map<String, dynamic>? _fullProfile;
   bool _isLoadingMedical = false;
   String? _medicalError;
+  List<dynamic> _sessions = [];
+  bool _loadingSessions = false;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _fetchFullProfile();
+    _fetchSessions();
+
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted) {
+        _fetchSessions(silent: true);
+      }
+    });
   }
 
   Future<String?> _getToken() async {
@@ -82,6 +93,68 @@ class _PersonalInfoState extends State<PersonalInfo> {
         _isLoadingMedical = false;
       });
     }
+  }
+
+  Future<void> _fetchSessions({bool silent = false}) async {
+    if (!silent) setState(() => _loadingSessions = true);
+    try {
+      final token = await _getToken();
+      if (token == null) {
+        if (!silent) setState(() => _loadingSessions = false);
+        return;
+      }
+
+      final response = await http.get(
+        Uri.parse('${_getBaseUrl()}/api/sessions'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        setState(() {
+          _sessions = json['data'] ?? [];
+          if (!silent) _loadingSessions = false;
+        });
+      } else {
+        if (!silent) setState(() => _loadingSessions = false);
+        print('Failed to load sessions: ${response.body}');
+      }
+    } catch (e) {
+      if (!silent) setState(() => _loadingSessions = false);
+      print('Error fetching sessions: $e');
+    }
+  }
+
+  Future<void> _terminateSession(String sessionId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return;
+
+      final response = await http.delete(
+        Uri.parse('${_getBaseUrl()}/api/sessions/$sessionId'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        _fetchSessions(); // 刷新列表
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Session terminated')),
+        );
+      } else {
+        final error = jsonDecode(response.body)['error'] ?? 'Failed to terminate';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $error')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
+  String _formatDateTime(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
 
   Widget infoRow({
@@ -514,9 +587,75 @@ class _PersonalInfoState extends State<PersonalInfo> {
 
             // ===== Card 2: Medical Record =====
             if (_buildMedicalRecordCard() != null) _buildMedicalRecordCard()!,
+
+            const SizedBox(height: 12),
+
+            // ===== Card 3: Active Sessions =====
+            sectionCard(
+              title: "Active Sessions",
+              onEdit: () {}, // No editing function, can be left blank or add a refresh action
+              children: [
+                if (_loadingSessions)
+                  const Center(child: CircularProgressIndicator())
+                else if (_sessions.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Center(child: Text('No other sessions')),
+                  )
+                else
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _sessions.length,
+                    itemBuilder: (ctx, i) {
+                      final s = _sessions[i];
+                      final isCurrent = s['isCurrent'] ?? false;
+                      final deviceName = s['deviceName'] ?? 'Unknown device';
+                      final lastActive = s['lastActiveAt'] != null
+                          ? DateTime.parse(s['lastActiveAt'])
+                          : DateTime.now();
+                      final deviceType = s['deviceType'] ?? 'unknown';
+
+                      IconData icon;
+                      if (deviceType == 'mobile') icon = Icons.phone_android;
+                      else if (deviceType == 'tablet') icon = Icons.tablet;
+                      else if (deviceType == 'desktop') icon = Icons.computer;
+                      else icon = Icons.device_unknown;
+
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        child: ListTile(
+                          leading: Icon(icon),
+                          title: Text(deviceName),
+                          subtitle: Text('Last active: ${_formatDateTime(lastActive)}'),
+                          trailing: isCurrent
+                              ? const Chip(
+                                  label: Text('Current'),
+                                  backgroundColor: Colors.green,
+                                  labelStyle: TextStyle(color: Colors.white),
+                                )
+                              : TextButton(
+                                  onPressed: () => _terminateSession(s['_id']),
+                                  child: const Text(
+                                    'Terminate',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                ),
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
           ],
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 }

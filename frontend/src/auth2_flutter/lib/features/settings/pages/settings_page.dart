@@ -89,9 +89,9 @@ class SettingsPage extends StatelessWidget {
 
               SettingsTile(
                 icon: Icons.flag,
-                title: 'Aims',
+                title: 'Health Goals',
                 isLinkTile: true,
-                routeName: '/homepage',
+                routeName: '/goals',
               ),
 
               SettingsTile(
@@ -102,6 +102,12 @@ class SettingsPage extends StatelessWidget {
                 onSwitchChanged: (val) {
                   // handle toggle
                 },
+              ),
+              SettingsTile(
+                icon: Icons.lock,
+                title: 'Change Password',
+                isLinkTile: true,
+                routeName: '/change-password',
               ),
 
               const SizedBox(height: 10),
@@ -126,15 +132,22 @@ class SettingsPage extends StatelessWidget {
               ),
 
               SettingsTile(
-                icon: Icons.phone_android,
-                title: 'Device Management',
+                icon: Icons.health_and_safety,
+                title: 'Health Devices',
                 isLinkTile: true,
                 routeName: '/devicepage',
               ),
 
               SettingsTile(
-                icon: Icons.bar_chart,
-                title: 'Unit',
+                icon: Icons.warning,
+                title: 'Health Alerts',
+                isLinkTile: true,
+                routeName: '/thresholds',
+              ),
+
+              SettingsTile(
+                icon: Icons.scale,
+                title: 'Measurement Unit',
                 isLinkTile: true,
                 routeName: '/homepage',
               ),
@@ -144,12 +157,6 @@ class SettingsPage extends StatelessWidget {
                 title: 'Language',
                 isLinkTile: true,
                 routeName: '/homepage',
-              ),
-              SettingsTile(
-                icon: Icons.lock,
-                title: 'Change Password',
-                isLinkTile: true,
-                routeName: '/change-password',
               ),
 
               const SizedBox(height: 10),
@@ -163,6 +170,13 @@ class SettingsPage extends StatelessWidget {
                 ),
               ),
 
+              SettingsTile(
+                icon: Icons.medical_services,
+                title: 'Apply as Doctor',
+                isLinkTile: true,
+                routeName: '/apply-doctor',
+              ),
+              
               SettingsTile(
                 icon: Icons.question_mark,
                 title: 'Help',

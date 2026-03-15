@@ -1,12 +1,12 @@
-import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
-import 'package:auth2_flutter/features/data/domain/presentation/components/bar_graph.dart';
-import 'package:auth2_flutter/features/data/domain/presentation/components/drawer.dart';
-import 'package:auth2_flutter/features/data/domain/presentation/components/info_cards.dart';
-import 'package:auth2_flutter/features/data/domain/presentation/components/line_graph.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubit.dart';
 import 'package:auth2_flutter/features/data/domain/entities/health_metric.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/components/drawer.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/components/info_cards.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/components/line_graph.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/components/bar_graph.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -43,8 +43,10 @@ class _ReportPageState extends State<ReportPage> {
   String _searchName = '';
   bool _isAdmin = false;
 
-  String _viewingUserName = ''; 
+  String _viewingUserName = '';
   bool _viewingAll = true;
+
+  String? _currentViewingUserId;
 
   bool get _canEditGoal {
     if (!_isAdmin) return true;
@@ -78,7 +80,25 @@ class _ReportPageState extends State<ReportPage> {
   @override
   void initState() {
     super.initState();
-    _fetchHealthData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final args = ModalRoute.of(context)?.settings.arguments as Map?;
+      print('ReportPage received args: $args');
+      if (args != null && args.containsKey('userId')) {
+        final userId = args['userId'] as String;
+        final userName = args['userName'] as String? ?? 'Patient';
+
+        _currentViewingUserId = userId;
+
+        _fetchHealthData(specificUserId: userId);
+
+        setState(() {
+          _viewingUserName = userName;
+          _viewingAll = false;
+        });
+      } else {
+        _fetchHealthData(specificUserId: _currentViewingUserId);
+      }
+    });
     _searchController.clear();
   }
 
@@ -92,8 +112,6 @@ class _ReportPageState extends State<ReportPage> {
     if (Platform.isAndroid) return 'http://10.0.2.2:3001';
     if (Platform.isIOS) return 'http://localhost:3001';
     return 'http://localhost:3001';
-    // return 'http://192.168.0.3:3001'; // Connect wifi ip
-    // return 'http://172.20.10.2:3001'; // Connect hotspot ip
   }
 
   Future<void> _fetchHealthData({String? specificUserId}) async {
@@ -134,10 +152,15 @@ class _ReportPageState extends State<ReportPage> {
       };
       final mainUrl = Uri.parse('${_getBaseUrl()}/api/health-metrics')
           .replace(queryParameters: mainParams);
+      
+      print('Fetching health metrics from: $mainUrl');
+
       final mainResponse = await http.get(
         mainUrl,
         headers: {'Authorization': 'Bearer $token'},
       );
+      print('Response status: ${mainResponse.statusCode}');
+      // print('Response body: ${mainResponse.body}'); // dont add first because data large
 
       // fetch goals
       try {
@@ -148,7 +171,7 @@ class _ReportPageState extends State<ReportPage> {
         if (goalsResponse.statusCode == 200) {
           final goalsJson = jsonDecode(goalsResponse.body);
           final List<dynamic> goalsData = goalsJson['data'] ?? [];
-          
+
           final stepsGoalObj = goalsData.firstWhere(
             (g) => g['goalType'] == 'steps',
             orElse: () => null,
@@ -156,7 +179,7 @@ class _ReportPageState extends State<ReportPage> {
           if (stepsGoalObj != null) {
             _stepsGoal = stepsGoalObj['targetValue']?.toInt() ?? _stepsGoal;
           }
-          
+
           final caloriesGoalObj = goalsData.firstWhere(
             (g) => g['goalType'] == 'calories_burned',
             orElse: () => null,
@@ -224,10 +247,7 @@ class _ReportPageState extends State<ReportPage> {
         _reportPeriod = '${_formatDate(start)} - ${_formatDate(end)}';
         _generatedDate = _formatDate(now);
 
-        if (specificUserId != null) {
-          _viewingUserName = 'your own data';
-          _viewingAll = false;
-        } else if (_searchName.isNotEmpty) {
+        if (_searchName.isNotEmpty) {
           _viewingUserName = _searchName;
           _viewingAll = false;
         } else {
@@ -263,7 +283,7 @@ class _ReportPageState extends State<ReportPage> {
     final heartMetrics = metrics.where((m) => m.metricType == 'heart_rate').toList();
     if (heartMetrics.isNotEmpty) {
       _avgHeartRate = heartMetrics
-              .where((m) => !m.isAbnormal) //ignore abnormal
+              .where((m) => !m.isAbnormal)
               .fold<double>(0, (sum, m) => sum + (m.value as num).toDouble()) /
           heartMetrics.length;
     } else {
@@ -279,7 +299,7 @@ class _ReportPageState extends State<ReportPage> {
     final sleepMetrics = metrics.where((m) => m.metricType == 'sleep_duration').toList();
     _totalSleepHours = sleepMetrics.fold<double>(
         0, (sum, m) => sum + (m.value as num).toDouble());
-    
+
     final glucoseMetrics = metrics.where((m) => m.metricType == 'glucose').toList();
     if (glucoseMetrics.isNotEmpty) {
       _avgGlucose = glucoseMetrics.fold<double>(
@@ -436,8 +456,7 @@ class _ReportPageState extends State<ReportPage> {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return months[month - 1];
   }
-  
-  // to test only
+
   Future<void> _generateSimulatedData() async {
     final token = await _getToken();
     if (token == null) return;
@@ -450,7 +469,7 @@ class _ReportPageState extends State<ReportPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Simulated data generated')),
         );
-        _fetchHealthData();
+        _fetchHealthData(specificUserId: _currentViewingUserId);
       } else {
         throw Exception('Failed to generate data');
       }
@@ -476,7 +495,7 @@ class _ReportPageState extends State<ReportPage> {
         _selectedStartDate = picked.start;
         _selectedEndDate = picked.end;
       });
-      _fetchHealthData();
+      _fetchHealthData(specificUserId: _currentViewingUserId);
     }
   }
 
@@ -660,7 +679,7 @@ class _ReportPageState extends State<ReportPage> {
             body: jsonEncode({'targetValue': newValue}),
           );
           if (updateResponse.statusCode == 200) {
-            _fetchHealthData();
+            _fetchHealthData(specificUserId: _currentViewingUserId);
           } else {
             throw Exception('Failed to update goal');
           }
@@ -680,7 +699,7 @@ class _ReportPageState extends State<ReportPage> {
             }),
           );
           if (createResponse.statusCode == 201) {
-            _fetchHealthData();
+            _fetchHealthData(specificUserId: _currentViewingUserId);
           } else {
             throw Exception('Failed to create goal');
           }
@@ -716,7 +735,7 @@ class _ReportPageState extends State<ReportPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Data added successfully')),
         );
-        await _fetchHealthData();
+        await _fetchHealthData(specificUserId: _currentViewingUserId);
       } else {
         final error = jsonDecode(response.body)['error'] ?? 'Failed to add data';
         throw Exception(error);
@@ -779,7 +798,14 @@ class _ReportPageState extends State<ReportPage> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        appBar: DefaultAppBar(),
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text('Health Report'),
+          backgroundColor: Colors.green[500],
+        ),
         drawer: DefaultDrawer(),
         body: const Center(child: CircularProgressIndicator()),
       );
@@ -787,14 +813,28 @@ class _ReportPageState extends State<ReportPage> {
 
     if (_error != null) {
       return Scaffold(
-        appBar: DefaultAppBar(),
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text('Health Report'),
+          backgroundColor: Colors.green[500],
+        ),
         drawer: DefaultDrawer(),
         body: Center(child: Text('Error: $_error')),
       );
     }
 
     return Scaffold(
-      appBar: DefaultAppBar(),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text('Health Report'),
+        backgroundColor: Colors.green[500],
+      ),
       drawer: DefaultDrawer(),
       body: SingleChildScrollView(
         child: Padding(
@@ -803,14 +843,12 @@ class _ReportPageState extends State<ReportPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (_metrics.isNotEmpty) ...[
-                
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Page Title
                     Text(
-                      "Health Report", 
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 25)
+                      "Health Report",
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
                     ),
                     Row(
                       children: [
@@ -838,20 +876,19 @@ class _ReportPageState extends State<ReportPage> {
                         ),
                         const SizedBox(width: 8),
                         IconButton(
-                          icon: Icon(Icons.refresh),
+                          icon: const Icon(Icons.refresh),
                           onPressed: () {
                             setState(() {
                               _selectedStartDate = null;
                               _selectedEndDate = null;
                             });
-                            _fetchHealthData();
+                            _fetchHealthData(specificUserId: _currentViewingUserId);
                           },
-                          tooltip: 'Reset to last 7 days',
                         ),
                         const SizedBox(width: 8),
                         if (kDebugMode)
                           ElevatedButton(
-                            onPressed: _generateSimulatedData, // test only
+                            onPressed: _generateSimulatedData,
                             child: const Text('Test'),
                           ),
                       ],
@@ -876,22 +913,21 @@ class _ReportPageState extends State<ReportPage> {
                           ),
                           contentPadding: const EdgeInsets.symmetric(vertical: 10),
                         ),
-                        //onChanged: (value) => _searchName = value,
                         onSubmitted: (_) {
                           setState(() {
                             _searchName = _searchController.text;
                           });
-                          _fetchHealthData();
+                          _fetchHealthData(specificUserId: _currentViewingUserId);
                         },
                       ),
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton(
-                      onPressed: (){
-                        setState((){
+                      onPressed: () {
+                        setState(() {
                           _searchName = _searchController.text;
                         });
-                        _fetchHealthData();
+                        _fetchHealthData(specificUserId: _currentViewingUserId);
                       },
                       child: const Text('Search'),
                     ),
@@ -906,7 +942,6 @@ class _ReportPageState extends State<ReportPage> {
                   child: _buildEmptyState(),
                 )
               else ...[
-                // Page Subtitle
                 Text(
                   _isAdmin
                       ? (_viewingAll
@@ -917,31 +952,6 @@ class _ReportPageState extends State<ReportPage> {
                 ),
                 const SizedBox(height: 10),
 
-                /*Text(
-                  "Your health data overview and analysis",
-                  style: TextStyle(color: Colors.grey[700], fontSize: 15),
-                ),
-                const SizedBox(height: 10),
-
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    _isAdmin
-                        ? (_viewingAll
-                            ? 'Showing data for all users'
-                            : 'Showing data for: $_viewingUserName')
-                        : 'Your health data',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey[700],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 10),*/                
-
                 SizedBox(
                   height: 120,
                   child: GridView.count(
@@ -950,9 +960,8 @@ class _ReportPageState extends State<ReportPage> {
                     mainAxisSpacing: 20,
                     padding: const EdgeInsets.symmetric(horizontal: 0),
                     children: [
-                      // Report Info Card Duration
                       MouseRegion(
-                        onEnter: (_) => _periodCardHoverColor.value = Colors.grey[300], // mouse on it colour
+                        onEnter: (_) => _periodCardHoverColor.value = Colors.grey[300],
                         onExit: (_) => _periodCardHoverColor.value = null,
                         child: ValueListenableBuilder<Color?>(
                           valueListenable: _periodCardHoverColor,
@@ -962,30 +971,18 @@ class _ReportPageState extends State<ReportPage> {
                               child: InfoCards(
                                 title: "Report Period",
                                 subtitle: _reportPeriod,
-                                backgroundColor: hoverColor ?? const Color(0xFFE6F2E6), // default
+                                backgroundColor: hoverColor ?? const Color(0xFFE6F2E6),
                               ),
                             );
                           },
                         ),
                       ),
-
-                      /*GestureDetector(
-                        onTap: _selectDateRange,
-                        child: InfoCards(
-                          title: "Report Period",
-                          subtitle: _reportPeriod,
-                        ),
-                      ),*/
-
-                      // Report Info Card Creation Date
                       InfoCards(
-                        title: "Generated On", 
+                        title: "Generated On",
                         subtitle: _generatedDate,
                       ),
-
-                      // Report Info Card Goals Achieved
                       InfoCards(
-                        title: "Goals Acheived", 
+                        title: "Goals Achieved",
                         subtitle: "$_goalsAchievedDays/7 Days",
                       ),
                     ],
@@ -993,7 +990,7 @@ class _ReportPageState extends State<ReportPage> {
                 ),
                 const SizedBox(height: 10),
 
-                // Steps Health Card
+                // Steps Card
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -1012,12 +1009,7 @@ class _ReportPageState extends State<ReportPage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            "Steps",
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-
-                          // steps progress status
+                          Text("Steps", style: TextStyle(fontWeight: FontWeight.bold)),
                           Container(
                             padding: EdgeInsets.only(left: 5, right: 5),
                             decoration: BoxDecoration(
@@ -1033,19 +1025,12 @@ class _ReportPageState extends State<ReportPage> {
                           ),
                         ],
                       ),
-
-                      // total value of steps this week
                       Text(
                         _totalSteps.toString(),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 25,
-                        ),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
                       ),
                       const Text("Total steps this week", style: TextStyle(fontSize: 10)),
                       const SizedBox(height: 10),
-
-                      // steps progress bar
                       LinearProgressIndicator(
                         value: 0.75,
                         valueColor: const AlwaysStoppedAnimation(Colors.green),
@@ -1058,7 +1043,6 @@ class _ReportPageState extends State<ReportPage> {
                         children: [
                           Column(
                             children: [
-                              // daily average steps
                               Text(
                                 (_totalSteps / 7).toStringAsFixed(0),
                                 style: const TextStyle(fontWeight: FontWeight.bold),
@@ -1068,15 +1052,8 @@ class _ReportPageState extends State<ReportPage> {
                           ),
                           Column(
                             children: const [
-                              // total steps last week
-                              Text(
-                                "N/A", 
-                                style: TextStyle(fontWeight: FontWeight.bold)
-                                ),
-                              Text(
-                                "Last Week", 
-                                style: TextStyle(fontSize: 10)
-                                ),
+                              Text("N/A", style: TextStyle(fontWeight: FontWeight.bold)),
+                              Text("Last Week", style: TextStyle(fontSize: 10)),
                             ],
                           ),
                           if (_canEditGoal)
@@ -1084,7 +1061,7 @@ class _ReportPageState extends State<ReportPage> {
                               onTap: () => _showEditGoalDialog('steps', _stepsGoal),
                               child: _buildGoalColumn(_stepsGoal),
                             )
-                          else 
+                          else
                             _buildGoalColumn(_stepsGoal),
                         ],
                       ),
@@ -1093,7 +1070,7 @@ class _ReportPageState extends State<ReportPage> {
                 ),
                 const SizedBox(height: 10),
 
-                // heart rate health card
+                // Heart Rate Card
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -1113,8 +1090,6 @@ class _ReportPageState extends State<ReportPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text("Heart Rate", style: TextStyle(fontWeight: FontWeight.bold)),
-
-                          // steps progress status
                           Container(
                             padding: EdgeInsets.only(left: 5, right: 5),
                             decoration: BoxDecoration(
@@ -1130,15 +1105,11 @@ class _ReportPageState extends State<ReportPage> {
                           ),
                         ],
                       ),
-
-                      //heart rate value
                       Text(
                         '${_avgHeartRate.toStringAsFixed(0)} BPM',
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
                       ),
                       const Text("Average heart rate", style: TextStyle(fontSize: 10)),
-
-                      // heart rate line graph
                       SizedBox(height: 150, child: LineGraph(dataPoints: _heartRatePoints)),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1164,8 +1135,8 @@ class _ReportPageState extends State<ReportPage> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                
-                // calories health card
+
+                // Calories Card
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -1185,8 +1156,6 @@ class _ReportPageState extends State<ReportPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text("Calories", style: TextStyle(fontWeight: FontWeight.bold)),
-
-                          // steps progress status
                           Container(
                             padding: EdgeInsets.only(left: 5, right: 5),
                             decoration: BoxDecoration(
@@ -1208,8 +1177,6 @@ class _ReportPageState extends State<ReportPage> {
                       ),
                       const Text("Active calories burned this week", style: TextStyle(fontSize: 10)),
                       const SizedBox(height: 10),
-
-                      // steps progress bar
                       LinearProgressIndicator(
                         value: 0.55,
                         valueColor: const AlwaysStoppedAnimation(Colors.green),
@@ -1249,7 +1216,7 @@ class _ReportPageState extends State<ReportPage> {
                 ),
                 const SizedBox(height: 10),
 
-                // sleep card
+                // Sleep Card
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -1269,8 +1236,6 @@ class _ReportPageState extends State<ReportPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text("Sleep", style: TextStyle(fontWeight: FontWeight.bold)),
-                          
-                          // steps progress status
                           Container(
                             padding: EdgeInsets.only(left: 5, right: 5),
                             decoration: BoxDecoration(
@@ -1318,6 +1283,7 @@ class _ReportPageState extends State<ReportPage> {
                 ),
                 const SizedBox(height: 10),
 
+                // Glucose Card
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -1396,6 +1362,7 @@ class _ReportPageState extends State<ReportPage> {
                 ),
                 const SizedBox(height: 10),
 
+                // Blood Pressure Card
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -1496,8 +1463,8 @@ class _ReportPageState extends State<ReportPage> {
                       Row(
                         children: [
                           Text("$_goalsAchievedDays/7", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-                          SizedBox(width: 10),
-                          Text("Goals Achieved This Week", style: TextStyle(fontSize: 10)),
+                          const SizedBox(width: 10),
+                          const Text("Goals Achieved This Week", style: TextStyle(fontSize: 10)),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -1513,7 +1480,6 @@ class _ReportPageState extends State<ReportPage> {
                         ),
                         child: const Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          // Weekly Health Summary
                           children: [
                             Text("Weekly Insight", style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
                             SizedBox(height: 4),

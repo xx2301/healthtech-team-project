@@ -18,6 +18,7 @@ class _DevicesPageState extends State<DevicesPage> {
   List<dynamic> _devices = [];
   bool _isLoading = true;
   String? _error;
+  String? _syncingDeviceId;
 
   final _nameController = TextEditingController();
   final _typeController = TextEditingController();
@@ -29,6 +30,10 @@ class _DevicesPageState extends State<DevicesPage> {
   void initState() {
     super.initState();
     _fetchDevices();
+  }
+
+  String _formatDateTime(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
 
   Future<String?> _getToken() async {
@@ -88,12 +93,50 @@ class _DevicesPageState extends State<DevicesPage> {
       if (response.statusCode == 201) {
         _fetchDevices();
       } else {
-        throw Exception('Failed to add device');
+        print('Add device failed: ${response.body}');
+        final errorMsg = jsonDecode(response.body)['error'] ?? 'Failed to add device';
+        throw Exception(errorMsg);
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e')),
       );
+    }
+  }
+
+  Future<void> _syncDevice(String deviceId) async {
+    setState(() {
+      _syncingDeviceId = deviceId;
+    });
+
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('Not authenticated');
+
+      final response = await http.post(
+        Uri.parse('${_getBaseUrl()}/api/devices/sync/$deviceId'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        await _fetchDevices();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Device synced successfully')),
+        );
+      } else {
+        final error = jsonDecode(response.body)['error'] ?? 'Sync failed';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $error')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    } finally {
+      setState(() {
+        _syncingDeviceId = null;
+      });
     }
   }
 
@@ -268,7 +311,7 @@ class _DevicesPageState extends State<DevicesPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
-                            'Devices Management',
+                            'Health Devices',
                             style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold),
                           ),
                           Row(
@@ -286,7 +329,16 @@ class _DevicesPageState extends State<DevicesPage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 20),
+
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Text(
+                          "These are your external health devices (e.g., smartwatches, fitness trackers). "
+                          "To manage your logged-in sessions, go to Personal Information.",
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                      ),
+                      const SizedBox(height: 50),
 
                       Center(
                         child: Column(
@@ -298,7 +350,6 @@ class _DevicesPageState extends State<DevicesPage> {
                                   foregroundColor: Colors.black,
                                 ),
                                 onPressed: () {
-                                  // Implement QR code connection (not implemented for now)
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(content: Text('QR linking not implemented yet')),
                                   );
@@ -324,7 +375,7 @@ class _DevicesPageState extends State<DevicesPage> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 50),
 
                       const Text(
                         'My Devices',
@@ -363,92 +414,50 @@ class _DevicesPageState extends State<DevicesPage> {
                                     Text('Type: ${device['type']}'),
                                     if (device['model'] != null && device['model'].isNotEmpty)
                                       Text('Model: ${device['model']}'),
-                                    Text('Status: $status'),
+                                    Text('Status: ${isActive ? status : 'offline'}'),
+                                    if (device['lastSyncAt'] != null)
+                                      Text('Last sync: ${_formatDateTime(DateTime.parse(device['lastSyncAt']))}'),
                                   ],
                                 ),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    if (isError)
-                                      const Tooltip(
-                                        message: 'Device error detected',
-                                        child: Icon(Icons.error, color: Colors.red),
+                                    if (_syncingDeviceId == device['_id'])
+                                      const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                    else ...[
+                                      if (isError)
+                                        const Tooltip(
+                                          message: 'Device error detected',
+                                          child: Icon(Icons.error, color: Colors.red),
+                                        ),
+                                      IconButton(
+                                        icon: const Icon(Icons.sync),
+                                        onPressed: () => _syncDevice(device['_id']),
+                                        tooltip: 'Sync now',
                                       ),
-                                    IconButton(
-                                      icon: Icon(
-                                        isActive ? Icons.toggle_on : Icons.toggle_off,
-                                        color: isActive ? Colors.green : Colors.grey,
+                                      IconButton(
+                                        icon: Icon(
+                                          isActive ? Icons.toggle_on : Icons.toggle_off,
+                                          color: isActive ? Colors.green : Colors.grey,
+                                        ),
+                                        onPressed: () => _toggleDeviceStatus(device['_id'], isActive),
                                       ),
-                                      onPressed: () => _toggleDeviceStatus(device['_id'], isActive),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.bug_report, color: Colors.orange),
-                                      onPressed: () => _simulateFault(device['_id']),
-                                      tooltip: 'Simulate fault',
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete, color: Colors.red),
-                                      onPressed: () => _deleteDevice(device['_id']),
-                                    ),
+                                      IconButton(
+                                        icon: const Icon(Icons.bug_report, color: Colors.orange),
+                                        onPressed: () => _simulateFault(device['_id']),
+                                        tooltip: 'Simulate fault',
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete, color: Colors.red),
+                                        onPressed: () => _deleteDevice(device['_id']),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
                             );
                           },
                         ),
-
-                      const SizedBox(height: 20),
-                      const Text(
-                        'Active Sessions',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 10),
-                      // the devices connected
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              "iPhone 14",
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-                            ),
-                            const Text("Health IOS 1.0.1", style: TextStyle(fontSize: 15)),
-                            const Text(
-                              "Kuala Lumpur, Malaysia · Online",
-                              style: TextStyle(fontSize: 15),
-                            ),
-                            const SizedBox(height: 10),
-                            GestureDetector(
-                              onTap: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Session terminated (demo)')),
-                                );
-                              },
-                              child: const Text(
-                                "Terminate Session",
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  color: Colors.red,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
                 ),

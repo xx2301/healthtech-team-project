@@ -9,6 +9,13 @@ require('dotenv').config();
 const nodemailer = require('nodemailer');
 const { startAutoSimulate } = require('./services/autoSimulateService');
 const deviceRoutes = require('./routes/devices');
+const Session = require('./models/Session');
+const sessionRoutes = require('./routes/sessions');
+const syncRoutes = require('./routes/sync');
+const thresholdRoutes = require('./routes/thresholds');
+const notificationRoutes = require('./routes/notifications');
+const goalRoutes = require('./routes/goals');
+const doctorRoutes = require('./routes/doctor');
 
 const { User, Doctor, Patient, HealthMetric, MedicalRecord, EmergencyContact, DoctorPatientRelation, HealthGoal, SymptomLog, Device, HealthReport, Conversation, ChatMessage} = require('./models/index');
 
@@ -20,6 +27,13 @@ app.use(helmet());
 app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/api/devices', deviceRoutes);
+app.use('/api/sessions', sessionRoutes);
+app.use('/api/devices/sync', syncRoutes);
+app.use('/api/thresholds', thresholdRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/goals', goalRoutes);
+app.use('/api/doctor', doctorRoutes);
 
 app.use((req, res, next) => {
   console.log('=== REQUEST LOG ===');
@@ -95,19 +109,7 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-const requireRole = (...roles) => {
-  return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.userType)) {
-      return res.status(403).json({ 
-        success: false, 
-        error: `Required role: ${roles.join(' or ')}` 
-      });
-    }
-    next();
-  };
-};
-
-app.use('/api/devices', deviceRoutes);
+const { requireRole } = require('./middleware/role');
 
 app.get('/', (req, res) => {
   res.send(`
@@ -318,8 +320,32 @@ app.post('/api/auth/register', [
 
     await user.save();
 
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    const ip = req.ip || req.connection.remoteAddress;
+
+    let deviceType = 'unknown';
+    if (userAgent.includes('Mobile')) deviceType = 'mobile';
+    else if (userAgent.includes('Tablet')) deviceType = 'tablet';
+    else deviceType = 'desktop';
+
+    const sessionCount = await Session.countDocuments({ userId: user._id });
+    if (sessionCount >= 3) {
+      const oldest = await Session.findOne({ userId: user._id }).sort('createdAt');
+      if (oldest) await oldest.deleteOne();
+    }
+
+    const session = new Session({
+      userId: user._id,
+      deviceName: userAgent,
+      deviceType,
+      ipAddress: ip,
+      userAgent,
+      lastActiveAt: new Date()
+    });
+    await session.save();
+
     const token = jwt.sign(
-      { userId: user._id, email: user.email, userType: user.userType },
+      { userId: user._id, email: user.email, userType: user.userType, sessionId: session._id },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -380,11 +406,38 @@ app.post('/api/auth/login', [
     user.updatedAt = new Date();
     await user.save();
 
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    const ip = req.ip || req.connection.remoteAddress;
+
+    let deviceType = 'unknown';
+    if (userAgent.includes('Mobile')) deviceType = 'mobile';
+    else if (userAgent.includes('Tablet')) deviceType = 'tablet';
+    else deviceType = 'desktop';
+
+    // Limit max to 3 active session per user, if exceed, delete the oldest one
+    const sessionCount = await Session.countDocuments({ userId: user._id });
+    if (sessionCount >= 3) {
+      const oldest = await Session.findOne({ userId: user._id }).sort('createdAt');
+      if (oldest) await oldest.deleteOne();
+    }
+
+    const session = new Session({
+      userId: user._id,
+      deviceName: userAgent,  // after that can change to parse device name from userAgent
+      deviceType,
+      ipAddress: ip,
+      userAgent,
+      lastActiveAt: new Date()
+    });
+    await session.save();
+
     const token = jwt.sign(
       { 
         userId: user._id, 
         email: user.email,
-        userType: user.userType 
+        userType: user.userType,
+        role: user.role,
+        sessionId: session._id,
       },
       JWT_SECRET,
       { expiresIn: '24h' }
@@ -452,13 +505,38 @@ app.post('/api/admin/login', [
     user.lastLogin = new Date();
     await user.save();
 
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    const ip = req.ip || req.connection.remoteAddress;
+
+    let deviceType = 'unknown';
+    if (userAgent.includes('Mobile')) deviceType = 'mobile';
+    else if (userAgent.includes('Tablet')) deviceType = 'tablet';
+    else deviceType = 'desktop';
+
+    const sessionCount = await Session.countDocuments({ userId: user._id });
+    if (sessionCount >= 3) {
+      const oldest = await Session.findOne({ userId: user._id }).sort('createdAt');
+      if (oldest) await oldest.deleteOne();
+    }
+
+    const session = new Session({
+      userId: user._id,
+      deviceName: userAgent,
+      deviceType,
+      ipAddress: ip,
+      userAgent,
+      lastActiveAt: new Date()
+    });
+    await session.save();
+
     const token = jwt.sign(
       { 
         userId: user._id, 
         email: user.email,
         userType: user.userType,
         role: user.role,
-        permissions: user.permissions
+        permissions: user.permissions,
+        sessionId: session._id,
       },
       JWT_SECRET,
       { expiresIn: '24h' }
@@ -598,59 +676,44 @@ app.post('/api/user/apply-for-doctor', authenticateToken, [
   try {
     const user = await User.findById(req.user.userId);
     
-    if (!user) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
-    
-    const existingDoctor = await Doctor.findOne({ userId: user._id });
-    if (existingDoctor) {
-      return res.status(400).json({ 
-        success: false, 
-        error: existingDoctor.approvalStatus === 'approved' 
-          ? 'You are already a doctor' 
-          : 'You already have a pending doctor application'
+    if (user.doctorProfileId) {
+      return res.status(400).json({
+        success: false,
+        error: 'You are already a doctor'
       });
     }
-    
-    const existingLicense = await Doctor.findOne({ 
-      medicalLicenseNumber: req.body.medicalLicenseNumber.toUpperCase() 
+
+    const existingApplication = await Doctor.findOne({ 
+      userId: user._id, 
+      approvalStatus: 'pending' 
     });
-    
-    if (existingLicense) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Medical license number already registered' 
+    if (existingApplication) {
+      return res.status(400).json({
+        success: false,
+        error: 'You already have a pending doctor application'
       });
     }
-    
+
     const doctor = new Doctor({
       userId: user._id,
-      medicalLicenseNumber: req.body.medicalLicenseNumber.toUpperCase(),
+      medicalLicenseNumber: req.body.medicalLicenseNumber,
       specialization: req.body.specialization,
       hospitalAffiliation: req.body.hospitalAffiliation,
       department: req.body.department,
       yearsOfExperience: req.body.yearsOfExperience,
-      consultationFee: req.body.consultationFee || 0,
-      qualifications: req.body.qualifications || [],
-      bio: req.body.bio,
-      languagesSpoken: req.body.languagesSpoken || [],
+      consultationFee: req.body.consultationFee,
       approvalStatus: 'pending'
     });
-    
     await doctor.save();
-    
-    user.accountStatus = 'pending_doctor_approval';
-    await user.save();
-    
+
     res.status(201).json({
       success: true,
-      message: 'Doctor application submitted successfully. Waiting for admin approval.',
-      applicationId: doctor._id
+      message: 'Application submitted successfully',
+      data: doctor
     });
-    
   } catch (error) {
-    console.error('Submit doctor application error:', error);
-    res.status(500).json({ success: false, error: 'Failed to submit doctor application' });
+    console.error('Doctor application error:', error);
+    res.status(500).json({ success: false, error: 'Failed to submit application' });
   }
 });
 
@@ -664,6 +727,7 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
+// admin add patient
 app.post('/api/admin/create-patient', authenticateToken, requireAdmin, [
   body('userId').isMongoId(),
   body('weight').optional().isFloat({ min: 0, max: 500 }),
@@ -1631,28 +1695,67 @@ app.get('/api/health-metrics', authenticateToken, async (req, res) => {
       } else if (requestedPatientId) {
         query.patientId = requestedPatientId;
       } else if (search) {
-        console.log('Admin search for:', search);
         const users = await User.find({
           $or: [
             { fullName: { $regex: search, $options: 'i' } },
             { email: { $regex: search, $options: 'i' } }
           ]
         }).select('_id');
-        console.log('Found users:', users.map(u => ({ id: u._id, fullName: u.fullName, email: u.email })));
         const userIds = users.map(u => u._id);
-        console.log('User IDs:', userIds);
         query.userId = { $in: userIds };
       }
-    } else if (user.userType === 'patient' || user.userType === 'user') {
+    }
+    else if (user.role === 'patient' || user.role === 'user') {
       query.userId = user._id;
-    } else if (user.userType === 'doctor') {
-      const relations = await DoctorPatientRelation.find({ doctorId: user._id, status: 'active' }).select('patientId');
-      const patientIds = relations.map(r => r.patientId);
-      if (patientIds.length === 0) {
-        return res.json({ success: true, data: [], pagination: { total: 0, page: parseInt(page), limit: parseInt(limit), pages: 0 } });
+    }
+    else if (user.userType === 'doctor' || user.role === 'doctor') {
+      console.log('=== Doctor branch ===');
+      console.log('requestedUserId:', requestedUserId);
+      console.log('doctorProfileId:', user.doctorProfileId);
+
+      if (requestedUserId) {
+        console.log('Fetching data for specific userId:', requestedUserId);
+        const patientUser = await User.findById(requestedUserId);
+        console.log('patientUser found:', !!patientUser);
+        if (!patientUser || patientUser.role !== 'patient') {
+          console.log('Patient user not found or role not patient');
+          return res.status(404).json({ success: false, error: 'Patient user not found' });
+        }
+        const patient = await Patient.findOne({ userId: patientUser._id });
+        console.log('patient found:', !!patient);
+        if (!patient) {
+          console.log('Patient profile not found');
+          return res.status(404).json({ success: false, error: 'Patient profile not found' });
+        }
+        const relation = await DoctorPatientRelation.findOne({
+          doctorId: user.doctorProfileId,
+          patientId: patient._id,
+          status: 'active'
+        });
+        console.log('relation found:', !!relation);
+        if (!relation) {
+          console.log('No active relation');
+          return res.status(403).json({ success: false, error: 'You are not authorized to view this patient\'s data' });
+        }
+        query.userId = requestedUserId;
+        console.log('Final query:', query);
+      } else {
+        console.log('No specific userId, fetching all patients data');
+        const relations = await DoctorPatientRelation.find({ doctorId: user.doctorProfileId, status: 'active' }).select('patientId');
+        console.log('relations count:', relations.length);
+        const patientIds = relations.map(r => r.patientId);
+        if (patientIds.length === 0) {
+          console.log('No relations found');
+          return res.json({ success: true, data: [], pagination: { total: 0, page: parseInt(page), limit: parseInt(limit), pages: 0 } });
+        }
+        const patients = await Patient.find({ _id: { $in: patientIds } }).select('userId');
+        console.log('patients count:', patients.length);
+        const userIds = patients.map(p => p.userId);
+        query.userId = { $in: userIds };
+        console.log('userIds:', userIds);
       }
-      query.patientId = { $in: patientIds };
-    } else {
+    }
+    else {
       return res.status(403).json({ success: false, error: 'Access denied' });
     }
 
@@ -1669,7 +1772,16 @@ app.get('/api/health-metrics', authenticateToken, async (req, res) => {
       HealthMetric.countDocuments(query)
     ]);
 
-    res.json({ success: true, data: metrics, pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / limit) } });
+    res.json({
+      success: true,
+      data: metrics,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
   } catch (error) {
     console.error('Fetch health metrics error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch health metrics' });
@@ -2145,24 +2257,60 @@ app.post('/api/doctor-patient-relations', authenticateToken, requireRole('doctor
   }
 });
 
+// doctor search for patient
 app.get('/api/doctors/patients', authenticateToken, requireRole('doctor'), async (req, res) => {
   try {
+    const doctorUser = await User.findById(req.user.userId).select('doctorProfileId');
+    if (!doctorUser || !doctorUser.doctorProfileId) {
+      return res.status(400).json({ success: false, error: 'Doctor profile not found' });
+    }
+    const doctorId = doctorUser.doctorProfileId;
+
     const relations = await DoctorPatientRelation.find({ 
-      doctorId: req.user.userId,
+      doctorId: doctorId,
       status: 'active'
-    }).populate('patient', 'fullName patientCode dateOfBirth gender');
-    
-    const patients = relations.map(relation => ({
-      ...relation.patient.toObject(),
-      relationType: relation.relationType,
-      permissions: relation.permissions
+    }).populate('patient');
+
+    const patients = await Promise.all(relations.map(async (relation) => {
+      const patient = relation.patient;
+      const user = await User.findById(patient.userId).select('fullName email gender');
+      
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const stepsMetrics = await HealthMetric.find({
+        userId: patient.userId,
+        metricType: 'steps',
+        timestamp: { $gte: sevenDaysAgo }
+      });
+      const totalSteps = stepsMetrics.reduce((sum, m) => sum + (m.value || 0), 0);
+      
+      const latestHeartRate = await HealthMetric.findOne({
+        userId: patient.userId,
+        metricType: 'heart_rate'
+      }).sort({ timestamp: -1 });
+      
+      const latestSleep = await HealthMetric.findOne({
+        userId: patient.userId,
+        metricType: 'sleep_duration'
+      }).sort({ timestamp: -1 });
+
+      return {
+        _id: patient._id,
+        patientCode: patient.patientCode,
+        fullName: user?.fullName || 'Unknown',
+        email: user?.email || '',
+        gender: user?.gender || 'unknown',
+        userId: patient.userId,
+        relationType: relation.relationType,
+        permissions: relation.permissions,
+        healthSummary: {
+          steps7Days: totalSteps,
+          latestHeartRate: latestHeartRate ? latestHeartRate.value : null,
+          latestSleep: latestSleep ? latestSleep.value : null,
+        }
+      };
     }));
-    
-    res.status(200).json({
-      success: true,
-      data: patients,
-      count: patients.length
-    });
+
+    res.status(200).json({ success: true, data: patients, count: patients.length });
   } catch (error) {
     console.error('Fetch patients error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch patients list' });

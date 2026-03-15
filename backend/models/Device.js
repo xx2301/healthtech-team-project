@@ -1,104 +1,57 @@
 const mongoose = require('mongoose');
 
 const deviceSchema = new mongoose.Schema({
-  deviceUUID: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true
-  },
-  
-  deviceName: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  
-  patientId: {
+  userId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Patient'
+    ref: 'User',
+    required: true,
+    index: true
   },
-  
-  platform: {
+  name: {
     type: String,
-    enum: ['ios', 'android', 'web', 'wearable', 'medical_device']
+    required: true,
+    trim: true
   },
-  
-  manufacturer: String,
-  
-  model: String,
-  
-  batteryLevel: {
-    type: Number,
-    min: 0,
-    max: 100
-  },
-  
-  connectionType: {
+  type: {
     type: String,
-    enum: ['bluetooth', 'wifi', 'cellular', 'usb']
+    required: true,
+    trim: true
   },
-  
-  lastKnownLocation: {
-    type: {
-      type: String,
-      enum: ['Point'],
-      default: 'Point'
-    },
-    coordinates: {
-      type: [Number],  //[longitude, latitude]
-      default: [0, 0]
-    }
+  model: {
+    type: String,
+    default: ''
   },
-  
-  lastSyncTime: {
-    type: Date,
-    default: Date.now
+  manufacturer: {
+    type: String,
+    default: ''
   },
-  
-  appVersion: String,
-  
-  osVersion: String,
-  
+  serialNumber: {
+    type: String,
+    default: ''
+  },
   isActive: {
     type: Boolean,
     default: true
   },
-  
-  capabilities: [{
+  status: {
     type: String,
-    enum: ['heart_rate', 'steps', 'sleep', 'blood_pressure', 'glucose', 'oxygen']
-  }],
-  
-  settings: {
-    syncFrequency: { type: Number, default: 300 }, //default is 5mins
-    dataSharing: { type: Boolean, default: true },
-    notifications: { type: Boolean, default: true }
+    enum: ['online', 'offline', 'error'],
+    default: 'online'
   },
-  
-  metadata: mongoose.Schema.Types.Mixed
+  externalSource: {
+    type: String,
+    enum: ['apple_health', 'google_fit', 'garmin', 'fitbit', 'other', null],
+    default: null
+  },
+  lastSyncAt: {
+    type: Date,
+    default: null
+  }
 }, {
   timestamps: true
 });
 
-deviceSchema.index({ lastKnownLocation: '2dsphere' });
-
-deviceSchema.index({ deviceUUID: 1 }, { unique: true });
-deviceSchema.index({ patientId: 1 });
-deviceSchema.index({ isActive: 1 });
-
-deviceSchema.methods.updateSyncTime = function() {
-  this.lastSyncTime = new Date();
-  return this.save();
-};
-
-deviceSchema.methods.needsSync = function() {
-  const now = new Date();
-  const lastSync = this.lastSyncTime;
-  const syncFrequency = this.settings?.syncFrequency || 300; //default is 5mins
-  
-  return (now - lastSync) > (syncFrequency * 1000);
-};
+deviceSchema.index({ userId: 1, type: 1 });
 
 const Device = mongoose.model('Device', deviceSchema);
 

@@ -65,9 +65,29 @@ class DefaultDrawer extends StatelessWidget {
                 },
               ),
 
+            if (user?.role == 'admin' || user?.role == 'super_admin')
+              ListTile(
+                leading: const Icon(Icons.admin_panel_settings),
+                title: const Text('Admin Dashboard'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/admin');
+                },
+              ),
+
+            if (user?.role == 'doctor')
+              ListTile(
+                leading: Icon(Icons.medical_services),
+                title: Text("M Y   P A T I E N T S"),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/doctor-dashboard');
+                },
+              ),
+
             ListTile(
-              leading: Icon(Icons.computer),
-              title: Text("D E V I C E S "),
+              leading: Icon(Icons.health_and_safety),
+              title: Text("H E A L T H   D E V I C E"),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushNamed(context, '/devicepage');

@@ -18,6 +18,13 @@ import 'package:provider/provider.dart';
 import 'features/data/domain/presentation/repos/backend_auth_repo_impl.dart';
 import 'features/medical_record/presentation/pages/medical_records_page.dart';
 import 'package:auth2_flutter/features/report/presentation/pages/metric_detail_page.dart';
+import 'package:auth2_flutter/features/thresholds/pages/threshold_settings_page.dart';
+import 'package:auth2_flutter/features/notifications/pages/notification_list_page.dart';
+import 'package:auth2_flutter/features/goals/pages/goals_page.dart';
+import 'package:auth2_flutter/features/doctor/pages/doctor_dashboard.dart';
+import 'package:auth2_flutter/features/auth/pages/apply_doctor_page.dart';
+import 'package:auth2_flutter/features/admin/admin_page.dart';
+import 'package:auth2_flutter/features/admin/admin_review_application.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,6 +70,13 @@ class MyApp extends StatelessWidget {
                     title: args['title'],
                   );
                 },
+                '/notifications': (context) => NotificationListPage(),
+                '/thresholds': (context) => ThresholdSettingsPage(),
+                '/goals': (context) => const GoalsPage(),
+                '/doctor-dashboard': (context) => const DoctorDashboard(),
+                '/apply-doctor': (context) => const ApplyDoctorPage(),
+                '/admin': (context) => const AdminDashboard(),
+                '/admin/review': (context) => const AdminReviewApplications(),  
               },
               theme: mainTheme,
               darkTheme: darkTheme,

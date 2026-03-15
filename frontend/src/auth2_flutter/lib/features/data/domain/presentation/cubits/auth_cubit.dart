@@ -9,7 +9,6 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:auth2_flutter/features/data/domain/entities/app_user.dart';
 
 class AuthCubit extends Cubit<AuthState> {
   final AuthRepo authRepo;
