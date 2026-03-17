@@ -13,6 +13,7 @@ const Session = require('./models/Session');
 const sessionRoutes = require('./routes/sessions');
 const syncRoutes = require('./routes/sync');
 const thresholdRoutes = require('./routes/thresholds');
+const Notification = require('./models/Notification');
 const notificationRoutes = require('./routes/notifications');
 const goalRoutes = require('./routes/goals');
 const doctorRoutes = require('./routes/doctor');
@@ -683,18 +684,39 @@ app.post('/api/user/apply-for-doctor', authenticateToken, [
       });
     }
 
-    const existingApplication = await Doctor.findOne({ 
-      userId: user._id, 
-      approvalStatus: 'pending' 
-    });
-    if (existingApplication) {
-      return res.status(400).json({
-        success: false,
-        error: 'You already have a pending doctor application'
+    let doctor = await Doctor.findOne({ userId: user._id });
+
+    if (doctor) {
+      if (doctor.approvalStatus === 'approved') {
+        return res.status(400).json({
+          success: false,
+          error: 'You are already a doctor'
+        });
+      }
+      if (doctor.approvalStatus === 'pending') {
+        return res.status(400).json({
+          success: false,
+          error: 'You already have a pending doctor application'
+        });
+      }
+      doctor.medicalLicenseNumber = req.body.medicalLicenseNumber;
+      doctor.specialization = req.body.specialization;
+      doctor.hospitalAffiliation = req.body.hospitalAffiliation;
+      doctor.department = req.body.department;
+      doctor.yearsOfExperience = req.body.yearsOfExperience;
+      doctor.consultationFee = req.body.consultationFee;
+      doctor.approvalStatus = 'pending';
+      doctor.rejectionReason = null;
+      await doctor.save();
+
+      return res.status(200).json({
+        success: true,
+        message: 'Application resubmitted successfully',
+        data: doctor
       });
     }
 
-    const doctor = new Doctor({
+    doctor = new Doctor({
       userId: user._id,
       medicalLicenseNumber: req.body.medicalLicenseNumber,
       specialization: req.body.specialization,
@@ -1020,7 +1042,7 @@ app.post('/api/admin/approve-doctor/:doctorId', authenticateToken, requireAdmin,
     
     doctor.approvalStatus = 'approved';
     doctor.approvedBy = req.user.userId;
-    doctor.approvedAt = new Date();
+    doctor.approvalDate = new Date();
     
     await doctor.save();
     
@@ -1028,6 +1050,14 @@ app.post('/api/admin/approve-doctor/:doctorId', authenticateToken, requireAdmin,
       accountStatus: 'active',
       doctorProfileId: doctor._id,
       role: 'doctor'
+    });
+
+    await Notification.create({
+      userId: doctor.userId,
+      type: 'system',
+      title: 'Doctor Application Approved',
+      message: 'Your application to become a doctor has been approved. You can now access doctor features.',
+      data: { doctorId: doctor._id }
     });
     
     res.json({
@@ -1066,11 +1096,24 @@ app.post('/api/admin/reject-doctor/:doctorId', authenticateToken, requireAdmin, 
     
     doctor.approvalStatus = 'rejected';
     doctor.rejectionReason = req.body.rejectionReason;
+    doctor.rejectedBy = req.user.userId;
+    doctor.rejectedAt = new Date();
     
     await doctor.save();
     
     await User.findByIdAndUpdate(doctor.userId, {
       accountStatus: 'active'
+    });
+
+    const reasonMessage = req.body.rejectionReason 
+        ? ` Reason: ${req.body.rejectionReason}` 
+        : '';
+    await Notification.create({
+      userId: doctor.userId,
+      type: 'system',
+      title: 'Doctor Application Rejected',
+      message: `Your application to become a doctor has been rejected.${reasonMessage}`,
+      data: { doctorId: doctor._id, rejectionReason: req.body.rejectionReason }
     });
     
     res.json({
@@ -1714,31 +1757,36 @@ app.get('/api/health-metrics', authenticateToken, async (req, res) => {
       console.log('doctorProfileId:', user.doctorProfileId);
 
       if (requestedUserId) {
-        console.log('Fetching data for specific userId:', requestedUserId);
-        const patientUser = await User.findById(requestedUserId);
-        console.log('patientUser found:', !!patientUser);
-        if (!patientUser || patientUser.role !== 'patient') {
-          console.log('Patient user not found or role not patient');
-          return res.status(404).json({ success: false, error: 'Patient user not found' });
+        if (requestedUserId.toString() === req.user.userId.toString()) {
+          console.log('Doctor viewing own data');
+          query.userId = requestedUserId;
+        } else {
+          console.log('Fetching data for specific userId:', requestedUserId);
+          const patientUser = await User.findById(requestedUserId);
+          console.log('patientUser found:', !!patientUser);
+          if (!patientUser || patientUser.role !== 'patient') {
+            console.log('Patient user not found or role not patient');
+            return res.status(404).json({ success: false, error: 'Patient user not found' });
+          }
+          const patient = await Patient.findOne({ userId: patientUser._id });
+          console.log('patient found:', !!patient);
+          if (!patient) {
+            console.log('Patient profile not found');
+            return res.status(404).json({ success: false, error: 'Patient profile not found' });
+          }
+          const relation = await DoctorPatientRelation.findOne({
+            doctorId: user.doctorProfileId,
+            patientId: patient._id,
+            status: 'active'
+          });
+          console.log('relation found:', !!relation);
+          if (!relation) {
+            console.log('No active relation');
+            return res.status(403).json({ success: false, error: 'You are not authorized to view this patient\'s data' });
+          }
+          query.userId = requestedUserId;
+          console.log('Final query:', query);
         }
-        const patient = await Patient.findOne({ userId: patientUser._id });
-        console.log('patient found:', !!patient);
-        if (!patient) {
-          console.log('Patient profile not found');
-          return res.status(404).json({ success: false, error: 'Patient profile not found' });
-        }
-        const relation = await DoctorPatientRelation.findOne({
-          doctorId: user.doctorProfileId,
-          patientId: patient._id,
-          status: 'active'
-        });
-        console.log('relation found:', !!relation);
-        if (!relation) {
-          console.log('No active relation');
-          return res.status(403).json({ success: false, error: 'You are not authorized to view this patient\'s data' });
-        }
-        query.userId = requestedUserId;
-        console.log('Final query:', query);
       } else {
         console.log('No specific userId, fetching all patients data');
         const relations = await DoctorPatientRelation.find({ doctorId: user.doctorProfileId, status: 'active' }).select('patientId');

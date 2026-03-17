@@ -68,7 +68,7 @@ class DefaultDrawer extends StatelessWidget {
             if (user?.role == 'admin' || user?.role == 'super_admin')
               ListTile(
                 leading: const Icon(Icons.admin_panel_settings),
-                title: const Text('Admin Dashboard'),
+                title: const Text('A D M I N   D A S H B O A R D'),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.pushNamed(context, '/admin');

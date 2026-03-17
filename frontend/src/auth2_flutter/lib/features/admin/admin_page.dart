@@ -1,6 +1,10 @@
-import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
-import 'package:auth2_flutter/features/data/domain/presentation/components/drawer.dart';
 import 'package:flutter/material.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/components/appbar_backarrow.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -10,11 +14,50 @@ class AdminDashboard extends StatefulWidget {
 }
 
 class _AdminDashboardState extends State<AdminDashboard> {
+  int _pendingCount = 0;
+
+  Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token');
+  }
+
+  String _getBaseUrl() {
+    if (kIsWeb) return 'http://localhost:3001';
+    if (Platform.isAndroid) return 'http://10.0.2.2:3001';
+    if (Platform.isIOS) return 'http://localhost:3001';
+    return 'http://localhost:3001';
+  }
+
+  Future<void> _fetchPendingCount() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return;
+      final response = await http.get(
+        Uri.parse('${_getBaseUrl()}/api/admin/pending-doctor-applications'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        final List<dynamic> data = json['data'] ?? [];
+        setState(() {
+          _pendingCount = data.length;
+        });
+      }
+    } catch (e) {
+      print('Error fetching pending count: $e');
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchPendingCount();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: DefaultAppBar(),
-      drawer: DefaultDrawer(),
+      appBar: const BackButtonAppBar(),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(15.0),
         child: Column(
@@ -316,22 +359,44 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
                   // ===== Review Doctor Applications =====
                   const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 44,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pushNamed(context, '/admin/review');
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
-                        elevation: 0,
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        height: 44,
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            await Navigator.pushNamed(context, '/admin/review');
+                            _fetchPendingCount(); // 返回后刷新红点
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: const Text(
+                            'Review Doctor Applications',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ),
                       ),
-                      child: const Text('Review Doctor Applications',
-                          style: TextStyle(color: Colors.white)),
-                    ),
+                      if (_pendingCount > 0)
+                        Positioned(
+                          top: -4,
+                          right: -4,
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ],
               ),

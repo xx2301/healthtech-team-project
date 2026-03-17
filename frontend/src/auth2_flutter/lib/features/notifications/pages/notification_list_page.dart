@@ -214,6 +214,16 @@ class _NotificationListPageState extends State<NotificationListPage> {
                             if (!isRead) {
                               _markAsRead(notification['_id']);
                             }
+                            final type = notification['type'] ?? '';
+                            if (type == 'doctor_application') {
+                              Navigator.pushNamed(context, '/admin/review');
+                            } else if (type == 'threshold_alert') {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Threshold alert')),
+                              );
+                            } else {
+                              // nothing first
+                            }
                           },
                         ),
                       );

@@ -9,7 +9,7 @@ const notificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['threshold_alert', 'system', 'reminder'],
+    enum: ['threshold_alert', 'system', 'reminder','doctor_application'],
     default: 'threshold_alert',
   },
   title: {

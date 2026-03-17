@@ -156,6 +156,7 @@ class _HomePageState extends State<HomePage> {
     if (token == null) throw Exception('Not authenticated');
 
     final now = DateTime.now();
+    final String? currentUserId = (context.read<AuthCubit>().currentUser)?.uid;
 
     // today range
     final startDate = DateTime(now.year, now.month, now.day);
@@ -170,6 +171,7 @@ class _HomePageState extends State<HomePage> {
       'startDate': startDate.toIso8601String(),
       'endDate': endDate.toIso8601String(),
       'limit': '500',
+      if (currentUserId != null) 'userId': currentUserId,
     });
     final todayResponse = await http.get(todayUrl, headers: {'Authorization': 'Bearer $token'});
     if (todayResponse.statusCode != 200) throw Exception('Failed to load today metrics');
@@ -179,6 +181,7 @@ class _HomePageState extends State<HomePage> {
       'startDate': weekStart.toIso8601String(),
       'endDate': weekEnd.toIso8601String(),
       'limit': '500',
+      if (currentUserId != null) 'userId': currentUserId,
     });
     final weekResponse = await http.get(weekUrl, headers: {'Authorization': 'Bearer $token'});
     if (weekResponse.statusCode != 200) throw Exception('Failed to load week metrics');

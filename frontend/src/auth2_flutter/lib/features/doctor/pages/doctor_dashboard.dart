@@ -246,7 +246,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                                   if (userId != null) {
                                     Navigator.pushNamed(
                                       context,
-                                      '/reportpage',
+                                      '/doctor-report',
                                       arguments: {'userId': userId, 'userName': name},
                                     );
                                   }

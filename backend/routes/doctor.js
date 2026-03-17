@@ -2,7 +2,9 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const Patient = require('../models/patient');
+const Doctor = require('../models/doctor');
 const DoctorPatientRelation = require('../models/DoctorPatientRelation');
+const HealthMetric = require('../models/HealthMetric');
 const authenticateToken = require('../middleware/auth');
 const { requireRole } = require('../middleware/role');
 
@@ -49,6 +51,53 @@ router.get('/patients', authenticateToken, async (req, res) => {
 router.get('/patients/:patientId/summary', authenticateToken, async (req, res) => {
   // not implemented yet
   res.json({ success: true, message: 'Summary endpoint' });
+});
+
+router.get('/patient-metrics/:userId', authenticateToken, requireRole('doctor'), async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { startDate, endDate, limit = 500 } = req.query;
+
+    const doctorUser = await User.findById(req.user.userId);
+    if (!doctorUser || !doctorUser.doctorProfileId) {
+      return res.status(400).json({ success: false, error: 'Doctor profile not found' });
+    }
+    const doctorId = doctorUser.doctorProfileId;
+
+    const patientUser = await User.findById(userId);
+    if (!patientUser || patientUser.role !== 'patient') {
+      return res.status(404).json({ success: false, error: 'Patient not found' });
+    }
+    const patient = await Patient.findOne({ userId: patientUser._id });
+    if (!patient) {
+      return res.status(404).json({ success: false, error: 'Patient profile not found' });
+    }
+    const relation = await DoctorPatientRelation.findOne({
+      doctorId,
+      patientId: patient._id,
+      status: 'active'
+    });
+    if (!relation) {
+      return res.status(403).json({ success: false, error: 'You are not authorized to view this patient\'s data' });
+    }
+
+    let query = { userId };
+    if (startDate || endDate) {
+      query.timestamp = {};
+      if (startDate) query.timestamp.$gte = new Date(startDate);
+      if (endDate) query.timestamp.$lte = new Date(endDate);
+    }
+
+    const metrics = await HealthMetric.find(query)
+      .sort({ timestamp: -1 })
+      .limit(parseInt(limit));
+
+    res.json({ success: true, data: metrics });
+  } catch (error) {
+    console.error('Fetch patient metrics error details:', error);
+    console.error('Stack:', error.stack);
+    res.status(500).json({ success: false, error: 'Failed to fetch patient health data', message: error.message });
+  }
 });
 
 router.post('/add-patient', authenticateToken, requireRole('doctor'), async (req, res) => {

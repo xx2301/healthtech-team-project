@@ -13,14 +13,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 
-class ReportPage extends StatefulWidget {
-  const ReportPage({super.key});
+class DoctorReportPage extends StatefulWidget {
+  const DoctorReportPage({super.key});
 
   @override
-  State<ReportPage> createState() => _ReportPageState();
+  State<DoctorReportPage> createState() => _DoctorReportPageState();
 }
 
-class _ReportPageState extends State<ReportPage> {
+class _DoctorReportPageState extends State<DoctorReportPage> {
   List<HealthMetric> _metrics = [];
   bool _isLoading = true;
   String? _error;
@@ -40,18 +40,8 @@ class _ReportPageState extends State<ReportPage> {
   String _reportPeriod = '';
   String _generatedDate = '';
 
-  String _searchName = '';
-  bool _isAdmin = false;
-
   String _viewingUserName = '';
-  bool _viewingAll = true;
-
-  String? _currentViewingUserId;
-
-  bool get _canEditGoal {
-    if (!_isAdmin) return true;
-    return !_viewingAll && _viewingUserName == 'your own data';
-  }
+  String? _viewingUserId;
 
   final _searchController = TextEditingController();
 
@@ -82,31 +72,22 @@ class _ReportPageState extends State<ReportPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final args = ModalRoute.of(context)?.settings.arguments as Map?;
-      print('ReportPage received args: $args');
+      print('DoctorReportPage received args: $args');
       if (args != null && args.containsKey('userId')) {
         final userId = args['userId'] as String;
         final userName = args['userName'] as String? ?? 'Patient';
-        _currentViewingUserId = userId;
+        _viewingUserId = userId;
         _fetchHealthData(specificUserId: userId);
         setState(() {
           _viewingUserName = userName;
-          _viewingAll = false;
         });
       } else {
-        final currentUser = context.read<AuthCubit>().currentUser;
-        if (currentUser != null) {
-          _currentViewingUserId = currentUser.uid;
-          _fetchHealthData(specificUserId: currentUser.uid);
-          setState(() {
-            _viewingUserName = 'your own data';
-            _viewingAll = false;
-          });
-        } else {
-          _fetchHealthData();
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No patient selected')),
+        );
+        Navigator.pop(context);
       }
     });
-    _searchController.clear();
   }
 
   Future<String?> _getToken() async {
@@ -125,11 +106,9 @@ class _ReportPageState extends State<ReportPage> {
     setState(() => _isLoading = true);
 
     try {
+      print('specificUserId in _fetchHealthData: $specificUserId');
       final token = await _getToken();
       if (token == null) throw Exception('Not authenticated');
-
-      final user = context.read<AuthCubit>().currentUser;
-      _isAdmin = user?.role == 'admin' || user?.role == 'super_admin';
 
       final now = DateTime.now();
 
@@ -146,30 +125,25 @@ class _ReportPageState extends State<ReportPage> {
       final lastWeekStart = DateTime(start.year, start.month, start.day - rangeLength);
       final lastWeekEnd = DateTime(end.year, end.month, end.day - rangeLength, 23, 59, 59);
 
-      final baseParams = {
-        'limit': '500',
-        if (_searchName.isNotEmpty) 'search': _searchName,
-        if (specificUserId != null) 'userId': specificUserId,
-        if (_isAdmin && specificUserId == null) 'all': 'true',
-      };
+      String mainUrlStr = '${_getBaseUrl()}/api/doctor/patient-metrics/$specificUserId?limit=500';
+      mainUrlStr += '&startDate=${Uri.encodeComponent(start.toIso8601String())}&endDate=${Uri.encodeComponent(end.toIso8601String())}';
+      Uri mainUrl = Uri.parse(mainUrlStr);
+      print('Fetching health metrics from: $mainUrl');
 
-      final mainParams = {
-        ...baseParams,
-        'startDate': start.toIso8601String(),
-        'endDate': end.toIso8601String(),
-      };
-      final mainUrl = Uri.parse('${_getBaseUrl()}/api/health-metrics')
-          .replace(queryParameters: mainParams);
-      
-      print('My Data URL: $mainUrl');
-
-      final mainResponse = await http.get(
-        mainUrl,
-        headers: {'Authorization': 'Bearer $token'},
-      );
+      var request = http.Request('GET', mainUrl);
+      request.headers['Authorization'] = 'Bearer $token';
+      var streamedResponse = await request.send();
+      var mainResponse = await http.Response.fromStream(streamedResponse);
       print('Response status: ${mainResponse.statusCode}');
 
-      // fetch goals
+      String lastWeekUrlStr = '${_getBaseUrl()}/api/doctor/patient-metrics/$specificUserId?limit=500';
+      lastWeekUrlStr += '&startDate=${Uri.encodeComponent(lastWeekStart.toIso8601String())}&endDate=${Uri.encodeComponent(lastWeekEnd.toIso8601String())}';
+      Uri lastWeekUrl = Uri.parse(lastWeekUrlStr);
+      final lastWeekResponse = await http.get(
+        lastWeekUrl,
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
       try {
         final goalsResponse = await http.get(
           Uri.parse('${_getBaseUrl()}/api/health-goals'),
@@ -199,23 +173,9 @@ class _ReportPageState extends State<ReportPage> {
         print('Error fetching goals: $e');
       }
 
-      final lastWeekParams = {
-        ...baseParams,
-        'startDate': lastWeekStart.toIso8601String(),
-        'endDate': lastWeekEnd.toIso8601String(),
-      };
-      final lastWeekUrl = Uri.parse('${_getBaseUrl()}/api/health-metrics')
-          .replace(queryParameters: lastWeekParams);
-      final lastWeekResponse = await http.get(
-        lastWeekUrl,
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
       if (mainResponse.statusCode == 200 && lastWeekResponse.statusCode == 200) {
         final mainData = jsonDecode(mainResponse.body)['data'] ?? [];
         final lastWeekData = jsonDecode(lastWeekResponse.body)['data'] ?? [];
-        final userIds = mainData.map<String>((e) => e['userId'] as String).toSet();
-        print('Fetched metrics from users: $userIds');
 
         final mainMetrics = mainData.map<HealthMetric?>((e) {
           try {
@@ -256,14 +216,6 @@ class _ReportPageState extends State<ReportPage> {
         _reportPeriod = '${_formatDate(start)} - ${_formatDate(end)}';
         _generatedDate = _formatDate(now);
 
-        if (_searchName.isNotEmpty) {
-          _viewingUserName = _searchName;
-          _viewingAll = false;
-        } else {
-          _viewingUserName = 'all users';
-          _viewingAll = true;
-        }
-
         setState(() {
           _metrics = mainMetrics;
           _isLoading = false;
@@ -288,14 +240,6 @@ class _ReportPageState extends State<ReportPage> {
       }
       return sum;
     });
-    
-    print('Total steps: $_totalSteps');
-    final stepsByUser = <String, int>{};
-    for (var m in metrics.where((m) => m.metricType == 'steps')) {
-      stepsByUser[m.userId] = (stepsByUser[m.userId] ?? 0) + (m.value as num).toInt();
-    }
-    print('Steps by user: $stepsByUser');
-
 
     final heartMetrics = metrics.where((m) => m.metricType == 'heart_rate').toList();
     if (heartMetrics.isNotEmpty) {
@@ -486,7 +430,7 @@ class _ReportPageState extends State<ReportPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Simulated data generated')),
         );
-        _fetchHealthData(specificUserId: _currentViewingUserId);
+        _fetchHealthData(specificUserId: _viewingUserId);
       } else {
         throw Exception('Failed to generate data');
       }
@@ -512,7 +456,7 @@ class _ReportPageState extends State<ReportPage> {
         _selectedStartDate = picked.start;
         _selectedEndDate = picked.end;
       });
-      _fetchHealthData(specificUserId: _currentViewingUserId);
+      _fetchHealthData(specificUserId: _viewingUserId);
     }
   }
 
@@ -696,7 +640,7 @@ class _ReportPageState extends State<ReportPage> {
             body: jsonEncode({'targetValue': newValue}),
           );
           if (updateResponse.statusCode == 200) {
-            _fetchHealthData(specificUserId: _currentViewingUserId);
+            _fetchHealthData(specificUserId: _viewingUserId);
           } else {
             throw Exception('Failed to update goal');
           }
@@ -716,7 +660,7 @@ class _ReportPageState extends State<ReportPage> {
             }),
           );
           if (createResponse.statusCode == 201) {
-            _fetchHealthData(specificUserId: _currentViewingUserId);
+            _fetchHealthData(specificUserId: _viewingUserId);
           } else {
             throw Exception('Failed to create goal');
           }
@@ -752,7 +696,7 @@ class _ReportPageState extends State<ReportPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Data added successfully')),
         );
-        await _fetchHealthData(specificUserId: _currentViewingUserId);
+        await _fetchHealthData(specificUserId: _viewingUserId);
       } else {
         final error = jsonDecode(response.body)['error'] ?? 'Failed to add data';
         throw Exception(error);
@@ -767,35 +711,15 @@ class _ReportPageState extends State<ReportPage> {
   }
 
   Widget _buildEmptyState() {
-    String message = _isAdmin && _searchName.isNotEmpty
-        ? 'No data found for "$_searchName".'
-        : 'You haven\'t imported any health data.\nPlease add manually or sync from device.';
-
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.insert_chart_outlined, size: 80, color: Colors.grey[400]),
           const SizedBox(height: 20),
-          Text(
-            'No health data yet',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.grey[700]),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 30),
-          ElevatedButton.icon(
-            onPressed: _showAddMetricDialog,
-            icon: const Icon(Icons.add),
-            label: const Text('Add Your First Data'),
-            style: ElevatedButton.styleFrom(
-              foregroundColor: Colors.black,
-              backgroundColor: Colors.green[100],
-            ),
+          const Text(
+            'No health data available for this patient',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -820,7 +744,7 @@ class _ReportPageState extends State<ReportPage> {
             icon: const Icon(Icons.arrow_back),
             onPressed: () => Navigator.pop(context),
           ),
-          title: const Text('Health Report'),
+          title: const Text('Patient Report'),
           backgroundColor: Colors.green[500],
         ),
         drawer: DefaultDrawer(),
@@ -835,7 +759,7 @@ class _ReportPageState extends State<ReportPage> {
             icon: const Icon(Icons.arrow_back),
             onPressed: () => Navigator.pop(context),
           ),
-          title: const Text('Health Report'),
+          title: const Text('Patient Report'),
           backgroundColor: Colors.green[500],
         ),
         drawer: DefaultDrawer(),
@@ -849,8 +773,26 @@ class _ReportPageState extends State<ReportPage> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Health Report'),
+        title: Text('Patient Report - $_viewingUserName'),
         backgroundColor: Colors.green[500],
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              setState(() {
+                _selectedStartDate = null;
+                _selectedEndDate = null;
+              });
+              _fetchHealthData(specificUserId: _viewingUserId);
+            },
+          ),
+          if (kDebugMode)
+            IconButton(
+              icon: const Icon(Icons.bug_report),
+              onPressed: _generateSimulatedData,
+              tooltip: 'Generate test data',
+            ),
+        ],
       ),
       drawer: DefaultDrawer(),
       body: SingleChildScrollView(
@@ -860,113 +802,6 @@ class _ReportPageState extends State<ReportPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (_metrics.isNotEmpty) ...[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "Health Report",
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
-                    ),
-                    Row(
-                      children: [
-                        if (_isAdmin) ...[
-                          ElevatedButton(
-                            onPressed: () {
-                              final currentUser = context.read<AuthCubit>().currentUser;
-                              if (currentUser != null) {
-                                _searchName = '';
-                                _fetchHealthData(specificUserId: currentUser.uid);
-                              }
-                            },
-                            child: const Text('My Data'),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        ElevatedButton.icon(
-                          onPressed: _showAddMetricDialog,
-                          icon: const Icon(Icons.add),
-                          label: const Text('Add'),
-                          style: ElevatedButton.styleFrom(
-                            foregroundColor: Colors.black,
-                            backgroundColor: Colors.green[100],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(Icons.refresh),
-                          onPressed: () {
-                            setState(() {
-                              _selectedStartDate = null;
-                              _selectedEndDate = null;
-                            });
-                            _fetchHealthData(specificUserId: _currentViewingUserId);
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        if (kDebugMode)
-                          ElevatedButton(
-                            onPressed: _generateSimulatedData,
-                            child: const Text('Test'),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-              ],
-
-              if (_isAdmin) ...[
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _searchController,
-                        decoration: InputDecoration(
-                          hintText: 'Search by user name',
-                          prefixIcon: const Icon(Icons.search),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                        onSubmitted: (_) {
-                          setState(() {
-                            _searchName = _searchController.text;
-                          });
-                          _fetchHealthData(specificUserId: _currentViewingUserId);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          _searchName = _searchController.text;
-                        });
-                        _fetchHealthData(specificUserId: _currentViewingUserId);
-                      },
-                      child: const Text('Search'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-              ],
-
-              if (_metrics.isEmpty)
-                SizedBox(
-                  height: MediaQuery.of(context).size.height - 150,
-                  child: _buildEmptyState(),
-                )
-              else ...[
-                Text(
-                  _isAdmin
-                      ? (_viewingAll
-                          ? 'Your health data overview and analysis – All users'
-                          : 'Your health data overview and analysis – $_viewingUserName')
-                      : 'Your health data overview and analysis',
-                  style: TextStyle(color: Colors.grey[700], fontSize: 15),
-                ),
                 const SizedBox(height: 10),
 
                 SizedBox(
@@ -1073,13 +908,10 @@ class _ReportPageState extends State<ReportPage> {
                               Text("Last Week", style: TextStyle(fontSize: 10)),
                             ],
                           ),
-                          if (_canEditGoal)
-                            GestureDetector(
-                              onTap: () => _showEditGoalDialog('steps', _stepsGoal),
-                              child: _buildGoalColumn(_stepsGoal),
-                            )
-                          else
-                            _buildGoalColumn(_stepsGoal),
+                          GestureDetector(
+                            onTap: () => _showEditGoalDialog('steps', _stepsGoal),
+                            child: _buildGoalColumn(_stepsGoal),
+                          ),
                         ],
                       ),
                     ],
@@ -1219,13 +1051,10 @@ class _ReportPageState extends State<ReportPage> {
                               Text("Last Week", style: TextStyle(fontSize: 10)),
                             ],
                           ),
-                          if (_canEditGoal)
-                            GestureDetector(
-                              onTap: () => _showEditGoalDialog('calories_burned', _caloriesGoal),
-                              child: _buildGoalColumn(_caloriesGoal),
-                            )
-                          else
-                            _buildGoalColumn(_caloriesGoal),
+                          GestureDetector(
+                            onTap: () => _showEditGoalDialog('calories_burned', _caloriesGoal),
+                            child: _buildGoalColumn(_caloriesGoal),
+                          ),
                         ],
                       ),
                     ],
@@ -1316,14 +1145,7 @@ class _ReportPageState extends State<ReportPage> {
                   ),
                   child: GestureDetector(
                     onTap: () {
-                      Navigator.pushNamed(
-                        context,
-                        '/metric-detail',
-                        arguments: {
-                          'metricType': 'glucose',
-                          'title': 'Glucose',
-                        },
-                      );
+                      // can skip for details page
                     },
                     child: Column(
                       children: [
@@ -1394,16 +1216,7 @@ class _ReportPageState extends State<ReportPage> {
                     ],
                   ),
                   child: GestureDetector(
-                    onTap: () {
-                      Navigator.pushNamed(
-                        context,
-                        '/metric-detail',
-                        arguments: {
-                          'metricType': 'blood_pressure',
-                          'title': 'Blood Pressure',
-                        },
-                      );
-                    },
+                    onTap: () {},
                     child: Column(
                       children: [
                         Row(
@@ -1501,7 +1314,7 @@ class _ReportPageState extends State<ReportPage> {
                             Text("Weekly Insight", style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
                             SizedBox(height: 4),
                             Text(
-                              "He knew what he was supposed to do. Tas supposed to do and what he would do were not the same. This would have been fine if he were willing to face the inevitable consequences, but he wasn't.",
+                              "Patient's health summary for the week.",
                             ),
                           ],
                         ),

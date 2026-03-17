@@ -4,8 +4,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
-import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
-import 'package:auth2_flutter/features/data/domain/presentation/components/drawer.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/components/appbar_backarrow.dart';
 
 class AdminReviewApplications extends StatefulWidget {
   const AdminReviewApplications({Key? key}) : super(key: key);
@@ -66,6 +65,56 @@ class _AdminReviewApplicationsState extends State<AdminReviewApplications> {
   }
 
   Future<void> _handleApplication(String doctorId, bool approve) async {
+    if (approve) {
+      _performAction(doctorId, approve, null);
+    } else {
+      _showRejectReasonDialog(doctorId);
+    }
+  }
+
+  Future<void> _showRejectReasonDialog(String doctorId) {
+    final TextEditingController reasonController = TextEditingController();
+    return showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Reject Application'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Please provide a reason for rejection (optional):'),
+              const SizedBox(height: 10),
+              TextField(
+                controller: reasonController,
+                decoration: const InputDecoration(
+                  hintText: 'Enter reason...',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _performAction(doctorId, false, reasonController.text.trim());
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Confirm Reject'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _performAction(String doctorId, bool approve, String? reason) async {
+    setState(() => _loading = true);
     try {
       final token = await _getToken();
       if (token == null) return;
@@ -73,34 +122,45 @@ class _AdminReviewApplicationsState extends State<AdminReviewApplications> {
       final url = approve
           ? '${_getBaseUrl()}/api/admin/approve-doctor/$doctorId'
           : '${_getBaseUrl()}/api/admin/reject-doctor/$doctorId';
+      
+      final Map<String, dynamic> body = {};
+      if (!approve && reason != null && reason.isNotEmpty) {
+        body['rejectionReason'] = reason;
+      }
+
       final response = await http.post(
         Uri.parse(url),
-        headers: {'Authorization': 'Bearer $token'},
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: body.isNotEmpty ? jsonEncode(body) : null,
       );
 
       if (response.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(approve ? 'Doctor approved' : 'Application rejected')),
         );
-        _fetchApplications(); // 刷新列表
+        _fetchApplications();
       } else {
         final error = jsonDecode(response.body)['error'] ?? 'Action failed';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $error')),
         );
+        setState(() => _loading = false);
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e')),
       );
+      setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: DefaultAppBar(),
-      drawer: DefaultDrawer(),
+      appBar: const BackButtonAppBar(),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _applications.isEmpty
@@ -140,13 +200,19 @@ class _AdminReviewApplicationsState extends State<AdminReviewApplications> {
                                   children: [
                                     ElevatedButton(
                                       onPressed: () => _handleApplication(doctorId, true),
-                                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green,
+                                        foregroundColor: Colors.white,
+                                      ),
                                       child: const Text('Approve'),
                                     ),
                                     const SizedBox(width: 8),
                                     ElevatedButton(
                                       onPressed: () => _handleApplication(doctorId, false),
-                                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                      ),
                                       child: const Text('Reject'),
                                     ),
                                   ],
