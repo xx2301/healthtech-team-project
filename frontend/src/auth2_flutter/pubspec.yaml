@@ -31,8 +31,8 @@ dependencies:
   provider: ^6.1.1
   flutter:
     sdk: flutter
-  
-  
+  fl_chart: ^0.68.0
+  reorderable_grid_view: ^2.2.0
   
 
   # The following adds the Cupertino Icons font to your application.
@@ -45,7 +45,6 @@ dependencies:
   connectivity_plus: ^5.0.2 # this is for checking internet connection
   formz: ^0.6.0 # this is for form validation
   percent_indicator: ^4.2.5
-  fl_chart: ^0.69.0
 
 dev_dependencies:
   flutter_test:
