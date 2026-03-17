@@ -1,4 +1,18 @@
 const mongoose = require('mongoose');
+const CryptoJS = require('crypto-js');
+
+const ENCRYPTION_KEY = process.env.DATA_ENCRYPTION_KEY || 'your-secret-key-32-characters-long';
+
+function encryptValue(value) {
+  const stringValue = JSON.stringify(value);
+  return CryptoJS.AES.encrypt(stringValue, ENCRYPTION_KEY).toString();
+}
+
+function decryptValue(ciphertext) {
+  const bytes = CryptoJS.AES.decrypt(ciphertext, ENCRYPTION_KEY);
+  const decryptedString = bytes.toString(CryptoJS.enc.Utf8);
+  return JSON.parse(decryptedString);
+}
 
 const healthMetricSchema = new mongoose.Schema({
   patientId: {
@@ -115,11 +129,14 @@ healthMetricSchema.pre('save', function(next) {
     
     this.unit = unitMap[this.metricType] || 'unknown';
   }
-  
+
+  next();
+});
+
+healthMetricSchema.pre('save', function(next) {
   if (this.value && !this.isAbnormal) {
     this.detectAbnormal();
   }
-  
   next();
 });
 
@@ -169,6 +186,30 @@ healthMetricSchema.statics.getMetricTrend = function(patientId, metricType, star
   .select('value timestamp')
   .exec();
 };
+
+healthMetricSchema.pre('save', function(next) {
+  if (this.isModified('value')) {
+    try {
+      this.value = encryptValue(this.value);
+    } catch (err) {
+      return next(err);
+    }
+  }
+  next();
+});
+
+healthMetricSchema.set('toJSON', {
+  transform: function(doc, ret) {
+    if (ret.value && typeof ret.value === 'string') {
+      try {
+        ret.value = decryptValue(ret.value);
+      } catch (err) {
+        console.error('Decryption error in toJSON:', err);
+      }
+    }
+    return ret;
+  }
+});
 
 const HealthMetric = mongoose.model('HealthMetric', healthMetricSchema);
 

@@ -1,14 +1,137 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/drawer.dart';
 import 'package:auth2_flutter/features/settings/pages/presentation/components/setting_tiles.dart';
 import 'package:auth2_flutter/themes/main_theme.dart';
-import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubit.dart';
+import 'dart:io';
+import 'package:flutter/services.dart';
 
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  bool _isLoading = false;
+
+  Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token');
+  }
+
+  String _getBaseUrl() {
+    if (kIsWeb) return 'http://localhost:3001';
+    if (Platform.isAndroid) return 'http://10.0.2.2:3001';
+    if (Platform.isIOS) return 'http://localhost:3001';
+    return 'http://localhost:3001';
+  }
+
+  Future<void> _showDeleteAccountDialog(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Account'),
+        content: const Text(
+          'Are you sure you want to permanently delete your account? '
+          'All your health data, devices, and personal information will be lost. '
+          'This action cannot be undone.'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel',),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _deleteAccount();
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    final token = await _getToken();
+    if (token == null) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final response = await http.delete(
+        Uri.parse('${_getBaseUrl()}/api/user/account'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Account deleted successfully')),
+        );
+        context.read<AuthCubit>().logout();
+      } else {
+        final error = jsonDecode(response.body)['error'] ?? 'Failed to delete account';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $error')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _exportData() async {
+    final token = await _getToken();
+    if (token == null) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final response = await http.get(
+        Uri.parse('${_getBaseUrl()}/api/user/export-data'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final jsonString = JsonEncoder.withIndent('  ').convert(data);
+        await Clipboard.setData(ClipboardData(text: jsonString));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Health data copied to clipboard!')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to export: ${response.statusCode}')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -18,175 +141,210 @@ class SettingsPage extends StatelessWidget {
     return Scaffold(
       appBar: DefaultAppBar(),
       drawer: DefaultDrawer(),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(15.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 35,
-                    backgroundColor: Color(0xFFB6D9B6), //soft green
-                    child: Icon(
-                      Icons.person,
-                      size: 40,
-                      color: Color(0xFF4F7F4F),
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            user?.fullName ?? 'User',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w600,
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(15.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 35,
+                          backgroundColor: const Color(0xFFB6D9B6),
+                          child: const Icon(
+                            Icons.person,
+                            size: 40,
+                            color: Color(0xFF4F7F4F),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  user?.fullName ?? 'User',
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                const Text(
+                                  '🌿',
+                                  style: TextStyle(fontSize: 16),
+                                ),
+                              ],
                             ),
-                          ),
-                          SizedBox(width: 6),
-                          Text(
-                            '🌿',
-                            style: TextStyle(fontSize: 16),
-                          ),
-                        ],
+                            const SizedBox(height: 2),
+                            Text(
+                              user != null
+                                  ? '${user.height ?? '?'} cm · ${user.weight ?? '?'} kg'
+                                  : 'Login to see details',
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+
+                    const Text(
+                      "Account",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                        color: Colors.grey,
                       ),
-                      SizedBox(height: 2),
-                      Text(
-                        user != null
-                            ? '${user.height ?? '?'} cm · ${user.weight ?? '?'} kg'
-                            : 'Login to see details',
-                        style: TextStyle(
-                          fontSize: 13,
-                          
+                    ),
+
+                    SettingsTile(
+                      icon: Icons.person,
+                      title: 'Personal Information',
+                      isLinkTile: true,
+                      routeName: '/personalinfopage',
+                    ),
+
+                    SettingsTile(
+                      icon: Icons.flag,
+                      title: 'Health Goals',
+                      isLinkTile: true,
+                      routeName: '/goals',
+                    ),
+
+                    SettingsTile(
+                      icon: Icons.notifications,
+                      title: 'Notifications',
+                      isLinkTile: false,
+                      initialSwitchValue: true,
+                      onSwitchChanged: (val) {
+                        // handle toggle
+                      },
+                    ),
+                    SettingsTile(
+                      icon: Icons.lock,
+                      title: 'Change Password',
+                      isLinkTile: true,
+                      routeName: '/change-password',
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    const Text(
+                      "Preferences",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                        color: Colors.grey,
+                      ),
+                    ),
+
+                    SettingsTile(
+                      icon: Icons.dark_mode,
+                      title: 'Dark Mode',
+                      isLinkTile: false,
+                      initialSwitchValue: Theme.of(context).brightness == Brightness.dark,
+                      onSwitchChanged: (val) {
+                        themeNotifier.toggleTheme(val);
+                      },
+                    ),
+
+                    SettingsTile(
+                      icon: Icons.health_and_safety,
+                      title: 'Health Devices',
+                      isLinkTile: true,
+                      routeName: '/devicepage',
+                    ),
+
+                    SettingsTile(
+                      icon: Icons.warning,
+                      title: 'Health Alerts',
+                      isLinkTile: true,
+                      routeName: '/thresholds',
+                    ),
+
+                    SettingsTile(
+                      icon: Icons.scale,
+                      title: 'Measurement Unit',
+                      isLinkTile: true,
+                      routeName: '/homepage',
+                    ),
+
+                    SettingsTile(
+                      icon: Icons.language,
+                      title: 'Language',
+                      isLinkTile: true,
+                      routeName: '/homepage',
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    const Text(
+                      "Support",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                        color: Colors.grey,
+                      ),
+                    ),
+
+                    SettingsTile(
+                      icon: Icons.medical_services,
+                      title: 'Apply as Doctor',
+                      isLinkTile: true,
+                      routeName: '/apply-doctor',
+                    ),
+
+                    SettingsTile(
+                      icon: Icons.question_mark,
+                      title: 'Help',
+                      isLinkTile: true,
+                      routeName: '/homepage',
+                    ),
+
+                    Container(
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: Colors.grey.shade400, width: 0.7),
                         ),
                       ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              Text(
-                "Account",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                  color: Colors.grey,
+                      child: ListTile(
+                        leading: const Icon(Icons.download),
+                        title: const Text(
+                          'Export My Data',
+                          style: TextStyle(fontSize: 15),
+                        ),
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                        onTap: _exportData,
+                      ),
+                    ),
+                    
+                    Container(
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: Colors.grey.shade400, width: 0.7),
+                        ),
+                      ),
+                      child: ListTile(
+                        leading: const Icon(Icons.delete_forever, color: Colors.red),
+                        title: const Text(
+                          'Delete Account',
+                          style: TextStyle(color: Colors.red, fontSize: 15),
+                        ),
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                        onTap: () => _showDeleteAccountDialog(context),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-
-              SettingsTile(
-                icon: Icons.person,
-                title: 'Personal Information',
-                isLinkTile: true,
-                routeName: '/personalinfopage',
-              ),
-
-              SettingsTile(
-                icon: Icons.flag,
-                title: 'Health Goals',
-                isLinkTile: true,
-                routeName: '/goals',
-              ),
-
-              SettingsTile(
-                icon: Icons.notifications,
-                title: 'Notifications',
-                isLinkTile: false,
-                initialSwitchValue: true,
-                onSwitchChanged: (val) {
-                  // handle toggle
-                },
-              ),
-              SettingsTile(
-                icon: Icons.lock,
-                title: 'Change Password',
-                isLinkTile: true,
-                routeName: '/change-password',
-              ),
-
-              const SizedBox(height: 10),
-
-              Text(
-                "Preferences",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                  color: Colors.grey,
-                ),
-              ),
-
-              SettingsTile(
-                icon: Icons.dark_mode,
-                title: 'Dark Mode',
-                isLinkTile: false,
-                initialSwitchValue: Theme.of(context).brightness == Brightness.dark,
-                onSwitchChanged: (val) {
-                  themeNotifier.toggleTheme(val);
-                },
-              ),
-
-              SettingsTile(
-                icon: Icons.health_and_safety,
-                title: 'Health Devices',
-                isLinkTile: true,
-                routeName: '/devicepage',
-              ),
-
-              SettingsTile(
-                icon: Icons.warning,
-                title: 'Health Alerts',
-                isLinkTile: true,
-                routeName: '/thresholds',
-              ),
-
-              SettingsTile(
-                icon: Icons.scale,
-                title: 'Measurement Unit',
-                isLinkTile: true,
-                routeName: '/homepage',
-              ),
-
-              SettingsTile(
-                icon: Icons.language,
-                title: 'Language',
-                isLinkTile: true,
-                routeName: '/homepage',
-              ),
-
-              const SizedBox(height: 10),
-
-              Text(
-                "Support",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                  color: Colors.grey,
-                ),
-              ),
-
-              SettingsTile(
-                icon: Icons.medical_services,
-                title: 'Apply as Doctor',
-                isLinkTile: true,
-                routeName: '/apply-doctor',
-              ),
-              
-              SettingsTile(
-                icon: Icons.question_mark,
-                title: 'Help',
-                isLinkTile: true,
-                routeName: '/homepage',
-              ),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 }

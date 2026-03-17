@@ -7,11 +7,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:auth2_flutter/features/data/domain/entities/health_metric.dart';
 import 'package:http/http.dart' as http;
+import 'package:percent_indicator/circular_percent_indicator.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:async';
+import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 
 class MetricConfig {
   final String type;
@@ -236,7 +238,7 @@ class _HomePageState extends State<HomePage> {
 
     // glucose
     final glucoseDeviceIds = todayMetrics
-        .where((m) => m.metricType == 'glucose')
+        .where((m) => m.metricType == 'blood_glucose')
         .map((m) => m.deviceId)
         .whereType<String>()
         .toSet();
@@ -273,7 +275,7 @@ class _HomePageState extends State<HomePage> {
     int? latestSystolic;
     int? latestDiastolic;
 
-    final glucoseMetrics = todayMetrics.where((m) => m.metricType == 'glucose').toList();
+    final glucoseMetrics = todayMetrics.where((m) => m.metricType == 'blood_glucose').toList();
     if (glucoseMetrics.isNotEmpty) {
       avgGlucose = glucoseMetrics.map((m) => m.value as double).reduce((a, b) => a + b) / glucoseMetrics.length;
     }
@@ -648,17 +650,50 @@ class _HomePageState extends State<HomePage> {
                         ],
                       ),
                       const SizedBox(height: 12),
+                      // Row(
+                      //   crossAxisAlignment: CrossAxisAlignment.end,
+                      //   children: [
+                      //     Text(
+                      //       "${(stepsProgress * 100).toInt()}%",
+                      //       style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                      //     ),
+                      //     const SizedBox(width: 8),
+                      //     Text(
+                      //       "of daily goal",
+                      //       style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      //     ),
+                      //   ],
+                      // ),
+
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text(
-                            "${(stepsProgress * 100).toInt()}%",
-                            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                          CircularPercentIndicator(
+                            radius: 40.0,
+                            lineWidth: 8.0,
+                            percent: stepsProgress,
+                            center: Text(
+                              "${(stepsProgress * 100).toInt()}%",
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                            progressColor: Colors.blue,
+                            backgroundColor: Colors.grey[300]!,
+                            circularStrokeCap: CircularStrokeCap.round,
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            "of daily goal",
-                            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Daily Goal",
+                                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                                ),
+                                Text(
+                                  "$todaySteps / $stepsGoal steps",
+                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -676,94 +711,6 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                
-                /*Row(
-                  children: [
-                    Text(
-                      "Good afternoon, ",
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: Colors.grey[700],
-                      ),
-                    ),
-                    
-                    //dynamic name
-                    Text(
-                      user.fullName?.isNotEmpty == true 
-                          ? user.fullName!
-                          : user.email.split('@')[0],
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue[900],
-                      ),
-                    ),
-                  ],
-                ),
-
-                if (user.age != null || user.height != null || user.weight != null)
-                  Container(
-                    margin: const EdgeInsets.only(top: 10),
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.green[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.green.shade100, width: 1),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        if (user.age != null && user.age!.isNotEmpty)
-                          _buildUserInfoItem("Age", "${user.age} yrs"),
-                        if (user.height != null && user.height!.isNotEmpty)
-                          _buildUserInfoItem("Height", "${user.height} cm"),
-                        if (user.weight != null && user.weight!.isNotEmpty)
-                          _buildUserInfoItem("Weight", "${user.weight} kg"),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 20),
-            
-                Row(
-                  children: [
-                    Text(
-                      "Health details",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Icon(
-                      Icons.arrow_forward_ios,
-                      size: 14,
-                      color: Colors.grey[600],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-
-                //weather
-                Text("Weather is Sunny, perfect for a walk!"),
-
-                const SizedBox(height: 20),
-
-                //progress header
-                Text("Today's Progress: ${(stepsProgress * 100).toInt()}%"),
-
-                //steps progress bar
-                Text("$todaySteps / $stepsGoal steps"), 
-                LinearProgressIndicator(
-                  value: stepsProgress,
-                  valueColor: const AlwaysStoppedAnimation(Colors.black),
-                ),
-
-                const SizedBox(height: 10),
-
-                //progress report
-                Text(progressMessage),
-
-                const SizedBox(height: 20),*/
 
                 // My Health 标题
                 Row(

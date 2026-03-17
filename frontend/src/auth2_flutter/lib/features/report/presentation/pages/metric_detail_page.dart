@@ -25,26 +25,39 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
   bool _loading = true;
   String? _errorMessage;
 
-  // Single-value metric data
   List<FlSpot> _spots = [];
-  double _thisWeekAvg = 0;
-  double _lastWeekAvg = 0;
-  double _todayValue = 0;
-
-  // Blood Pressure Index Data (Hyperbolic Curve)
   List<FlSpot> _systolicSpots = [];
   List<FlSpot> _diastolicSpots = [];
-  double _thisWeekAvgSystolic = 0;
-  double _thisWeekAvgDiastolic = 0;
-  double _lastWeekAvgSystolic = 0;
-  double _lastWeekAvgDiastolic = 0;
+  List<int> _hoursWithData = [];
+
+  double _todayTotal = 0;
+  double _todayAvg = 0;
   double _todaySystolic = 0;
   double _todayDiastolic = 0;
+
+  String get _backendMetricType {
+    switch (widget.metricType) {
+      case 'calories':
+        return 'calories_burned';
+      case 'sleep':
+        return 'sleep_duration';
+      case 'glucose':
+        return 'blood_glucose';
+      default:
+        return widget.metricType;
+    }
+  }
+
+  bool get _useBarChart {
+    return widget.metricType == 'steps' ||
+           widget.metricType == 'calories' ||
+           widget.metricType == 'sleep';
+  }
 
   @override
   void initState() {
     super.initState();
-    _loadHistory();
+    _loadTodayData();
   }
 
   String _getBaseUrl() {
@@ -59,7 +72,7 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
     return prefs.getString('auth_token');
   }
 
-  Future<void> _loadHistory() async {
+  Future<void> _loadTodayData() async {
     setState(() {
       _loading = true;
       _errorMessage = null;
@@ -70,14 +83,13 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
       if (token == null) throw Exception('Not authenticated');
 
       final now = DateTime.now();
-      // The past 14 days (including today)
-      final startDate = DateTime(now.year, now.month, now.day - 13);
+      final startDate = DateTime(now.year, now.month, now.day);
       final endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
       final url = Uri.parse('${_getBaseUrl()}/api/health-metrics').replace(queryParameters: {
         'startDate': startDate.toIso8601String(),
         'endDate': endDate.toIso8601String(),
-        'metricType': widget.metricType,
+        'metricType': _backendMetricType,
         'limit': '1000',
       });
 
@@ -87,112 +99,104 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
       final data = jsonDecode(response.body)['data'] as List;
       final metrics = data.map((e) => HealthMetric.fromJson(e)).toList();
 
+      metrics.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+      if (metrics.isEmpty) {
+        setState(() {
+          _loading = false;
+          _errorMessage = 'No data for today';
+        });
+        return;
+      }
+
       if (widget.metricType == 'blood_pressure') {
-        // Blood pressure data processing (object format)
-        final Map<DateTime, List<dynamic>> dailyValues = {};
+        Map<int, List<double>> systolicMap = {};
+        Map<int, List<double>> diastolicMap = {};
+
+        double sumSystolic = 0;
+        double sumDiastolic = 0;
+        int totalPoints = 0;
+
         for (var m in metrics) {
-          final day = DateTime(m.timestamp.year, m.timestamp.month, m.timestamp.day);
-          dailyValues.putIfAbsent(day, () => []).add(m.value);
+          final hour = m.timestamp.hour;
+          final value = m.value;
+          if (value is Map && value.containsKey('systolic') && value.containsKey('diastolic')) {
+            double systolic = (value['systolic'] as num).toDouble();
+            double diastolic = (value['diastolic'] as num).toDouble();
+
+            systolicMap.putIfAbsent(hour, () => []).add(systolic);
+            diastolicMap.putIfAbsent(hour, () => []).add(diastolic);
+
+            sumSystolic += systolic;
+            sumDiastolic += diastolic;
+            totalPoints++;
+          }
         }
 
         List<FlSpot> systolicSpots = [];
         List<FlSpot> diastolicSpots = [];
-        double thisWeekSystolicSum = 0, thisWeekDiastolicSum = 0;
-        int thisWeekCount = 0;
-        double lastWeekSystolicSum = 0, lastWeekDiastolicSum = 0;
-        int lastWeekCount = 0;
-        double todaySystolic = 0, todayDiastolic = 0;
+        List<int> hours = [];
 
-        for (int i = 13; i >= 0; i--) {
-          final day = DateTime(now.year, now.month, now.day - i);
-          final values = dailyValues[DateTime(day.year, day.month, day.day)];
-
-          double avgSystolic = 0;
-          double avgDiastolic = 0;
-
-          if (values != null && values.isNotEmpty) {
-            double sumSystolic = 0;
-            double sumDiastolic = 0;
-            int count = 0;
-            for (var val in values) {
-              if (val is Map && val.containsKey('systolic') && val.containsKey('diastolic')) {
-                sumSystolic += (val['systolic'] as num).toDouble();
-                sumDiastolic += (val['diastolic'] as num).toDouble();
-                count++;
-              }
-            }
-            if (count > 0) {
-              avgSystolic = sumSystolic / count;
-              avgDiastolic = sumDiastolic / count;
-            }
-          }
-
-          double x = (13 - i).toDouble();
-          systolicSpots.add(FlSpot(x, avgSystolic));
-          diastolicSpots.add(FlSpot(x, avgDiastolic));
-
-          if (i <= 6) {
-            thisWeekSystolicSum += avgSystolic;
-            thisWeekDiastolicSum += avgDiastolic;
-            thisWeekCount++;
-            if (i == 0) {
-              todaySystolic = avgSystolic;
-              todayDiastolic = avgDiastolic;
-            }
-          } else {
-            lastWeekSystolicSum += avgSystolic;
-            lastWeekDiastolicSum += avgDiastolic;
-            lastWeekCount++;
+        for (int h = 0; h < 24; h++) {
+          if (systolicMap.containsKey(h) && diastolicMap.containsKey(h)) {
+            double avgSystolic = systolicMap[h]!.reduce((a, b) => a + b) / systolicMap[h]!.length;
+            double avgDiastolic = diastolicMap[h]!.reduce((a, b) => a + b) / diastolicMap[h]!.length;
+            systolicSpots.add(FlSpot(h.toDouble(), avgSystolic));
+            diastolicSpots.add(FlSpot(h.toDouble(), avgDiastolic));
+            hours.add(h);
           }
         }
 
         setState(() {
           _systolicSpots = systolicSpots;
           _diastolicSpots = diastolicSpots;
-          _thisWeekAvgSystolic = thisWeekCount > 0 ? thisWeekSystolicSum / thisWeekCount : 0;
-          _thisWeekAvgDiastolic = thisWeekCount > 0 ? thisWeekDiastolicSum / thisWeekCount : 0;
-          _lastWeekAvgSystolic = lastWeekCount > 0 ? lastWeekSystolicSum / lastWeekCount : 0;
-          _lastWeekAvgDiastolic = lastWeekCount > 0 ? lastWeekDiastolicSum / lastWeekCount : 0;
-          _todaySystolic = todaySystolic;
-          _todayDiastolic = todayDiastolic;
+          _hoursWithData = hours;
+          _todaySystolic = totalPoints > 0 ? sumSystolic / totalPoints : 0;
+          _todayDiastolic = totalPoints > 0 ? sumDiastolic / totalPoints : 0;
           _loading = false;
         });
       } else {
-        // Single-value Indicator Processing
-        final Map<DateTime, List<double>> dailyValues = {};
+        Map<int, List<double>> hourlyMap = {};
+        double sum = 0;
+        int totalPoints = 0;
+
         for (var m in metrics) {
-          final day = DateTime(m.timestamp.year, m.timestamp.month, m.timestamp.day);
-          dailyValues.putIfAbsent(day, () => []).add(m.value.toDouble());
+          final hour = m.timestamp.hour;
+          double val = (m.value as num).toDouble();
+          hourlyMap.putIfAbsent(hour, () => []).add(val);
+          sum += val;
+          totalPoints++;
         }
 
         List<FlSpot> spots = [];
-        double thisWeekSum = 0;
-        int thisWeekCount = 0;
-        double lastWeekSum = 0;
-        int lastWeekCount = 0;
-        double todayVal = 0;
+        List<int> hours = [];
 
-        for (int i = 13; i >= 0; i--) {
-          final day = DateTime(now.year, now.month, now.day - i);
-          final values = dailyValues[DateTime(day.year, day.month, day.day)];
-          double avg = values != null ? values.reduce((a, b) => a + b) / values.length : 0;
-          spots.add(FlSpot((13 - i).toDouble(), avg));
-
-          if (i <= 6) {
-            thisWeekSum += avg;
-            thisWeekCount++;
-            if (i == 0) todayVal = avg;
-          } else {
-            lastWeekSum += avg;
-            lastWeekCount++;
+        for (int h = 0; h < 24; h++) {
+          if (hourlyMap.containsKey(h)) {
+            final values = hourlyMap[h]!;
+            double aggregated;
+            if (_useBarChart) {
+              aggregated = values.reduce((a, b) => a + b);
+            } else {
+              aggregated = values.reduce((a, b) => a + b) / values.length;
+            }
+            spots.add(FlSpot(h.toDouble(), aggregated));
+            hours.add(h);
           }
+        }
+
+        double todayDisplay;
+        if (_useBarChart) {
+          todayDisplay = sum;
+        } else {
+          todayDisplay = totalPoints > 0 ? sum / totalPoints : 0;
         }
 
         setState(() {
           _spots = spots;
-          _thisWeekAvg = thisWeekCount > 0 ? thisWeekSum / thisWeekCount : 0;
-          _lastWeekAvg = lastWeekCount > 0 ? lastWeekSum / lastWeekCount : 0;
-          _todayValue = todayVal;
+          _hoursWithData = hours;
+          _todayTotal = sum;
+          _todayAvg = todayDisplay;
           _loading = false;
         });
       }
@@ -210,9 +214,9 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
         return 'steps';
       case 'heart_rate':
         return 'bpm';
-      case 'calories_burned':
+      case 'calories':
         return 'kcal';
-      case 'sleep_duration':
+      case 'sleep':
         return 'hrs';
       case 'glucose':
         return 'mmol/L';
@@ -223,15 +227,21 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
     }
   }
 
-  String _formatValue(double value) {
-    if (value == 0) return '--';
-    if (widget.metricType == 'sleep_duration') {
-      return value.toStringAsFixed(1);
+  String _formatTodayValue() {
+    if (widget.metricType == 'blood_pressure') {
+      return '${_todaySystolic.toInt()}/${_todayDiastolic.toInt()} ${_getUnit()}';
+    } else if (_useBarChart) {
+      if (widget.metricType == 'sleep') {
+        return '${_todayTotal.toStringAsFixed(1)} ${_getUnit()}';
+      }
+      return '${_todayTotal.toInt()} ${_getUnit()}';
+    } else {
+      if (_todayAvg == 0) return '--';
+      if (widget.metricType == 'glucose') {
+        return '${_todayAvg.toStringAsFixed(1)} ${_getUnit()}';
+      }
+      return '${_todayAvg.toInt()} ${_getUnit()}';
     }
-    if (widget.metricType == 'glucose') {
-      return value.toStringAsFixed(1);
-    }
-    return value.toInt().toString();
   }
 
   @override
@@ -240,6 +250,9 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
       appBar: AppBar(
         title: Text(widget.title),
         centerTitle: true,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: Colors.black87,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -248,201 +261,55 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
               : Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
+                        width: double.infinity,
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(16),
+                          gradient: LinearGradient(
+                            colors: [Colors.blue.shade50, Colors.white],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
                               'Today',
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                              style: TextStyle(fontSize: 16, color: Colors.grey),
                             ),
-                            if (widget.metricType == 'blood_pressure')
-                              Text(
-                                '${_todaySystolic.toInt()}/${_todayDiastolic.toInt()} ${_getUnit()}',
-                                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                              )
-                            else
-                              Text(
-                                '${_formatValue(_todayValue)} ${_getUnit()}',
-                                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                              ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _formatTodayValue(),
+                              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                            ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 24),
 
-                      // Charts
-                      Expanded(
-                        flex: 2,
-                        child: widget.metricType == 'blood_pressure'
-                            ? (_systolicSpots.isEmpty || _diastolicSpots.isEmpty
-                                ? const Center(child: Text('No data for chart'))
-                                : LineChart(
-                                    LineChartData(
-                                      gridData: FlGridData(show: true),
-                                      titlesData: FlTitlesData(
-                                        leftTitles: AxisTitles(
-                                          sideTitles: SideTitles(
-                                            showTitles: true,
-                                            reservedSize: 40,
-                                            getTitlesWidget: (value, meta) {
-                                              return Text(value.toInt().toString());
-                                            },
-                                          ),
-                                        ),
-                                        bottomTitles: AxisTitles(
-                                          sideTitles: SideTitles(
-                                            showTitles: true,
-                                            reservedSize: 30,
-                                            getTitlesWidget: (value, meta) {
-                                              int index = value.toInt();
-                                              if (index < 0 || index > 13) return const Text('');
-                                              final now = DateTime.now();
-                                              final day = DateTime(now.year, now.month, now.day - (13 - index));
-                                              return Text('${day.month}/${day.day}');
-                                            },
-                                          ),
-                                        ),
-                                        rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                        topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                      ),
-                                      borderData: FlBorderData(show: true),
-                                      lineBarsData: [
-                                        // Systolic pressure (red)
-                                        LineChartBarData(
-                                          spots: _systolicSpots,
-                                          isCurved: true,
-                                          color: Colors.red,
-                                          barWidth: 3,
-                                          isStrokeCapRound: true,
-                                          dotData: FlDotData(show: true),
-                                          belowBarData: BarAreaData(show: false),
-                                        ),
-                                        // Diastolic pressure (blue)
-                                        LineChartBarData(
-                                          spots: _diastolicSpots,
-                                          isCurved: true,
-                                          color: Colors.blue,
-                                          barWidth: 3,
-                                          isStrokeCapRound: true,
-                                          dotData: FlDotData(show: true),
-                                          belowBarData: BarAreaData(show: false),
-                                        ),
-                                      ],
-                                    ),
-                                  ))
-                            : (_spots.isEmpty
-                                ? const Center(child: Text('No data for chart'))
-                                : LineChart(
-                                    LineChartData(
-                                      gridData: FlGridData(show: true),
-                                      titlesData: FlTitlesData(
-                                        leftTitles: AxisTitles(
-                                          sideTitles: SideTitles(
-                                            showTitles: true,
-                                            reservedSize: 40,
-                                            getTitlesWidget: (value, meta) {
-                                              return Text(value.toInt().toString());
-                                            },
-                                          ),
-                                        ),
-                                        bottomTitles: AxisTitles(
-                                          sideTitles: SideTitles(
-                                            showTitles: true,
-                                            reservedSize: 30,
-                                            getTitlesWidget: (value, meta) {
-                                              int index = value.toInt();
-                                              if (index < 0 || index > 13) return const Text('');
-                                              final now = DateTime.now();
-                                              final day = DateTime(now.year, now.month, now.day - (13 - index));
-                                              return Text('${day.month}/${day.day}');
-                                            },
-                                          ),
-                                        ),
-                                        rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                        topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                      ),
-                                      borderData: FlBorderData(show: true),
-                                      lineBarsData: [
-                                        LineChartBarData(
-                                          spots: _spots,
-                                          isCurved: true,
-                                          color: Colors.blue,
-                                          barWidth: 3,
-                                          isStrokeCapRound: true,
-                                          dotData: FlDotData(show: true),
-                                          belowBarData: BarAreaData(show: false),
-                                        ),
-                                      ],
-                                    ),
-                                  )),
+                      // Graph title
+                      Text(
+                        _useBarChart ? 'Hourly Total' : 'Hourly Average',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 12),
 
-                      // This week vs last week
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: widget.metricType == 'blood_pressure'
-                            ? Column(
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                    children: [
-                                      _buildComparisonCard(
-                                        'This Week (Sys)',
-                                        '${_thisWeekAvgSystolic.toInt()} mmHg',
-                                        '',
-                                      ),
-                                      _buildComparisonCard(
-                                        'Last Week (Sys)',
-                                        '${_lastWeekAvgSystolic.toInt()} mmHg',
-                                        '',
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                    children: [
-                                      _buildComparisonCard(
-                                        'This Week (Dias)',
-                                        '${_thisWeekAvgDiastolic.toInt()} mmHg',
-                                        '',
-                                      ),
-                                      _buildComparisonCard(
-                                        'Last Week (Dias)',
-                                        '${_lastWeekAvgDiastolic.toInt()} mmHg',
-                                        '',
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              )
-                            : Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                children: [
-                                  _buildComparisonCard(
-                                    'This Week',
-                                    '${_formatValue(_thisWeekAvg)} ${_getUnit()}',
-                                    _thisWeekAvg > _lastWeekAvg ? '▲' : (_thisWeekAvg < _lastWeekAvg ? '▼' : ''),
-                                  ),
-                                  _buildComparisonCard(
-                                    'Last Week',
-                                    '${_formatValue(_lastWeekAvg)} ${_getUnit()}',
-                                    '',
-                                  ),
-                                ],
-                              ),
+                      // Graph
+                      Expanded(
+                        child: _hoursWithData.isEmpty
+                            ? const Center(child: Text('No hourly data available'))
+                            : _buildChart(),
                       ),
                     ],
                   ),
@@ -450,27 +317,154 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
     );
   }
 
-  Widget _buildComparisonCard(String label, String value, String trend) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: const TextStyle(fontSize: 14, color: Colors.grey),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        if (trend.isNotEmpty)
-          Text(
-            trend,
-            style: TextStyle(
-              fontSize: 16,
-              color: trend == '▲' ? Colors.green : Colors.red,
+  Widget _buildChart() {
+    if (widget.metricType == 'blood_pressure') {
+      return LineChart(
+        LineChartData(
+          gridData: const FlGridData(show: false),
+          borderData: FlBorderData(show: false),
+          titlesData: _buildTitlesData(),
+          lineTouchData: LineTouchData(
+            touchTooltipData: LineTouchTooltipData(
+              getTooltipItems: (touchedSpots) {
+                return touchedSpots.map((spot) {
+                  return LineTooltipItem(
+                    spot.y.toStringAsFixed(1),
+                    const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  );
+                }).toList();
+              },
             ),
           ),
-      ],
+          lineBarsData: [
+            LineChartBarData(
+              spots: _systolicSpots,
+              isCurved: true,
+              color: Colors.red,
+              barWidth: 3,
+              isStrokeCapRound: true,
+              dotData: const FlDotData(show: false),
+              belowBarData: BarAreaData(
+                show: true,
+                color: Colors.red.withOpacity(0.1),
+              ),
+            ),
+            LineChartBarData(
+              spots: _diastolicSpots,
+              isCurved: true,
+              color: Colors.blue,
+              barWidth: 3,
+              isStrokeCapRound: true,
+              dotData: const FlDotData(show: false),
+              belowBarData: BarAreaData(
+                show: true,
+                color: Colors.blue.withOpacity(0.1),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (_useBarChart) {
+      // Bar chart
+      return BarChart(
+        BarChartData(
+          barTouchData: BarTouchData(
+            touchTooltipData: BarTouchTooltipData(
+              getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                return BarTooltipItem(
+                  rod.toY.toStringAsFixed(1),
+                  const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                );
+              },
+            ),
+          ),
+          gridData: const FlGridData(show: false),
+          borderData: FlBorderData(show: false),
+          titlesData: _buildTitlesData(),
+          barGroups: _spots.asMap().entries.map((entry) {
+            final index = entry.key;
+            final spot = entry.value;
+            final hour = spot.x.toInt();
+            return BarChartGroupData(
+              x: hour,
+              barRods: [
+                BarChartRodData(
+                  toY: spot.y,
+                  color: Colors.blue,
+                  width: 12,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4),
+                    topRight: Radius.circular(4),
+                  ),
+                ),
+              ],
+            );
+          }).toList(),
+        ),
+      );
+    } else {
+      // Single line graph
+      return LineChart(
+        LineChartData(
+          gridData: const FlGridData(show: false),
+          borderData: FlBorderData(show: false),
+          titlesData: _buildTitlesData(),
+          lineBarsData: [
+            LineChartBarData(
+              spots: _spots,
+              isCurved: true,
+              color: Colors.blue,
+              barWidth: 3,
+              isStrokeCapRound: true,
+              dotData: const FlDotData(show: false),
+              belowBarData: BarAreaData(
+                show: true,
+                color: Colors.blue.withOpacity(0.1),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  FlTitlesData _buildTitlesData() {
+    return FlTitlesData(
+      leftTitles: AxisTitles(
+        sideTitles: SideTitles(
+          showTitles: true,
+          reservedSize: 40,
+          getTitlesWidget: (value, meta) {
+            return Text(
+              value.toInt().toString(),
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            );
+          },
+        ),
+      ),
+      bottomTitles: AxisTitles(
+        sideTitles: SideTitles(
+          showTitles: true,
+          reservedSize: 30,
+          interval: 2,
+          getTitlesWidget: (value, meta) {
+            int hour = value.toInt();
+            if (hour < 0 || hour > 23) return const Text('');
+            return Text(
+              '$hour:00',
+              style: const TextStyle(fontSize: 10, color: Colors.grey),
+            );
+          },
+        ),
+      ),
+      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
     );
   }
 }

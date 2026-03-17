@@ -52,13 +52,13 @@ const isTestUser = (user) => {
     timestamp: now,
   });
 
-  // 4. Glucose (optional, generating every minute is not very realistic, 
+  // 4. Blood Glucose (optional, generating every minute is not very realistic, 
   // but for demonstration purposes it can be random)
   const glucose = 4.0 + Math.random() * 3.0; // 4-7 mmol/L
   metrics.push({
     userId: user._id,
     patientId: null,
-    metricType: 'glucose',
+    metricType: 'blood_glucose',
     value: glucose,
     unit: 'mmol/L',
     source: 'device',
@@ -82,9 +82,23 @@ const isTestUser = (user) => {
     isAbnormal: systolic > 140 || systolic < 90 || diastolic > 90 || diastolic < 60,
   });
 
+  // 6. Sleep Duration (simulate sleep data every minute, which is not realistic but for demonstration)
+  const sleepIncrement = Math.random() * 0.5; // 0-0.5hrs
+  metrics.push({
+    userId: user._id,
+    patientId: null,
+    metricType: 'sleep_duration',
+    value: sleepIncrement,
+    unit: 'hours',
+    source: 'device',
+    deviceName: 'Sleep Tracker',
+    timestamp: now,
+    isAbnormal: false,
+  });
+
   // Batch insert (ignore duplicate key and other errors)
   try {
-    await HealthMetric.insertMany(metrics, { ordered: false });
+    await HealthMetric.create(metrics);
     console.log(`[AutoSimulate] Inserted ${metrics.length} metrics for user ${user.email}`);
   } catch (error) {
     console.error(`[AutoSimulate] Failed for user ${user.email}:`, error.message);

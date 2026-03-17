@@ -654,6 +654,45 @@ app.post('/api/auth/reset-password', async (req, res) => {
   }
 });
 
+app.delete('/api/user/account', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    await HealthMetric.deleteMany({ userId });
+
+    await Device.deleteMany({ userId });
+
+    await Notification.deleteMany({ userId });
+
+    await Session.deleteMany({ userId });
+
+    const targetUser = await User.findById(userId);
+    if (targetUser.patientProfileId) {
+      await Patient.findByIdAndDelete(targetUser.patientProfileId);
+    }
+    if (targetUser.doctorProfileId) {
+      await Doctor.findByIdAndDelete(targetUser.doctorProfileId);
+    }
+
+    await User.findByIdAndDelete(userId);
+
+    res.json({ success: true, message: 'Account permanently deleted' });
+  } catch (error) {
+    console.error('Delete account error:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete account' });
+  }
+});
+
+const requireAdmin = (req, res, next) => {
+  if (!req.user || (req.user.userType !== 'admin' && !['super_admin', 'admin', 'moderator'].includes(req.user.role))) {
+    return res.status(403).json({ 
+      success: false, 
+      error: 'Admin access required' 
+    });
+  }
+  next();
+};
+
 app.post('/api/user/apply-for-doctor', authenticateToken, [
   body('medicalLicenseNumber').notEmpty().trim(),
   body('specialization').notEmpty().isIn([
@@ -709,6 +748,22 @@ app.post('/api/user/apply-for-doctor', authenticateToken, [
       doctor.rejectionReason = null;
       await doctor.save();
 
+      const admins = await User.find({ role: 'admin' }).select('_id');
+      const notificationPromises = admins.map(admin => 
+        Notification.create({
+          userId: admin._id,
+          type: 'doctor_application',
+          title: 'Doctor Application Resubmitted',
+          message: `${user.fullName || user.email} has resubmitted their doctor application.`,
+          data: {
+            doctorId: doctor._id,
+            applicantId: user._id,
+            applicantName: user.fullName || user.email,
+          }
+        })
+      );
+      await Promise.all(notificationPromises);
+
       return res.status(200).json({
         success: true,
         message: 'Application resubmitted successfully',
@@ -728,6 +783,22 @@ app.post('/api/user/apply-for-doctor', authenticateToken, [
     });
     await doctor.save();
 
+    const admins = await User.find({ role: 'admin' }).select('_id');
+    const notificationPromises = admins.map(admin => 
+      Notification.create({
+        userId: admin._id,
+        type: 'doctor_application',
+        title: 'New Doctor Application',
+        message: `${user.fullName || user.email} has applied to become a doctor.`,
+        data: {
+          doctorId: doctor._id,
+          applicantId: user._id,
+          applicantName: user.fullName || user.email,
+        }
+      })
+    );
+    await Promise.all(notificationPromises);
+
     res.status(201).json({
       success: true,
       message: 'Application submitted successfully',
@@ -738,16 +809,6 @@ app.post('/api/user/apply-for-doctor', authenticateToken, [
     res.status(500).json({ success: false, error: 'Failed to submit application' });
   }
 });
-
-const requireAdmin = (req, res, next) => {
-  if (!req.user || (req.user.userType !== 'admin' && !['super_admin', 'admin', 'moderator'].includes(req.user.role))) {
-    return res.status(403).json({ 
-      success: false, 
-      error: 'Admin access required' 
-    });
-  }
-  next();
-};
 
 // admin add patient
 app.post('/api/admin/create-patient', authenticateToken, requireAdmin, [
@@ -2574,6 +2635,44 @@ app.put('/api/health-goals/:goalId', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Update health goal error:', error);
     res.status(500).json({ success: false, error: 'Failed to update health goal' });
+  }
+});
+
+// export in JSON format
+app.get('/api/user/export-data', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const metrics = await HealthMetric.find({ userId }).sort({ timestamp: 1 });
+
+    const user = await User.findById(userId).select('-password');
+
+    const exportData = {
+      user: {
+        email: user.email,
+        fullName: user.fullName,
+        age: user.age,
+        height: user.height,
+        weight: user.weight,
+        role: user.role,
+      },
+      metrics: metrics.map(m => ({
+        metricType: m.metricType,
+        value: m.value,
+        unit: m.unit,
+        timestamp: m.timestamp,
+        source: m.source,
+        deviceName: m.deviceName,
+      })),
+      exportDate: new Date(),
+    };
+
+    res.setHeader('Content-Disposition', 'attachment; filename="my_health_data.json"');
+    res.setHeader('Content-Type', 'application/json');
+    res.json(exportData);
+  } catch (error) {
+    console.error('Export data error:', error);
+    res.status(500).json({ success: false, error: 'Failed to export data' });
   }
 });
 

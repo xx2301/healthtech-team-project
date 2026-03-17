@@ -51,7 +51,7 @@ router.post('/:deviceId', authenticateToken, async (req, res) => {
     const mockData = generateMockData(device.type, device._id, userId);
 
     if (mockData.length > 0) {
-      await HealthMetric.insertMany(mockData);
+      await HealthMetric.create(mockData);
 
       for (const metric of mockData) {
         await checkThresholdAndNotify(metric);

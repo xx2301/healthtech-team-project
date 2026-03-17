@@ -317,7 +317,7 @@ class _ReportPageState extends State<ReportPage> {
     _totalSleepHours = sleepMetrics.fold<double>(
         0, (sum, m) => sum + (m.value as num).toDouble());
 
-    final glucoseMetrics = metrics.where((m) => m.metricType == 'glucose').toList();
+    final glucoseMetrics = metrics.where((m) => m.metricType == 'blood_glucose').toList();
     if (glucoseMetrics.isNotEmpty) {
       _avgGlucose = glucoseMetrics.fold<double>(
           0, (sum, m) => sum + (m.value as num).toDouble()) / glucoseMetrics.length;
@@ -411,7 +411,7 @@ class _ReportPageState extends State<ReportPage> {
     double thisGlucose = 0;
     int glucoseCount = 0;
     for (var m in thisWeek) {
-      if (m.metricType == 'glucose') {
+      if (m.metricType == 'blood_glucose') {
         thisGlucose += (m.value as num).toDouble();
         glucoseCount++;
       }
@@ -419,7 +419,7 @@ class _ReportPageState extends State<ReportPage> {
     double lastGlucose = 0;
     int lastGlucoseCount = 0;
     for (var m in lastWeek) {
-      if (m.metricType == 'glucose') {
+      if (m.metricType == 'blood_glucose') {
         lastGlucose += (m.value as num).toDouble();
         lastGlucoseCount++;
       }
