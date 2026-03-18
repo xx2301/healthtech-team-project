@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 class InfoCards extends StatefulWidget {
   final String title;
   final String subtitle;
-  final Color backgroundColor;
+  final Color? backgroundColor;
 
   const InfoCards({
     super.key,
     required this.title,
     required this.subtitle,
-    this.backgroundColor = const Color(0xFFE6F2E6),
+    this.backgroundColor,
   });
 
   @override
@@ -22,7 +22,9 @@ class _InfoCardState extends State<InfoCards> {
     return Container(
       padding:  EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: widget.backgroundColor,
+        color: (Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF1F2E1F)
+            : const Color(0xFFE6F2E6)),
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -40,7 +42,9 @@ class _InfoCardState extends State<InfoCards> {
             widget.title,
             style:  TextStyle(
               fontSize: 10,
-              color: Colors.grey,
+              color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.grey[200]
+                    : Colors.grey[700],
             ),
           ),
           const SizedBox(height: 6),

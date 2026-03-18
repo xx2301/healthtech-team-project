@@ -21,7 +21,20 @@ String _formatDate(DateTime date) {
 }
 
 String _monthAbbr(int month) {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
   return months[month - 1];
 }
 
@@ -136,20 +149,21 @@ class _PersonalInfoState extends State<PersonalInfo> {
       );
 
       if (response.statusCode == 200) {
-        _fetchSessions(); // 刷新列表
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Session terminated')),
-        );
+        _fetchSessions();
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Session terminated')));
       } else {
-        final error = jsonDecode(response.body)['error'] ?? 'Failed to terminate';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $error')),
-        );
+        final error =
+            jsonDecode(response.body)['error'] ?? 'Failed to terminate';
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $error')));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -168,7 +182,7 @@ class _PersonalInfoState extends State<PersonalInfo> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: Colors.black.withOpacity(0.55)),
+          Icon(icon, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -179,7 +193,7 @@ class _PersonalInfoState extends State<PersonalInfo> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: Colors.black.withOpacity(0.55),
+                      color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.7),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -197,7 +211,7 @@ class _PersonalInfoState extends State<PersonalInfo> {
                     subtitle,
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.black.withOpacity(0.45),
+                      color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.7),
                     ),
                   ),
                 ],
@@ -218,13 +232,19 @@ class _PersonalInfoState extends State<PersonalInfo> {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).brightness == Brightness.dark
+            ? const Color.fromARGB(255, 36, 36, 36)
+            : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.black.withOpacity(0.06)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 18,
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.black.withOpacity(0.3)
+                : Colors.black.withOpacity(0.04),
+            blurRadius: Theme.of(context).brightness == Brightness.dark
+                ? 20
+                : 18,
             offset: const Offset(0, 10),
           ),
         ],
@@ -247,7 +267,7 @@ class _PersonalInfoState extends State<PersonalInfo> {
                 icon: const Icon(Icons.edit, size: 20),
                 splashRadius: 18,
               ),
-              const SizedBox(width: 4), 
+              const SizedBox(width: 4),
               IconButton(
                 onPressed: _showColorPickerDialog,
                 icon: const Icon(Icons.color_lens, size: 20),
@@ -265,11 +285,20 @@ class _PersonalInfoState extends State<PersonalInfo> {
     );
   }
 
-  Future<void> _showEditProfileDialog(BuildContext context, AppUser user) async {
+  Future<void> _showEditProfileDialog(
+    BuildContext context,
+    AppUser user,
+  ) async {
     final nameController = TextEditingController(text: user.fullName);
-    final ageController = TextEditingController(text: user.age?.toString() ?? '');
-    final heightController = TextEditingController(text: user.height?.toString() ?? '');
-    final weightController = TextEditingController(text: user.weight?.toString() ?? '');
+    final ageController = TextEditingController(
+      text: user.age?.toString() ?? '',
+    );
+    final heightController = TextEditingController(
+      text: user.height?.toString() ?? '',
+    );
+    final weightController = TextEditingController(
+      text: user.weight?.toString() ?? '',
+    );
     String selectedGender = user.gender ?? 'prefer_not_to_say';
 
     return showDialog(
@@ -293,11 +322,18 @@ class _PersonalInfoState extends State<PersonalInfo> {
                       decoration: const InputDecoration(labelText: 'Gender'),
                       items: const [
                         DropdownMenuItem(value: 'male', child: Text('Male')),
-                        DropdownMenuItem(value: 'female', child: Text('Female')),
+                        DropdownMenuItem(
+                          value: 'female',
+                          child: Text('Female'),
+                        ),
                         DropdownMenuItem(value: 'other', child: Text('Other')),
-                        DropdownMenuItem(value: 'prefer_not_to_say', child: Text('Prefer not to say')),
+                        DropdownMenuItem(
+                          value: 'prefer_not_to_say',
+                          child: Text('Prefer not to say'),
+                        ),
                       ],
-                      onChanged: (value) => setState(() => selectedGender = value!),
+                      onChanged: (value) =>
+                          setState(() => selectedGender = value!),
                     ),
                     const SizedBox(height: 8),
                     TextField(
@@ -308,13 +344,17 @@ class _PersonalInfoState extends State<PersonalInfo> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: heightController,
-                      decoration: const InputDecoration(labelText: 'Height (cm)'),
+                      decoration: const InputDecoration(
+                        labelText: 'Height (cm)',
+                      ),
                       keyboardType: TextInputType.number,
                     ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: weightController,
-                      decoration: const InputDecoration(labelText: 'Weight (kg)'),
+                      decoration: const InputDecoration(
+                        labelText: 'Weight (kg)',
+                      ),
                       keyboardType: TextInputType.number,
                     ),
                   ],
@@ -323,7 +363,10 @@ class _PersonalInfoState extends State<PersonalInfo> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancel'),
+                  child: Text('Cancel', style: TextStyle(color:Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white
+                    : Colors.black,)
+                  ),
                 ),
                 ElevatedButton(
                   onPressed: () async {
@@ -337,15 +380,18 @@ class _PersonalInfoState extends State<PersonalInfo> {
                       updatedData['gender'] = selectedGender;
                     }
                     final newAge = int.tryParse(ageController.text);
-                    if (newAge != null && newAge.toString() != currentUser?.age) {
+                    if (newAge != null &&
+                        newAge.toString() != currentUser?.age) {
                       updatedData['age'] = newAge;
                     }
                     final newHeight = double.tryParse(heightController.text);
-                    if (newHeight != null && newHeight.toString() != currentUser?.height) {
+                    if (newHeight != null &&
+                        newHeight.toString() != currentUser?.height) {
                       updatedData['height'] = newHeight;
                     }
                     final newWeight = double.tryParse(weightController.text);
-                    if (newWeight != null && newWeight.toString() != currentUser?.weight) {
+                    if (newWeight != null &&
+                        newWeight.toString() != currentUser?.weight) {
                       updatedData['weight'] = newWeight;
                     }
 
@@ -359,7 +405,10 @@ class _PersonalInfoState extends State<PersonalInfo> {
                     await _updateUserProfile(updatedData);
                     Navigator.pop(ctx);
                   },
-                  child: const Text('Save'),
+                  child:  Text('Save', style: TextStyle(color:Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white
+                    : Colors.black,)
+                  ),
                 ),
               ],
             );
@@ -371,7 +420,7 @@ class _PersonalInfoState extends State<PersonalInfo> {
 
   Future<void> _updateUserProfile(Map<String, dynamic> data) async {
     if (data.isEmpty) return;
-    
+
     final token = await _getToken();
     if (token == null) return;
 
@@ -421,10 +470,7 @@ class _PersonalInfoState extends State<PersonalInfo> {
                 await _updateAvatarColor(colorInt);
                 Navigator.pop(ctx);
               },
-              child: CircleAvatar(
-                backgroundColor: color,
-                radius: 24,
-              ),
+              child: CircleAvatar(backgroundColor: color, radius: 24),
             );
           }).toList(),
         ),
@@ -445,9 +491,9 @@ class _PersonalInfoState extends State<PersonalInfo> {
     );
     if (response.statusCode == 200) {
       await context.read<AuthCubit>().refreshUser();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Avatar color updated')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Avatar color updated')));
     }
   }
 
@@ -461,7 +507,9 @@ class _PersonalInfoState extends State<PersonalInfo> {
     if (_medicalError != null) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 20),
-        child: Center(child: Text('Error loading medical data: $_medicalError')),
+        child: Center(
+          child: Text('Error loading medical data: $_medicalError'),
+        ),
       );
     }
     if (_fullProfile == null) return null;
@@ -525,8 +573,6 @@ class _PersonalInfoState extends State<PersonalInfo> {
   Widget build(BuildContext context) {
     final user = context.watch<AuthCubit>().currentUser;
 
-    print('Current user: ${user?.toJson()}');
-
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -537,10 +583,14 @@ class _PersonalInfoState extends State<PersonalInfo> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        backgroundColor: const Color(0xFFF5F6F8),
+        backgroundColor: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF0E0E10)
+            : const Color(0xFFF5F6F8),
         elevation: 0,
       ),
-      backgroundColor: const Color(0xFFF5F6F8),
+     backgroundColor: Theme.of(context).brightness == Brightness.dark
+    ? const Color(0xFF0E0E10)
+    : const Color(0xFFF5F6F8),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(15),
         child: Column(
@@ -566,19 +616,29 @@ class _PersonalInfoState extends State<PersonalInfo> {
                 infoRow(
                   icon: Icons.cake_rounded,
                   title: "Age",
-                  value: user?.age != null ? '${user!.age} years old' : 'Not set',
+                  value: user?.age != null
+                      ? '${user!.age} years old'
+                      : 'Not set',
                 ),
                 infoRow(
                   icon: Icons.food_bank,
                   title: "Weight",
-                  value: user?.weight != null ? '${user!.weight} kg' : 'Not set',
-                  subtitle: user?.weightUpdatedAt != null ? 'Last updated ${_formatDate(user!.weightUpdatedAt!)}': null,
+                  value: user?.weight != null
+                      ? '${user!.weight} kg'
+                      : 'Not set',
+                  subtitle: user?.weightUpdatedAt != null
+                      ? 'Last updated ${_formatDate(user!.weightUpdatedAt!)}'
+                      : null,
                 ),
                 infoRow(
                   icon: Icons.straighten,
                   title: "Height",
-                  value: user?.height != null ? '${user!.height} cm' : 'Not set',
-                  subtitle: user?.heightUpdatedAt != null ? 'Last updated ${_formatDate(user!.heightUpdatedAt!)}': null,
+                  value: user?.height != null
+                      ? '${user!.height} cm'
+                      : 'Not set',
+                  subtitle: user?.heightUpdatedAt != null
+                      ? 'Last updated ${_formatDate(user!.heightUpdatedAt!)}'
+                      : null,
                 ),
               ],
             ),
@@ -593,7 +653,8 @@ class _PersonalInfoState extends State<PersonalInfo> {
             // ===== Card 3: Active Sessions =====
             sectionCard(
               title: "Active Sessions",
-              onEdit: () {}, // No editing function, can be left blank or add a refresh action
+              onEdit:
+                  () {}, // No editing function, can be left blank or add a refresh action
               children: [
                 if (_loadingSessions)
                   const Center(child: CircularProgressIndicator())
@@ -617,17 +678,23 @@ class _PersonalInfoState extends State<PersonalInfo> {
                       final deviceType = s['deviceType'] ?? 'unknown';
 
                       IconData icon;
-                      if (deviceType == 'mobile') icon = Icons.phone_android;
-                      else if (deviceType == 'tablet') icon = Icons.tablet;
-                      else if (deviceType == 'desktop') icon = Icons.computer;
-                      else icon = Icons.device_unknown;
+                      if (deviceType == 'mobile')
+                        icon = Icons.phone_android;
+                      else if (deviceType == 'tablet')
+                        icon = Icons.tablet;
+                      else if (deviceType == 'desktop')
+                        icon = Icons.computer;
+                      else
+                        icon = Icons.device_unknown;
 
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 4),
                         child: ListTile(
                           leading: Icon(icon),
                           title: Text(deviceName),
-                          subtitle: Text('Last active: ${_formatDateTime(lastActive)}'),
+                          subtitle: Text(
+                            'Last active: ${_formatDateTime(lastActive)}',
+                          ),
                           trailing: isCurrent
                               ? const Chip(
                                   label: Text('Current'),

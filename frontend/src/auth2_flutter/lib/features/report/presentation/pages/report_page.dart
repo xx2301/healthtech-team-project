@@ -143,8 +143,19 @@ class _ReportPageState extends State<ReportPage> {
       }
 
       final rangeLength = end.difference(start).inDays + 1;
-      final lastWeekStart = DateTime(start.year, start.month, start.day - rangeLength);
-      final lastWeekEnd = DateTime(end.year, end.month, end.day - rangeLength, 23, 59, 59);
+      final lastWeekStart = DateTime(
+        start.year,
+        start.month,
+        start.day - rangeLength,
+      );
+      final lastWeekEnd = DateTime(
+        end.year,
+        end.month,
+        end.day - rangeLength,
+        23,
+        59,
+        59,
+      );
 
       final baseParams = {
         'limit': '500',
@@ -158,9 +169,10 @@ class _ReportPageState extends State<ReportPage> {
         'startDate': start.toIso8601String(),
         'endDate': end.toIso8601String(),
       };
-      final mainUrl = Uri.parse('${_getBaseUrl()}/api/health-metrics')
-          .replace(queryParameters: mainParams);
-      
+      final mainUrl = Uri.parse(
+        '${_getBaseUrl()}/api/health-metrics',
+      ).replace(queryParameters: mainParams);
+
       print('My Data URL: $mainUrl');
 
       final mainResponse = await http.get(
@@ -192,7 +204,8 @@ class _ReportPageState extends State<ReportPage> {
             orElse: () => null,
           );
           if (caloriesGoalObj != null) {
-            _caloriesGoal = caloriesGoalObj['targetValue']?.toInt() ?? _caloriesGoal;
+            _caloriesGoal =
+                caloriesGoalObj['targetValue']?.toInt() ?? _caloriesGoal;
           }
         }
       } catch (e) {
@@ -204,48 +217,66 @@ class _ReportPageState extends State<ReportPage> {
         'startDate': lastWeekStart.toIso8601String(),
         'endDate': lastWeekEnd.toIso8601String(),
       };
-      final lastWeekUrl = Uri.parse('${_getBaseUrl()}/api/health-metrics')
-          .replace(queryParameters: lastWeekParams);
+      final lastWeekUrl = Uri.parse(
+        '${_getBaseUrl()}/api/health-metrics',
+      ).replace(queryParameters: lastWeekParams);
       final lastWeekResponse = await http.get(
         lastWeekUrl,
         headers: {'Authorization': 'Bearer $token'},
       );
 
-      if (mainResponse.statusCode == 200 && lastWeekResponse.statusCode == 200) {
+      if (mainResponse.statusCode == 200 &&
+          lastWeekResponse.statusCode == 200) {
         final mainData = jsonDecode(mainResponse.body)['data'] ?? [];
         final lastWeekData = jsonDecode(lastWeekResponse.body)['data'] ?? [];
-        final userIds = mainData.map<String>((e) => e['userId'] as String).toSet();
+        final userIds = mainData
+            .map<String>((e) => e['userId'] as String)
+            .toSet();
         print('Fetched metrics from users: $userIds');
 
-        final mainMetrics = mainData.map<HealthMetric?>((e) {
-          try {
-            return HealthMetric.fromJson(e as Map<String, dynamic>);
-          } catch (err) {
-            print('Error parsing main metric: $err');
-            return null;
-          }
-        }).whereType<HealthMetric>().toList();
+        final mainMetrics = mainData
+            .map<HealthMetric?>((e) {
+              try {
+                return HealthMetric.fromJson(e as Map<String, dynamic>);
+              } catch (err) {
+                print('Error parsing main metric: $err');
+                return null;
+              }
+            })
+            .whereType<HealthMetric>()
+            .toList();
 
-        final lastWeekMetrics = lastWeekData.map<HealthMetric?>((e) {
-          try {
-            return HealthMetric.fromJson(e as Map<String, dynamic>);
-          } catch (err) {
-            print('Error parsing lastWeek metric: $err');
-            return null;
-          }
-        }).whereType<HealthMetric>().toList();
+        final lastWeekMetrics = lastWeekData
+            .map<HealthMetric?>((e) {
+              try {
+                return HealthMetric.fromJson(e as Map<String, dynamic>);
+              } catch (err) {
+                print('Error parsing lastWeek metric: $err');
+                return null;
+              }
+            })
+            .whereType<HealthMetric>()
+            .toList();
 
         _calculateStats(mainMetrics);
         _prepareChartData(mainMetrics);
         _calculateChangePercentages(mainMetrics, lastWeekMetrics);
 
         int achievedDays = 0;
-        final stepsMetrics = mainMetrics.where((m) => m.metricType == 'steps' && !m.isAbnormal).toList();
+        final stepsMetrics = mainMetrics
+            .where((m) => m.metricType == 'steps' && !m.isAbnormal)
+            .toList();
 
         final Map<DateTime, int> dailySteps = {};
         for (var metric in stepsMetrics) {
-          final day = DateTime(metric.timestamp.year, metric.timestamp.month, metric.timestamp.day);
-          dailySteps[day] = (dailySteps[day] ?? 0) + (metric.value is num ? (metric.value as num).toInt() : 0);
+          final day = DateTime(
+            metric.timestamp.year,
+            metric.timestamp.month,
+            metric.timestamp.day,
+          );
+          dailySteps[day] =
+              (dailySteps[day] ?? 0) +
+              (metric.value is num ? (metric.value as num).toInt() : 0);
         }
 
         for (var steps in dailySteps.values) {
@@ -288,18 +319,21 @@ class _ReportPageState extends State<ReportPage> {
       }
       return sum;
     });
-    
+
     print('Total steps: $_totalSteps');
     final stepsByUser = <String, int>{};
     for (var m in metrics.where((m) => m.metricType == 'steps')) {
-      stepsByUser[m.userId] = (stepsByUser[m.userId] ?? 0) + (m.value as num).toInt();
+      stepsByUser[m.userId] =
+          (stepsByUser[m.userId] ?? 0) + (m.value as num).toInt();
     }
     print('Steps by user: $stepsByUser');
 
-
-    final heartMetrics = metrics.where((m) => m.metricType == 'heart_rate').toList();
+    final heartMetrics = metrics
+        .where((m) => m.metricType == 'heart_rate')
+        .toList();
     if (heartMetrics.isNotEmpty) {
-      _avgHeartRate = heartMetrics
+      _avgHeartRate =
+          heartMetrics
               .where((m) => !m.isAbnormal)
               .fold<double>(0, (sum, m) => sum + (m.value as num).toDouble()) /
           heartMetrics.length;
@@ -307,26 +341,39 @@ class _ReportPageState extends State<ReportPage> {
       _avgHeartRate = 0;
     }
 
-    final calorieMetrics = metrics.where((m) => m.metricType == 'calories_burned').toList();
+    final calorieMetrics = metrics
+        .where((m) => m.metricType == 'calories_burned')
+        .toList();
     _totalCalories = calorieMetrics.fold<int>(0, (sum, m) {
       if (m.value is num) return sum + (m.value as num).toInt();
       return sum;
     });
 
-    final sleepMetrics = metrics.where((m) => m.metricType == 'sleep_duration').toList();
+    final sleepMetrics = metrics
+        .where((m) => m.metricType == 'sleep_duration')
+        .toList();
     _totalSleepHours = sleepMetrics.fold<double>(
-        0, (sum, m) => sum + (m.value as num).toDouble());
+      0,
+      (sum, m) => sum + (m.value as num).toDouble(),
+    );
 
-    final glucoseMetrics = metrics.where((m) => m.metricType == 'blood_glucose').toList();
+    final glucoseMetrics = metrics
+        .where((m) => m.metricType == 'glucose')
+        .toList();
     if (glucoseMetrics.isNotEmpty) {
-      _avgGlucose = glucoseMetrics.fold<double>(
-          0, (sum, m) => sum + (m.value as num).toDouble()) / glucoseMetrics.length;
+      _avgGlucose =
+          glucoseMetrics.fold<double>(
+            0,
+            (sum, m) => sum + (m.value as num).toDouble(),
+          ) /
+          glucoseMetrics.length;
     } else {
       _avgGlucose = 0;
     }
 
-    final bpMetrics = metrics.where((m) => m.metricType == 'blood_pressure').toList()
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    final bpMetrics =
+        metrics.where((m) => m.metricType == 'blood_pressure').toList()
+          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
     if (bpMetrics.isNotEmpty) {
       final val = bpMetrics.first.value;
       if (val is Map) {
@@ -342,31 +389,50 @@ class _ReportPageState extends State<ReportPage> {
   }
 
   void _prepareChartData(List<HealthMetric> metrics) {
-    final heartMetrics = metrics
-        .where((m) => m.metricType == 'heart_rate' && !m.isAbnormal)
-        .toList()
-      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    _heartRatePoints = heartMetrics.map((m) => (m.value as num).toDouble()).toList();
+    final heartMetrics =
+        metrics
+            .where((m) => m.metricType == 'heart_rate' && !m.isAbnormal)
+            .toList()
+          ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    _heartRatePoints = heartMetrics
+        .map((m) => (m.value as num).toDouble())
+        .toList();
 
     _sleepDataPoints = List.filled(7, 0.0);
-    final sleepMetrics = metrics.where((m) => m.metricType == 'sleep_duration').toList();
+    final sleepMetrics = metrics
+        .where((m) => m.metricType == 'sleep_duration')
+        .toList();
     final now = DateTime.now();
     for (int i = 0; i < 7; i++) {
       final day = DateTime(now.year, now.month, now.day - (6 - i));
       final dayStart = DateTime(day.year, day.month, day.day);
       final dayEnd = DateTime(day.year, day.month, day.day, 23, 59, 59);
       final daySleep = sleepMetrics
-          .where((m) => m.timestamp.isAfter(dayStart) && m.timestamp.isBefore(dayEnd))
+          .where(
+            (m) =>
+                m.timestamp.isAfter(dayStart) && m.timestamp.isBefore(dayEnd),
+          )
           .fold<double>(0, (sum, m) => sum + (m.value as num).toDouble());
       _sleepDataPoints[i] = daySleep;
     }
   }
 
-  void _calculateChangePercentages(List<HealthMetric> thisWeek, List<HealthMetric> lastWeek) {
-    double thisSteps = thisWeek.where((m) => m.metricType == 'steps' && !m.isAbnormal).fold<double>(
-        0, (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0));
-    double lastSteps = lastWeek.where((m) => m.metricType == 'steps' && !m.isAbnormal).fold<double>(
-        0, (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0));
+  void _calculateChangePercentages(
+    List<HealthMetric> thisWeek,
+    List<HealthMetric> lastWeek,
+  ) {
+    double thisSteps = thisWeek
+        .where((m) => m.metricType == 'steps' && !m.isAbnormal)
+        .fold<double>(
+          0,
+          (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0),
+        );
+    double lastSteps = lastWeek
+        .where((m) => m.metricType == 'steps' && !m.isAbnormal)
+        .fold<double>(
+          0,
+          (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0),
+        );
     if (lastSteps > 0) {
       _stepsChangePercent = ((thisSteps - lastSteps) / lastSteps) * 100;
       _hasStepsChange = true;
@@ -374,21 +440,43 @@ class _ReportPageState extends State<ReportPage> {
       _hasStepsChange = false;
     }
 
-    final thisHeart = thisWeek.where((m) => m.metricType == 'heart_rate' && !m.isAbnormal).toList();
-    final lastHeart = lastWeek.where((m) => m.metricType == 'heart_rate' && !m.isAbnormal).toList();
+    final thisHeart = thisWeek
+        .where((m) => m.metricType == 'heart_rate' && !m.isAbnormal)
+        .toList();
+    final lastHeart = lastWeek
+        .where((m) => m.metricType == 'heart_rate' && !m.isAbnormal)
+        .toList();
     if (thisHeart.isNotEmpty && lastHeart.isNotEmpty) {
-      double thisAvg = thisHeart.fold<double>(0, (sum, m) => sum + (m.value as num).toDouble()) / thisHeart.length;
-      double lastAvg = lastHeart.fold<double>(0, (sum, m) => sum + (m.value as num).toDouble()) / lastHeart.length;
+      double thisAvg =
+          thisHeart.fold<double>(
+            0,
+            (sum, m) => sum + (m.value as num).toDouble(),
+          ) /
+          thisHeart.length;
+      double lastAvg =
+          lastHeart.fold<double>(
+            0,
+            (sum, m) => sum + (m.value as num).toDouble(),
+          ) /
+          lastHeart.length;
       _heartRateChangePercent = ((thisAvg - lastAvg) / lastAvg) * 100;
       _hasHeartRateChange = true;
     } else {
       _hasHeartRateChange = false;
     }
 
-    double thisCal = thisWeek.where((m) => m.metricType == 'calories_burned').fold<double>(
-        0, (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0));
-    double lastCal = lastWeek.where((m) => m.metricType == 'calories_burned').fold<double>(
-        0, (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0));
+    double thisCal = thisWeek
+        .where((m) => m.metricType == 'calories_burned')
+        .fold<double>(
+          0,
+          (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0),
+        );
+    double lastCal = lastWeek
+        .where((m) => m.metricType == 'calories_burned')
+        .fold<double>(
+          0,
+          (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0),
+        );
     if (lastCal > 0) {
       _caloriesChangePercent = ((thisCal - lastCal) / lastCal) * 100;
       _hasCaloriesChange = true;
@@ -396,10 +484,18 @@ class _ReportPageState extends State<ReportPage> {
       _hasCaloriesChange = false;
     }
 
-    double thisSleep = thisWeek.where((m) => m.metricType == 'sleep_duration').fold<double>(
-        0, (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0));
-    double lastSleep = lastWeek.where((m) => m.metricType == 'sleep_duration').fold<double>(
-        0, (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0));
+    double thisSleep = thisWeek
+        .where((m) => m.metricType == 'sleep_duration')
+        .fold<double>(
+          0,
+          (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0),
+        );
+    double lastSleep = lastWeek
+        .where((m) => m.metricType == 'sleep_duration')
+        .fold<double>(
+          0,
+          (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0),
+        );
     if (lastSleep > 0) {
       _sleepChangePercent = ((thisSleep - lastSleep) / lastSleep) * 100;
       _hasSleepChange = true;
@@ -411,7 +507,7 @@ class _ReportPageState extends State<ReportPage> {
     double thisGlucose = 0;
     int glucoseCount = 0;
     for (var m in thisWeek) {
-      if (m.metricType == 'blood_glucose') {
+      if (m.metricType == 'glucose') {
         thisGlucose += (m.value as num).toDouble();
         glucoseCount++;
       }
@@ -419,15 +515,18 @@ class _ReportPageState extends State<ReportPage> {
     double lastGlucose = 0;
     int lastGlucoseCount = 0;
     for (var m in lastWeek) {
-      if (m.metricType == 'blood_glucose') {
+      if (m.metricType == 'glucose') {
         lastGlucose += (m.value as num).toDouble();
         lastGlucoseCount++;
       }
     }
     double thisGlucoseAvg = glucoseCount > 0 ? thisGlucose / glucoseCount : 0;
-    double lastGlucoseAvg = lastGlucoseCount > 0 ? lastGlucose / lastGlucoseCount : 0;
+    double lastGlucoseAvg = lastGlucoseCount > 0
+        ? lastGlucose / lastGlucoseCount
+        : 0;
     if (lastGlucoseAvg > 0) {
-      _glucoseChangePercent = ((thisGlucoseAvg - lastGlucoseAvg) / lastGlucoseAvg) * 100;
+      _glucoseChangePercent =
+          ((thisGlucoseAvg - lastGlucoseAvg) / lastGlucoseAvg) * 100;
       _hasGlucoseChange = true;
     } else {
       _hasGlucoseChange = false;
@@ -452,13 +551,23 @@ class _ReportPageState extends State<ReportPage> {
         lastBpCount++;
       }
     }
-    double thisSystolicAvg = thisBpCount > 0 ? thisSystolicSum / thisBpCount : 0;
-    double thisDiastolicAvg = thisBpCount > 0 ? thisDiastolicSum / thisBpCount : 0;
-    double lastSystolicAvg = lastBpCount > 0 ? lastSystolicSum / lastBpCount : 0;
-    double lastDiastolicAvg = lastBpCount > 0 ? lastDiastolicSum / lastBpCount : 0;
+    double thisSystolicAvg = thisBpCount > 0
+        ? thisSystolicSum / thisBpCount
+        : 0;
+    double thisDiastolicAvg = thisBpCount > 0
+        ? thisDiastolicSum / thisBpCount
+        : 0;
+    double lastSystolicAvg = lastBpCount > 0
+        ? lastSystolicSum / lastBpCount
+        : 0;
+    double lastDiastolicAvg = lastBpCount > 0
+        ? lastDiastolicSum / lastBpCount
+        : 0;
     if (lastSystolicAvg > 0) {
-      _systolicChangePercent = ((thisSystolicAvg - lastSystolicAvg) / lastSystolicAvg) * 100;
-      _diastolicChangePercent = ((thisDiastolicAvg - lastDiastolicAvg) / lastDiastolicAvg) * 100;
+      _systolicChangePercent =
+          ((thisSystolicAvg - lastSystolicAvg) / lastSystolicAvg) * 100;
+      _diastolicChangePercent =
+          ((thisDiastolicAvg - lastDiastolicAvg) / lastDiastolicAvg) * 100;
       _hasBpChange = true;
     } else {
       _hasBpChange = false;
@@ -470,7 +579,20 @@ class _ReportPageState extends State<ReportPage> {
   }
 
   String _monthAbbr(int month) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return months[month - 1];
   }
 
@@ -491,9 +613,9 @@ class _ReportPageState extends State<ReportPage> {
         throw Exception('Failed to generate data');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -518,9 +640,18 @@ class _ReportPageState extends State<ReportPage> {
 
   Future<void> _showAddMetricDialog() async {
     final metricTypes = [
-      'steps', 'heart_rate', 'blood_pressure', 'glucose',
-      'weight', 'height', 'body_temperature', 'oxygen_saturation',
-      'sleep_duration', 'calories_burned', 'water_intake', 'respiratory_rate'
+      'steps',
+      'heart_rate',
+      'blood_pressure',
+      'glucose',
+      'weight',
+      'height',
+      'body_temperature',
+      'oxygen_saturation',
+      'sleep_duration',
+      'calories_burned',
+      'water_intake',
+      'respiratory_rate',
     ];
     String selectedMetric = metricTypes.first;
 
@@ -547,8 +678,11 @@ class _ReportPageState extends State<ReportPage> {
                           child: Text(type.replaceAll('_', ' ').toUpperCase()),
                         );
                       }).toList(),
-                      onChanged: (value) => setState(() => selectedMetric = value!),
-                      decoration: const InputDecoration(labelText: 'Metric Type'),
+                      onChanged: (value) =>
+                          setState(() => selectedMetric = value!),
+                      decoration: const InputDecoration(
+                        labelText: 'Metric Type',
+                      ),
                     ),
                     TextField(
                       controller: valueController,
@@ -557,11 +691,15 @@ class _ReportPageState extends State<ReportPage> {
                     ),
                     TextField(
                       controller: unitController,
-                      decoration: const InputDecoration(labelText: 'Unit (optional)'),
+                      decoration: const InputDecoration(
+                        labelText: 'Unit (optional)',
+                      ),
                     ),
                     ListTile(
                       title: Text('Date & Time'),
-                      subtitle: Text('${selectedDateTime.toLocal()}'.split('.')[0]),
+                      subtitle: Text(
+                        '${selectedDateTime.toLocal()}'.split('.')[0],
+                      ),
                       trailing: Icon(Icons.calendar_today),
                       onTap: () async {
                         final date = await showDatePicker(
@@ -573,13 +711,18 @@ class _ReportPageState extends State<ReportPage> {
                         if (date != null) {
                           final time = await showTimePicker(
                             context: ctx,
-                            initialTime: TimeOfDay.fromDateTime(selectedDateTime),
+                            initialTime: TimeOfDay.fromDateTime(
+                              selectedDateTime,
+                            ),
                           );
                           if (time != null) {
                             setState(() {
                               selectedDateTime = DateTime(
-                                date.year, date.month, date.day,
-                                time.hour, time.minute,
+                                date.year,
+                                date.month,
+                                date.day,
+                                time.hour,
+                                time.minute,
                               );
                             });
                           }
@@ -613,7 +756,9 @@ class _ReportPageState extends State<ReportPage> {
                     final data = {
                       'metricType': selectedMetric,
                       'value': value,
-                      'unit': unitController.text.isEmpty ? null : unitController.text,
+                      'unit': unitController.text.isEmpty
+                          ? null
+                          : unitController.text,
                       'timestamp': selectedDateTime.toIso8601String(),
                       'source': 'manual',
                     };
@@ -632,12 +777,16 @@ class _ReportPageState extends State<ReportPage> {
   }
 
   Future<void> _showEditGoalDialog(String goalType, int currentValue) async {
-    final TextEditingController controller = TextEditingController(text: currentValue.toString());
+    final TextEditingController controller = TextEditingController(
+      text: currentValue.toString(),
+    );
     return showDialog(
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          title: Text('Edit ${goalType == 'steps' ? 'Steps' : 'Calories'} Goal'),
+          title: Text(
+            'Edit ${goalType == 'steps' ? 'Steps' : 'Calories'} Goal',
+          ),
           content: TextField(
             controller: controller,
             keyboardType: TextInputType.number,
@@ -653,7 +802,9 @@ class _ReportPageState extends State<ReportPage> {
                 final newValue = int.tryParse(controller.text);
                 if (newValue == null || newValue <= 0) {
                   ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(content: Text('Please enter a valid number')),
+                    const SnackBar(
+                      content: Text('Please enter a valid number'),
+                    ),
                   );
                   return;
                 }
@@ -688,7 +839,9 @@ class _ReportPageState extends State<ReportPage> {
 
         if (existingGoal != null) {
           final updateResponse = await http.put(
-            Uri.parse('${_getBaseUrl()}/api/health-goals/${existingGoal['_id']}'),
+            Uri.parse(
+              '${_getBaseUrl()}/api/health-goals/${existingGoal['_id']}',
+            ),
             headers: {
               'Authorization': 'Bearer $token',
               'Content-Type': 'application/json',
@@ -711,7 +864,9 @@ class _ReportPageState extends State<ReportPage> {
             body: jsonEncode({
               'goalType': goalType,
               'targetValue': newValue,
-              'targetDate': now.add(const Duration(days: 30)).toIso8601String(), // dafault after 30 days
+              'targetDate': now
+                  .add(const Duration(days: 30))
+                  .toIso8601String(), // dafault after 30 days
               'title': goalType == 'steps' ? 'Steps Goal' : 'Calories Goal',
             }),
           );
@@ -723,13 +878,17 @@ class _ReportPageState extends State<ReportPage> {
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to fetch existing goal: ${getResponse.statusCode}')),
+          SnackBar(
+            content: Text(
+              'Failed to fetch existing goal: ${getResponse.statusCode}',
+            ),
+          ),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error updating goal: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error updating goal: $e')));
     }
   }
 
@@ -754,13 +913,14 @@ class _ReportPageState extends State<ReportPage> {
         );
         await _fetchHealthData(specificUserId: _currentViewingUserId);
       } else {
-        final error = jsonDecode(response.body)['error'] ?? 'Failed to add data';
+        final error =
+            jsonDecode(response.body)['error'] ?? 'Failed to add data';
         throw Exception(error);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -779,7 +939,11 @@ class _ReportPageState extends State<ReportPage> {
           const SizedBox(height: 20),
           Text(
             'No health data yet',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.grey[700]),
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[700],
+            ),
           ),
           const SizedBox(height: 10),
           Text(
@@ -805,7 +969,10 @@ class _ReportPageState extends State<ReportPage> {
   Widget _buildGoalColumn(int goalValue) {
     return Column(
       children: [
-        Text(goalValue.toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
+        Text(
+          goalValue.toString(),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         const Text("Goal", style: TextStyle(fontSize: 10)),
       ],
     );
@@ -813,6 +980,8 @@ class _ReportPageState extends State<ReportPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isLight = Theme.of(context).brightness == Brightness.light;
+
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(
@@ -865,17 +1034,24 @@ class _ReportPageState extends State<ReportPage> {
                   children: [
                     Text(
                       "Health Report",
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 25,
+                      ),
                     ),
                     Row(
                       children: [
                         if (_isAdmin) ...[
                           ElevatedButton(
                             onPressed: () {
-                              final currentUser = context.read<AuthCubit>().currentUser;
+                              final currentUser = context
+                                  .read<AuthCubit>()
+                                  .currentUser;
                               if (currentUser != null) {
                                 _searchName = '';
-                                _fetchHealthData(specificUserId: currentUser.uid);
+                                _fetchHealthData(
+                                  specificUserId: currentUser.uid,
+                                );
                               }
                             },
                             child: const Text('My Data'),
@@ -899,14 +1075,21 @@ class _ReportPageState extends State<ReportPage> {
                               _selectedStartDate = null;
                               _selectedEndDate = null;
                             });
-                            _fetchHealthData(specificUserId: _currentViewingUserId);
+                            _fetchHealthData(
+                              specificUserId: _currentViewingUserId,
+                            );
                           },
                         ),
                         const SizedBox(width: 8),
                         if (kDebugMode)
                           ElevatedButton(
                             onPressed: _generateSimulatedData,
-                            child: const Text('Test'),
+                            child: Text(
+                              'Test',
+                              style: TextStyle(
+                                color: isLight ? Colors.black : Colors.white,
+                              ),
+                            ),
                           ),
                       ],
                     ),
@@ -928,13 +1111,17 @@ class _ReportPageState extends State<ReportPage> {
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 10,
+                          ),
                         ),
                         onSubmitted: (_) {
                           setState(() {
                             _searchName = _searchController.text;
                           });
-                          _fetchHealthData(specificUserId: _currentViewingUserId);
+                          _fetchHealthData(
+                            specificUserId: _currentViewingUserId,
+                          );
                         },
                       ),
                     ),
@@ -962,10 +1149,13 @@ class _ReportPageState extends State<ReportPage> {
                 Text(
                   _isAdmin
                       ? (_viewingAll
-                          ? 'Your health data overview and analysis – All users'
-                          : 'Your health data overview and analysis – $_viewingUserName')
+                            ? 'Your health data overview and analysis – All users'
+                            : 'Your health data overview and analysis – $_viewingUserName')
                       : 'Your health data overview and analysis',
-                  style: TextStyle(color: Colors.grey[700], fontSize: 15),
+                  style: TextStyle(
+                    color: isLight ? Colors.grey[700] : Colors.grey[200],
+                    fontSize: 15,
+                  ),
                 ),
                 const SizedBox(height: 10),
 
@@ -978,7 +1168,8 @@ class _ReportPageState extends State<ReportPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 0),
                     children: [
                       MouseRegion(
-                        onEnter: (_) => _periodCardHoverColor.value = Colors.grey[300],
+                        onEnter: (_) =>
+                            _periodCardHoverColor.value = Colors.grey[300],
                         onExit: (_) => _periodCardHoverColor.value = null,
                         child: ValueListenableBuilder<Color?>(
                           valueListenable: _periodCardHoverColor,
@@ -988,7 +1179,8 @@ class _ReportPageState extends State<ReportPage> {
                               child: InfoCards(
                                 title: "Report Period",
                                 subtitle: _reportPeriod,
-                                backgroundColor: hoverColor ?? const Color(0xFFE6F2E6),
+                                backgroundColor:
+                                    hoverColor ?? const Color(0xFFE6F2E6),
                               ),
                             );
                           },
@@ -1005,13 +1197,15 @@ class _ReportPageState extends State<ReportPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 20),
 
                 // Steps Card
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: isLight
+                        ? Colors.white
+                        : const Color(0xFF06241A),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
@@ -1026,31 +1220,48 @@ class _ReportPageState extends State<ReportPage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text("Steps", style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text(
+                            "Steps",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                           Container(
                             padding: EdgeInsets.only(left: 5, right: 5),
                             decoration: BoxDecoration(
-                              color: (_hasStepsChange && _stepsChangePercent >= 0) ? Colors.green[100] : Colors.red[100],
+                              color:
+                                  (_hasStepsChange && _stepsChangePercent >= 0)
+                                  ? (isLight ? Colors.green[100] : Colors.green[700])
+                                  : (isLight ? Colors.red[100] : Colors.red[600]),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
                               _hasStepsChange
                                   ? '${_stepsChangePercent >= 0 ? '+' : ''}${_stepsChangePercent.toStringAsFixed(1)}%'
                                   : '—',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: isLight ? Colors.black : Colors.white,
+                              ),
                             ),
                           ),
                         ],
                       ),
                       Text(
                         _totalSteps.toString(),
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 25,
+                        ),
                       ),
-                      const Text("Total steps this week", style: TextStyle(fontSize: 10)),
+                      const Text(
+                        "Total steps this week",
+                        style: TextStyle(fontSize: 10),
+                      ),
                       const SizedBox(height: 10),
                       LinearProgressIndicator(
                         value: 0.75,
                         valueColor: const AlwaysStoppedAnimation(Colors.green),
+                        backgroundColor: isLight ? Colors.grey[300] : Colors.grey[800],
                         minHeight: 8,
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -1062,20 +1273,29 @@ class _ReportPageState extends State<ReportPage> {
                             children: [
                               Text(
                                 (_totalSteps / 7).toStringAsFixed(0),
-                                style: const TextStyle(fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                              const Text("Daily Average", style: TextStyle(fontSize: 10)),
+                              const Text(
+                                "Daily Average",
+                                style: TextStyle(fontSize: 10),
+                              ),
                             ],
                           ),
                           Column(
                             children: const [
-                              Text("N/A", style: TextStyle(fontWeight: FontWeight.bold)),
+                              Text(
+                                "N/A",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                               Text("Last Week", style: TextStyle(fontSize: 10)),
                             ],
                           ),
                           if (_canEditGoal)
                             GestureDetector(
-                              onTap: () => _showEditGoalDialog('steps', _stepsGoal),
+                              onTap: () =>
+                                  _showEditGoalDialog('steps', _stepsGoal),
                               child: _buildGoalColumn(_stepsGoal),
                             )
                           else
@@ -1085,13 +1305,15 @@ class _ReportPageState extends State<ReportPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 15),
 
                 // Heart Rate Card
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: isLight
+                        ? Colors.white
+                        : const Color.fromARGB(255, 33, 11, 11),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
@@ -1106,28 +1328,50 @@ class _ReportPageState extends State<ReportPage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text("Heart Rate", style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text(
+                            "Heart Rate",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                           Container(
-                            padding: EdgeInsets.only(left: 5, right: 5),
+                            padding: const EdgeInsets.only(left: 5, right: 5),
                             decoration: BoxDecoration(
-                              color: (_hasHeartRateChange && _heartRateChangePercent >= 0) ? Colors.green[100] : Colors.red[100],
+                              color:
+                                  (_hasHeartRateChange &&
+                                      _heartRateChangePercent >= 0)
+                                  ? (isLight ? Colors.green[100] : Colors.green[700])
+                                  : (isLight ? Colors.red[100] : Colors.red[600]),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
                               _hasHeartRateChange
                                   ? '${_heartRateChangePercent >= 0 ? '+' : ''}${_heartRateChangePercent.toStringAsFixed(1)}%'
                                   : '—',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: isLight ? Colors.black : Colors.white,
+                              ),
                             ),
                           ),
                         ],
                       ),
                       Text(
                         '${_avgHeartRate.toStringAsFixed(0)} BPM',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 25,
+                        ),
                       ),
-                      const Text("Average heart rate", style: TextStyle(fontSize: 10)),
-                      SizedBox(height: 150, child: LineGraph(dataPoints: _heartRatePoints)),
+                      const Text(
+                        "Average heart rate",
+                        style: TextStyle(fontSize: 10),
+                      ),
+                      SizedBox(
+                        height: 150,
+                        child: LineGraph(dataPoints: _heartRatePoints),
+                      ),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -1135,15 +1379,26 @@ class _ReportPageState extends State<ReportPage> {
                             children: [
                               Text(
                                 '${_avgHeartRate.toStringAsFixed(0)} BPM',
-                                style: const TextStyle(fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                              const Text("Average", style: TextStyle(fontSize: 10)),
+                              const Text(
+                                "Average",
+                                style: TextStyle(fontSize: 10),
+                              ),
                             ],
                           ),
                           Column(
                             children: const [
-                              Text("60–100", style: TextStyle(fontWeight: FontWeight.bold)),
-                              Text("Normal Range", style: TextStyle(fontSize: 10)),
+                              Text(
+                                "60–100",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                "Normal Range",
+                                style: TextStyle(fontSize: 10),
+                              ),
                             ],
                           ),
                         ],
@@ -1151,13 +1406,15 @@ class _ReportPageState extends State<ReportPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 15),
 
                 // Calories Card
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: isLight
+                        ? Colors.white
+                        : const Color(0xFF3A2308),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
@@ -1172,31 +1429,51 @@ class _ReportPageState extends State<ReportPage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text("Calories", style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text(
+                            "Calories",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                           Container(
-                            padding: EdgeInsets.only(left: 5, right: 5),
+                            padding: const EdgeInsets.only(left: 5, right: 5),
                             decoration: BoxDecoration(
-                              color: (_hasCaloriesChange && _caloriesChangePercent >= 0) ? Colors.green[100] : Colors.red[100],
+                              color:
+                                  (_hasCaloriesChange &&
+                                      _caloriesChangePercent >= 0)
+                                  ? (isLight ? Colors.green[100] : Colors.green[700])
+                                  : (isLight ? Colors.red[100] : Colors.red[600]),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
                               _hasCaloriesChange
                                   ? '${_caloriesChangePercent >= 0 ? '+' : ''}${_caloriesChangePercent.toStringAsFixed(1)}%'
                                   : '—',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: isLight ? Colors.black : Colors.white,
+                              ),
                             ),
                           ),
                         ],
                       ),
                       Text(
                         _totalCalories.toString(),
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 25,
+                        ),
                       ),
-                      const Text("Active calories burned this week", style: TextStyle(fontSize: 10)),
+                      const Text(
+                        "Active calories burned this week",
+                        style: TextStyle(fontSize: 10),
+                      ),
                       const SizedBox(height: 10),
                       LinearProgressIndicator(
                         value: 0.55,
                         valueColor: const AlwaysStoppedAnimation(Colors.green),
+                        backgroundColor: isLight ? Colors.grey[300] : Colors.grey[800],
                         minHeight: 8,
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -1208,20 +1485,31 @@ class _ReportPageState extends State<ReportPage> {
                             children: [
                               Text(
                                 (_totalCalories / 7).toStringAsFixed(0),
-                                style: const TextStyle(fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                              const Text("Daily Average", style: TextStyle(fontSize: 10)),
+                              const Text(
+                                "Daily Average",
+                                style: TextStyle(fontSize: 10),
+                              ),
                             ],
                           ),
                           Column(
                             children: const [
-                              Text("N/A", style: TextStyle(fontWeight: FontWeight.bold)),
+                              Text(
+                                "N/A",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                               Text("Last Week", style: TextStyle(fontSize: 10)),
                             ],
                           ),
                           if (_canEditGoal)
                             GestureDetector(
-                              onTap: () => _showEditGoalDialog('calories_burned', _caloriesGoal),
+                              onTap: () => _showEditGoalDialog(
+                                'calories_burned',
+                                _caloriesGoal,
+                              ),
                               child: _buildGoalColumn(_caloriesGoal),
                             )
                           else
@@ -1231,13 +1519,15 @@ class _ReportPageState extends State<ReportPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 15),
 
                 // Sleep Card
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: isLight
+                        ? Colors.white
+                        : const Color(0xFF24102F),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
@@ -1252,29 +1542,50 @@ class _ReportPageState extends State<ReportPage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text("Sleep", style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text(
+                            "Sleep",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                           Container(
-                            padding: EdgeInsets.only(left: 5, right: 5),
+                            padding: const EdgeInsets.only(left: 5, right: 5),
                             decoration: BoxDecoration(
-                              color: (_hasSleepChange && _sleepChangePercent >= 0) ? Colors.green[100] : Colors.red[100],
+                              color:
+                                  (_hasSleepChange && _sleepChangePercent >= 0)
+                                  ? (isLight ? Colors.green[100] : Colors.green[700])
+                                  : (isLight ? Colors.red[100] : Colors.red[600]),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
                               _hasSleepChange
                                   ? '${_sleepChangePercent >= 0 ? '+' : ''}${_sleepChangePercent.toStringAsFixed(1)}%'
                                   : '—',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: isLight ? Colors.black : Colors.white,
+                              ),
                             ),
                           ),
                         ],
                       ),
                       Text(
                         '${_totalSleepHours.toStringAsFixed(0)} hours',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 25,
+                        ),
                       ),
-                      const Text("Total sleep this week", style: TextStyle(fontSize: 10)),
+                      const Text(
+                        "Total sleep this week",
+                        style: TextStyle(fontSize: 10),
+                      ),
                       const SizedBox(height: 10),
-                      SizedBox(height: 130, child: BarGraph(dataPoints: _sleepDataPoints)),
+                      SizedBox(
+                        height: 130,
+                        child: BarGraph(dataPoints: _sleepDataPoints),
+                      ),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -1282,14 +1593,22 @@ class _ReportPageState extends State<ReportPage> {
                             children: [
                               Text(
                                 '${(_totalSleepHours / 7).toStringAsFixed(1)} hours',
-                                style: const TextStyle(fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                              const Text("Daily Average", style: TextStyle(fontSize: 10)),
+                              const Text(
+                                "Daily Average",
+                                style: TextStyle(fontSize: 10),
+                              ),
                             ],
                           ),
                           Column(
                             children: const [
-                              Text("N/A", style: TextStyle(fontWeight: FontWeight.bold)),
+                              Text(
+                                "N/A",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                               Text("Last Week", style: TextStyle(fontSize: 10)),
                             ],
                           ),
@@ -1298,13 +1617,15 @@ class _ReportPageState extends State<ReportPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 15),
 
                 // Glucose Card
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: isLight
+                        ? Colors.white
+                        : const Color(0xFF03292C),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
@@ -1330,18 +1651,33 @@ class _ReportPageState extends State<ReportPage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text("Glucose", style: TextStyle(fontWeight: FontWeight.bold)),
+                            Text(
+                              "Glucose",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                              ),
                               decoration: BoxDecoration(
-                                color: _hasGlucoseChange && _glucoseChangePercent >= 0 ? Colors.green[100] : Colors.red[100],
+                                color:
+                                    _hasGlucoseChange &&
+                                        _glucoseChangePercent >= 0
+                                    ? (isLight ? Colors.green[100] : Colors.green[700])
+                                    : (isLight ? Colors.red[100] : Colors.red[600]),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
                                 _hasGlucoseChange
                                     ? '${_glucoseChangePercent >= 0 ? '+' : ''}${_glucoseChangePercent.toStringAsFixed(1)}%'
                                     : '—',
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: isLight ? Colors.black : Colors.white,
+                                ),
                               ),
                             ),
                           ],
@@ -1349,9 +1685,15 @@ class _ReportPageState extends State<ReportPage> {
                         const SizedBox(height: 8),
                         Text(
                           '${_avgGlucose.toStringAsFixed(1)} mmol/L',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 25,
+                          ),
                         ),
-                        const Text("Average glucose this week", style: TextStyle(fontSize: 10)),
+                        const Text(
+                          "Average glucose this week",
+                          style: TextStyle(fontSize: 10),
+                        ),
                         const SizedBox(height: 10),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1360,15 +1702,26 @@ class _ReportPageState extends State<ReportPage> {
                               children: [
                                 Text(
                                   '${_avgGlucose.toStringAsFixed(1)}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
-                                const Text("Avg", style: TextStyle(fontSize: 10)),
+                                const Text(
+                                  "Avg",
+                                  style: TextStyle(fontSize: 10),
+                                ),
                               ],
                             ),
                             Column(
                               children: const [
-                                Text("3.9–7.8", style: TextStyle(fontWeight: FontWeight.bold)),
-                                Text("Normal Range", style: TextStyle(fontSize: 10)),
+                                Text(
+                                  "3.9–7.8",
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                Text(
+                                  "Normal Range",
+                                  style: TextStyle(fontSize: 10),
+                                ),
                               ],
                             ),
                           ],
@@ -1377,13 +1730,15 @@ class _ReportPageState extends State<ReportPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 15),
 
                 // Blood Pressure Card
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: isLight
+                        ? Colors.white
+                        : const Color(0xFF0A2238),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
@@ -1409,18 +1764,31 @@ class _ReportPageState extends State<ReportPage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text("Blood Pressure", style: TextStyle(fontWeight: FontWeight.bold)),
+                            Text(
+                              "Blood Pressure",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                              ),
                               decoration: BoxDecoration(
-                                color: _hasBpChange ? Colors.green[100] : Colors.red[100],
+                                color: _hasBpChange
+                                    ? (isLight ? Colors.green[100] : Colors.green[700])
+                                    : (isLight ? Colors.red[100] : Colors.red[600]),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
                                 _hasBpChange
                                     ? '${_systolicChangePercent >= 0 ? '+' : ''}${_systolicChangePercent.toStringAsFixed(1)}%'
                                     : '—',
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: isLight ? Colors.black : Colors.white,
+                                ),
                               ),
                             ),
                           ],
@@ -1428,9 +1796,15 @@ class _ReportPageState extends State<ReportPage> {
                         const SizedBox(height: 8),
                         Text(
                           _bloodPressure,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 25,
+                          ),
                         ),
-                        const Text("Latest reading", style: TextStyle(fontSize: 10)),
+                        const Text(
+                          "Latest reading",
+                          style: TextStyle(fontSize: 10),
+                        ),
                         const SizedBox(height: 10),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1439,15 +1813,26 @@ class _ReportPageState extends State<ReportPage> {
                               children: [
                                 Text(
                                   '$_systolic / $_diastolic',
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
-                                const Text("Today", style: TextStyle(fontSize: 10)),
+                                const Text(
+                                  "Today",
+                                  style: TextStyle(fontSize: 10),
+                                ),
                               ],
                             ),
                             Column(
                               children: const [
-                                Text("<120/80", style: TextStyle(fontWeight: FontWeight.bold)),
-                                Text("Optimal", style: TextStyle(fontSize: 10)),
+                                Text(
+                                  "<120/80",
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                Text(
+                                  "Optimal",
+                                  style: TextStyle(fontSize: 10),
+                                ),
                               ],
                             ),
                           ],
@@ -1462,7 +1847,7 @@ class _ReportPageState extends State<ReportPage> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: isLight ? Colors.white : const Color.fromARGB(255, 36, 36, 36),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
@@ -1475,30 +1860,52 @@ class _ReportPageState extends State<ReportPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("Weekly Progress", style: TextStyle(fontWeight: FontWeight.bold)),
+                      const Text(
+                        "Weekly Progress",
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          Text("$_goalsAchievedDays/7", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                          Text(
+                            "$_goalsAchievedDays/7",
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                            ),
+                          ),
                           const SizedBox(width: 10),
-                          const Text("Goals Achieved This Week", style: TextStyle(fontSize: 10)),
+                          const Text(
+                            "Goals Achieved This Week",
+                            style: TextStyle(fontSize: 10),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Color(0xFFDFF2FA),
+                          color: isLight
+                              ? const Color(0xFFDFF2FA)
+                              : const Color.fromARGB(44, 223, 242, 250),
                           borderRadius: const BorderRadius.only(
                             topRight: Radius.circular(16),
                             bottomRight: Radius.circular(20),
                           ),
-                          border: const Border(left: BorderSide(width: 3, color: Colors.blue)),
+                          border: const Border(
+                            left: BorderSide(width: 3, color: Colors.blue),
+                          ),
                         ),
                         child: const Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text("Weekly Insight", style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                            Text(
+                              "Weekly Insight",
+                              style: TextStyle(
+                                color: Colors.blue,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             SizedBox(height: 4),
                             Text(
                               "He knew what he was supposed to do. Tas supposed to do and what he would do were not the same. This would have been fine if he were willing to face the inevitable consequences, but he wasn't.",
