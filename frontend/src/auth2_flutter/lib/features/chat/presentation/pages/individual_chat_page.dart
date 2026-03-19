@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:auth2_flutter/features/chat/services/health_bot_service.dart';
 
 class ChatDetailPage extends StatefulWidget {
   final String chatId;
   final String chatName;
+  final Map<String, dynamic> healthData;
 
   ChatDetailPage({
     super.key,
     required this.chatId,
     required this.chatName,
+    required this.healthData,
   });
 
   @override
@@ -110,6 +113,21 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
               },
             ),
           ),
+          
+          // quick questions
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildQuickQuestion('How is my health today?'),
+                _buildQuickQuestion('Did I reach my step goal?'),
+                _buildQuickQuestion('How was my sleep?'),
+                _buildQuickQuestion('Explain my heart rate'),
+              ],
+            ),
+          ),
 
           // input bar
           Container(
@@ -191,18 +209,58 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     );
   }
 
+  Widget _buildQuickQuestion(String question) {
+    return ActionChip(
+      label: Text(
+        question,
+        style: const TextStyle(fontSize: 12),
+      ),
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: Colors.grey.shade300),
+      ),
+      onPressed: () {
+        _controller.text = question;
+        _handleSend();
+      },
+    );
+  }
+
   void _handleSend() {
     String text = _controller.text.trim();
     if (text.isEmpty) return;
+
+    final now = TimeOfDay.now();
+    final timeText =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
     setState(() {
       _messages.add({
         'fromMe': true,
         'text': text,
-        'time': '15:00', // temp; later from backend or DateTime.now()
+        'time': timeText,
       });
     });
 
     _controller.clear();
+
+    final reply = HealthBotService.getReply(text, widget.healthData);
+
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (!mounted) return;
+
+      final botNow = TimeOfDay.now();
+      final botTime =
+          '${botNow.hour.toString().padLeft(2, '0')}:${botNow.minute.toString().padLeft(2, '0')}';
+
+      setState(() {
+        _messages.add({
+          'fromMe': false,
+          'text': reply,
+          'time': botTime,
+        });
+      });
+    });
   }
 }

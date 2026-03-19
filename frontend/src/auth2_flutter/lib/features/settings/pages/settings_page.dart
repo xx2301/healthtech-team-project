@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:http/http.dart' as http;
+import 'package:open_file/open_file.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
@@ -13,6 +14,11 @@ import 'package:provider/provider.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubit.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:cross_file/cross_file.dart';
+import 'package:csv/csv.dart';
+import 'dart:html' as html;
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -100,7 +106,71 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _exportData() async {
+  Future<void> _showExportDialog() async {
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Export Data'),
+        content: const Text('Choose format:'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'json'),
+            child: const Text('JSON'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'csv'),
+            child: const Text('CSV'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+    
+    if (choice != null) {
+      await _exportData(format: choice);
+    }
+  }
+
+  Future<void> shareFile(String content, String fileName, String format) async {
+    final bytes = utf8.encode(content);
+
+    final params = ShareParams(
+      text: 'My health data',
+      subject: 'Health Data Export',
+      files: [
+        XFile.fromData(
+          bytes,
+          mimeType: format == 'csv' ? 'text/csv' : 'application/json',
+        ),
+      ],
+      fileNameOverrides: [fileName],
+
+      // important for web
+      downloadFallbackEnabled: true,
+    );
+
+    final result = await SharePlus.instance.share(params);
+
+    print("Share status: ${result.status}");
+  }
+
+  void downloadFile(String content, String fileName) {
+    final bytes = utf8.encode(content);
+
+    final blob = html.Blob([bytes]);
+    final url = html.Url.createObjectUrlFromBlob(blob);
+
+    final anchor = html.AnchorElement(href: url)
+      ..setAttribute("download", fileName)
+      ..click();
+
+    html.Url.revokeObjectUrl(url);
+  }
+
+  Future<void> _exportData({String format = 'json'}) async {
     final token = await _getToken();
     if (token == null) return;
 
@@ -114,10 +184,60 @@ class _SettingsPageState extends State<SettingsPage> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final jsonString = JsonEncoder.withIndent('  ').convert(data);
-        await Clipboard.setData(ClipboardData(text: jsonString));
+        String content;
+        String fileName;
+
+        if (format == 'json') {
+          content = JsonEncoder.withIndent('  ').convert(data);
+          fileName = 'health_data.json';
+        } else {
+          content = _jsonToCsv(data);
+          fileName = 'health_data.csv';
+        }
+
+        if (kIsWeb) {
+        // ✅ Web → no file system
+          downloadFile(content, fileName);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('File downloaded')),
+          );
+
+          return;
+        } else {
+          // ✅ Mobile/Desktop → file system
+          // Get temporary directory
+          final dir = await getTemporaryDirectory();
+          final file = File('${dir.path}/$fileName');
+
+          // Write content to file
+          await file.writeAsString(content);
+
+          // Share the file
+          if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+            // 👉 Desktop → open file instead of sharing
+            await OpenFile.open(file.path);
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('File opened: $fileName')),
+            );
+
+          } else {
+            // 👉 Mobile → share
+            await SharePlus.instance.share(
+              ShareParams(
+                text: 'My health data',
+                files: [XFile(file.path)],
+              ),
+            );
+          }
+
+          print("File path: ${file.path}");
+          print("File exists: ${await file.exists()}");
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Health data copied to clipboard!')),
+          SnackBar(content: Text('File ready to share: $fileName')),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -131,6 +251,79 @@ class _SettingsPageState extends State<SettingsPage> {
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _exportWeb(String content, String fileName, String format) async {
+    final bytes = utf8.encode(content);
+
+    final params = ShareParams(
+      text: 'My health data',
+      files: [
+        XFile.fromData(
+          bytes,
+          mimeType: format == 'csv' ? 'text/csv' : 'application/json',
+        ),
+      ],
+      fileNameOverrides: [fileName],
+      downloadFallbackEnabled: true, // 🔥 KEY
+    );
+
+    await SharePlus.instance.share(params);
+  }
+
+  String _jsonToCsv(Map<String, dynamic> jsonData) {
+    final List<List<dynamic>> rows = [];
+
+    // user info
+    final user = jsonData['user'] ?? {};
+    if (user.isNotEmpty) {
+      rows.add(['User Info']); // section title
+      user.forEach((key, value) {
+        rows.add([key, value?.toString() ?? '']);
+      });
+      rows.add([]); // empty row spacing
+    }
+
+    // metrics data
+    final metrics = jsonData['metrics'] as List? ?? [];
+
+    if (metrics.isNotEmpty) {
+      // Collect all possible keys
+      final Set<String> headersSet = {};
+      for (var m in metrics) {
+        if (m is Map<String, dynamic>) {
+          headersSet.addAll(m.keys);
+        }
+      }
+
+      final headers = headersSet.toList()..sort();
+
+      // Add header row
+      rows.add(headers);
+
+      // Add data rows
+      for (var m in metrics) {
+        if (m is Map<String, dynamic>) {
+          final row = headers.map((key) {
+            final value = m[key];
+
+            if (value == null) return '';
+
+            // Convert nested objects safely
+            if (value is Map || value is List) {
+              return jsonEncode(value);
+            }
+
+            return value.toString();
+          }).toList();
+
+          rows.add(row);
+        }
+      }
+    }
+
+    // convert to CSV
+    return ListToCsvConverter().convert(rows);
   }
 
   @override
@@ -320,7 +513,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         dense: true,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                        onTap: _exportData,
+                        onTap: _showExportDialog,
                       ),
                     ),
                     

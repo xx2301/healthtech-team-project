@@ -191,8 +191,17 @@ class _ChatPageState extends State<ChatPage> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) =>
-                      ChatDetailPage(chatId: chatId, chatName: chatName),
+                  builder: (_) => ChatDetailPage(
+                    chatId: chatId,
+                    chatName: chatName,
+                    healthData: {
+                      'todaySteps': 4320,
+                      'avgHeartRate': 78.0,
+                      'todayCalories': 350,
+                      'todaySleep': 6.5,
+                      'stepsGoal': 6700,
+                    },
+                  ),
                 ),
               );
             },

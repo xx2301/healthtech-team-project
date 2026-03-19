@@ -56,7 +56,7 @@ class BarGraph extends StatelessWidget {
     final index = value.toInt();
     if (index < 0 || index >= days.length) return const SizedBox.shrink();
     return SideTitleWidget(
-      axisSide: meta.axisSide,
+      meta: meta,
       space: 4,
       child: Text(days[index], style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500)),
     );

@@ -28,12 +28,17 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
-  provider: ^6.1.1
   flutter:
     sdk: flutter
-  fl_chart: ^0.68.0
+  provider: ^6.1.1
+  fl_chart: ^1.2.0
   reorderable_grid_view: ^2.2.0
-  
+  path_provider: ^2.0.16
+  share_plus: ^12.0.1
+  win32: ^5.5.3
+  ffi: ^2.2.0
+  csv: ^5.0.2
+  open_file: ^3.3.2
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -42,8 +47,8 @@ dependencies:
   http: ^1.2.1
   shared_preferences: ^2.2.2 # local memory storage
   equatable: ^2.0.5
-  connectivity_plus: ^5.0.2 # this is for checking internet connection
-  formz: ^0.6.0 # this is for form validation
+  connectivity_plus: ^7.0.0 # this is for checking internet connection
+  formz: ^0.8.0 # this is for form validation
   percent_indicator: ^4.2.5
 
 dev_dependencies:
