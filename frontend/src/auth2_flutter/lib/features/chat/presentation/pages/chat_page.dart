@@ -1,7 +1,8 @@
-import 'package:auth2_flutter/features/chat/presentation/pages/individual_chat_page.dart';
-import 'package:auth2_flutter/features/data/backend_auth_respository.dart';
+import 'package:auth2_flutter/features/chat/presentation/pages/chat_detail_page.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 class ChatPage extends StatefulWidget {
   ChatPage({super.key});
@@ -11,35 +12,31 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage> {
-  final BackendAuthRepository _authRepo = BackendAuthRepository();
-
   List<Map<String, dynamic>> _chats = [];
-  bool _loading = true;
-  String? _error;
   String _searchText = '';
+  String? _lastMessage;
+  String? _lastTime;
 
   @override
   void initState() {
     super.initState();
-    _loadChats();
+    _loadLastMessage();
   }
 
-  Future<void> _loadChats() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
-    try {
-      final chats = await _authRepo.getChats();
+  Future<void> _loadLastMessage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getStringList('chat_assistant');
+    if (saved != null && saved.isNotEmpty) {
+      final lastMsg = jsonDecode(saved.last) as Map<String, dynamic>;
       setState(() {
-        _chats = chats;
-        _loading = false;
+        _lastMessage = lastMsg['text'];
+        _lastTime = lastMsg['time'];
       });
-    } catch (e) {
+    } else {
+      // 没有消息时，使用默认占位
       setState(() {
-        _error = e.toString();
-        _loading = false;
+        _lastMessage = 'Ask me about your health';
+        _lastTime = '';
       });
     }
   }
@@ -48,8 +45,18 @@ class _ChatPageState extends State<ChatPage> {
   Widget build(BuildContext context) {
     Color background = Color(0xFFE6F5E6);
 
-    // filter by search
-    List<Map<String, dynamic>> filteredChats = _chats.where((chat) {
+    // 构建动态的聊天列表（目前只有一个助手，但可扩展）
+    final List<Map<String, dynamic>> chats = [
+      {
+        'id': 'assistant',
+        'name': 'Health Assistant',
+        'lastMessage': _lastMessage ?? 'Ask me about your health',
+        'time': _lastTime ?? '',
+        'initials': 'HA',
+      }
+    ];
+
+    List<Map<String, dynamic>> filteredChats = chats.where((chat) {
       if (_searchText.trim().isEmpty) return true;
       String query = _searchText.toLowerCase();
       String name = (chat['name'] ?? '').toString().toLowerCase();
@@ -65,46 +72,38 @@ class _ChatPageState extends State<ChatPage> {
         child: Column(
           children: [
             SizedBox(
-  height: 50,
-  child: Stack(
-    alignment: Alignment.center,
-    children: [
-      // Centered Title
-      const Center(
-        child: Text(
-          'Chat',
-          style: TextStyle(
-            color: Colors.black87,
-            fontWeight: FontWeight.w600,
-            fontSize: 18,
-          ),
-        ),
-      ),
-
-      // Right-side button
-      Positioned(
-        right: 0,
-        child: IconButton(
-          icon: const Icon(Icons.add, color: Colors.black87),
-          onPressed: () {
-            // TODO: start new chat
-          },
-        ),
-      ),
-    ],
-  ),
-),
-
-
-            // search bar
+              height: 50,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  const Center(
+                    child: Text(
+                      'Chat',
+                      style: TextStyle(
+                        color: Colors.black87,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 0,
+                    child: IconButton(
+                      icon: const Icon(Icons.add, color: Colors.black87),
+                      onPressed: () {
+                        // TODO: start new chat
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
             TextField(
-              onChanged: (value) {
-                setState(() {
-                  _searchText = value;
-                });
-              },
+              onChanged: (value) => setState(() => _searchText = value),
+              style: const TextStyle(color: Colors.black),
               decoration: InputDecoration(
                 hintText: 'Search',
+                hintStyle: TextStyle(color: Colors.grey[400]),
                 filled: true,
                 fillColor: Colors.white,
                 contentPadding: EdgeInsets.symmetric(
@@ -118,10 +117,7 @@ class _ChatPageState extends State<ChatPage> {
                 prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
               ),
             ),
-
             SizedBox(height: 16),
-
-            // content area
             Expanded(child: _buildBody(filteredChats)),
           ],
         ),
@@ -130,32 +126,6 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Widget _buildBody(List<Map<String, dynamic>> filteredChats) {
-    if (_loading) {
-      return Center(child: CircularProgressIndicator());
-    }
-
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Failed to load chats',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            SizedBox(height: 4),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Colors.red),
-            ),
-            SizedBox(height: 8),
-            TextButton(onPressed: _loadChats, child: Text('Retry')),
-          ],
-        ),
-      );
-    }
-
     if (filteredChats.isEmpty) {
       return Center(
         child: Text('No chats yet', style: TextStyle(color: Colors.grey[600])),
@@ -169,43 +139,26 @@ class _ChatPageState extends State<ChatPage> {
       color: Colors.white,
       child: ListView.separated(
         itemCount: filteredChats.length,
-        separatorBuilder: (context, index) {
-          return Divider(height: 1, thickness: 0.5, color: Colors.grey[300]);
-        },
+        separatorBuilder: (context, index) => Divider(height: 1, thickness: 0.5, color: Colors.grey[300]),
         itemBuilder: (context, index) {
           final chat = filteredChats[index];
-
-          String name = (chat['name'] ?? '').toString();
-          String lastMessage = (chat['lastMessage'] ?? '').toString();
-          String time = (chat['time'] ?? '').toString();
-
-          // either backend sends initials, or we generate from name
-          String initials = (chat['initials'] ?? _getInitialsFromName(name))
-              .toString();
+          final name = chat['name'];
+          final lastMessage = chat['lastMessage'];
+          final time = chat['time'];
+          final initials = chat['initials'];
 
           return InkWell(
             onTap: () {
-              String chatId = (chat['id'] ?? '').toString();
-              String chatName = (chat['name'] ?? '').toString();
-
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) => ChatDetailPage(
-                    chatId: chatId,
-                    chatName: chatName,
-                    healthData: {
-                      'todaySteps': 4320,
-                      'avgHeartRate': 78.0,
-                      'todayCalories': 350,
-                      'todaySleep': 6.5,
-                      'stepsGoal': 6700,
-                    },
+                    chatId: chat['id'],
+                    chatName: name,
                   ),
                 ),
-              );
+              ).then((_) => _loadLastMessage()); // 返回时刷新预览
             },
-
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
               child: Row(
@@ -230,10 +183,10 @@ class _ChatPageState extends State<ChatPage> {
                           name,
                           style: TextStyle(
                             fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
                           ),
                         ),
-                        SizedBox(height: 2),
                         Text(
                           lastMessage,
                           style: TextStyle(
@@ -246,18 +199,18 @@ class _ChatPageState extends State<ChatPage> {
                       ],
                     ),
                   ),
-                  SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        time,
-                        style: TextStyle(fontSize: 11, color: Colors.grey[700]),
-                      ),
-                      SizedBox(height: 4),
-                      Icon(Icons.done_all, size: 16, color: Colors.grey[500]),
-                    ],
-                  ),
+                  if (time.isNotEmpty)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          time,
+                          style: TextStyle(fontSize: 11, color: Colors.grey[700]),
+                        ),
+                        SizedBox(height: 4),
+                        Icon(Icons.done_all, size: 16, color: Colors.grey[500]),
+                      ],
+                    ),
                 ],
               ),
             ),
@@ -265,14 +218,5 @@ class _ChatPageState extends State<ChatPage> {
         },
       ),
     );
-  }
-
-  String _getInitialsFromName(String name) {
-    if (name.trim().isEmpty) return '';
-    List<String> parts = name.trim().split(' ');
-    if (parts.length == 1) {
-      return parts[0][0].toUpperCase();
-    }
-    return (parts[0][0] + parts[1][0]).toUpperCase();
   }
 }

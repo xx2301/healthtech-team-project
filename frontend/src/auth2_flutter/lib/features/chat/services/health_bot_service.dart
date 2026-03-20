@@ -2,16 +2,16 @@ class HealthBotService {
   static String getReply(String userMessage, Map<String, dynamic> data) {
     final text = userMessage.toLowerCase();
 
-    final int steps = data['todaySteps'] ?? 0;
-    final int goal = data['stepsGoal'] ?? 6700;
-    final double heartRate = (data['avgHeartRate'] ?? 0).toDouble();
-    final int calories = data['todayCalories'] ?? 0;
-    final double sleep = (data['todaySleep'] ?? 0).toDouble();
+    final steps = data['todaySteps'] ?? 0;
+    final goal = data['stepsGoal'] ?? 6700;
+    final heartRate = (data['avgHeartRate'] ?? 0).toDouble();
+    final calories = (data['todayCalories'] ?? 0).toDouble();
+    final sleep = (data['todaySleep'] ?? 0).toDouble();
 
     if (text.contains('health') || text.contains('summary')) {
       return 'Today you have walked $steps steps. '
           'Your average heart rate is ${heartRate.toInt()} bpm. '
-          'You burned $calories kcal today and slept ${sleep.toStringAsFixed(1)} hours.';
+          'You burned ${calories.toStringAsFixed(1)} kcal today and slept ${sleep.toStringAsFixed(1)} hours.';
     }
 
     if (text.contains('step')) {
@@ -23,6 +23,15 @@ class HealthBotService {
       }
     }
 
+    if (text.contains('goal')) {
+      if (steps >= goal) {
+        return 'You already reached your daily goal! Congratulations!';
+      } else {
+        final remaining = goal - steps;
+        return 'You need $remaining more steps to reach your goal. Keep moving!';
+      }
+    }
+    
     if (text.contains('sleep')) {
       if (sleep >= 8) {
         return 'You slept ${sleep.toStringAsFixed(1)} hours. That looks good today.';

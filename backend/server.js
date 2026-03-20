@@ -2638,6 +2638,63 @@ app.put('/api/health-goals/:goalId', authenticateToken, async (req, res) => {
   }
 });
 
+// get health summary for today
+app.get('/api/user/health-summary', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const today = new Date();
+    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+
+    const metrics = await HealthMetric.find({
+      userId,
+      timestamp: { $gte: start, $lte: end }
+    });
+
+    let stepsTotal = 0;
+    let heartRateSum = 0;
+    let heartRateCount = 0;
+    let sleepTotal = 0;
+    let caloriesTotal = 0;
+
+    metrics.forEach(metric => {
+      const val = metric.decryptedValue;
+      switch (metric.metricType) {
+        case 'steps':
+          stepsTotal += val;
+          break;
+        case 'heart_rate':
+          heartRateSum += val;
+          heartRateCount++;
+          break;
+        case 'sleep_duration':
+          sleepTotal += val;
+          break;
+        case 'calories_burned':
+          caloriesTotal += val;
+          break;
+        // 可添加其他指标
+      }
+    });
+
+    const goal = await HealthGoal.findOne({ userId, goalType: 'steps' });
+
+    res.json({
+      success: true,
+      data: {
+        steps: stepsTotal,
+        heartRate: heartRateCount > 0 ? heartRateSum / heartRateCount : null,
+        sleep: sleepTotal,
+        calories: caloriesTotal,
+        stepsGoal: goal?.targetValue ?? 6700,
+      }
+    });
+  } catch (err) {
+    console.error('Health summary error:', err.stack);
+    res.status(500).json({ success: false, error: 'Failed to get summary' });
+  }
+});
+
 // export in JSON format
 app.get('/api/user/export-data', authenticateToken, async (req, res) => {
   try {

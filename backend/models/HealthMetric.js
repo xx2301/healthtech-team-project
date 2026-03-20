@@ -211,6 +211,18 @@ healthMetricSchema.set('toJSON', {
   }
 });
 
+healthMetricSchema.virtual('decryptedValue').get(function() {
+  if (typeof this.value === 'string') {
+    try {
+      return decryptValue(this.value);
+    } catch (err) {
+      console.error('Decryption error in virtual:', err);
+      return this.value;
+    }
+  }
+  return this.value;
+});
+
 const HealthMetric = mongoose.model('HealthMetric', healthMetricSchema);
 
 module.exports = HealthMetric;
