@@ -25,7 +25,7 @@ const conversationSchema = new mongoose.Schema({
   participantCount: {
     type: Number,
     default: 0,
-    min: 2
+    // min: 2
   },
   
   isArchived: {
@@ -84,4 +84,4 @@ conversationSchema.methods.updateLastMessageTime = function() {
 
 const Conversation = mongoose.model('Conversation', conversationSchema);
 
-module.exports = Conversation;
+module.exports = mongoose.models.Conversation || mongoose.model('Conversation', conversationSchema);

@@ -24,10 +24,13 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   List<Map<String, dynamic>> _messages = [];
   Map<String, dynamic>? _healthData;
   bool _loadingHealth = true;
+  bool _loadingMessages = true;
   String? _userName;
   final ScrollController _scrollController = ScrollController();
   bool _isBotTyping = false;
   Timer? _refreshTimer;
+
+  bool get _isAssistant => widget.chatId == 'assistant';
 
   @override
   void initState() {
@@ -41,15 +44,19 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         WidgetsBinding.instance.addPostFrameCallback((__) {
           _scrollToBottom();
         });
-        _fetchHealthSummary(isInitialLoad: true);
+        if (_isAssistant) {
+          _fetchHealthSummary(isInitialLoad: true);
+        }
       });
     });
 
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) {
-        _fetchHealthSummary(isInitialLoad: false);
-      }
-    });
+    if (_isAssistant) {
+      _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+        if (mounted) {
+          _fetchHealthSummary(isInitialLoad: false);
+        }
+      });
+    }
   }
 
   @override
@@ -71,6 +78,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     return 'http://localhost:3001';
   }
 
+  // 仅用于助手会话的健康数据获取
   Future<void> _fetchHealthSummary({required bool isInitialLoad}) async {
     try {
       final token = await _getToken();
@@ -137,9 +145,184 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     }
   }
 
+  // 加载消息（助手从本地存储，普通会话从后端）
+  Future<void> _loadMessages() async {
+    setState(() => _loadingMessages = true);
+    try {
+      if (_isAssistant) {
+        final prefs = await SharedPreferences.getInstance();
+        final saved = prefs.getStringList('chat_${widget.chatId}');
+        if (saved != null) {
+          setState(() {
+            _messages = saved.map((jsonStr) => jsonDecode(jsonStr) as Map<String, dynamic>).toList();
+          });
+        }
+        setState(() => _loadingMessages = false);
+      } else {
+        final token = await _getToken();
+        if (token == null) return;
+        final response = await http.get(
+          Uri.parse('${_getBaseUrl()}/api/chat/conversations/${widget.chatId}/messages'),
+          headers: {'Authorization': 'Bearer $token'},
+        );
+        if (response.statusCode == 200) {
+          final json = jsonDecode(response.body);
+          setState(() {
+            _messages = List<Map<String, dynamic>>.from(json['data']);
+            _loadingMessages = false;
+          });
+        } else {
+          setState(() => _loadingMessages = false);
+        }
+      }
+    } catch (e) {
+      print('Error loading messages: $e');
+      setState(() => _loadingMessages = false);
+    }
+  }
+
+  // 保存消息（助手保存到本地，普通会话自动通过后端保存）
+  Future<void> _saveMessages() async {
+    if (_isAssistant) {
+      final prefs = await SharedPreferences.getInstance();
+      final messagesJson = _messages.map((msg) => jsonEncode(msg)).toList();
+      await prefs.setStringList('chat_${widget.chatId}', messagesJson);
+    }
+    // 普通会话的消息已由后端保存，无需额外操作
+  }
+
+  // 发送消息
+  Future<void> _sendMessage(String text) async {
+    if (text.isEmpty || (_isAssistant && _healthData == null)) return;
+
+    final timeText = _getCurrentTime();
+
+    setState(() {
+      _messages.add({'fromMe': true, 'text': text, 'time': timeText});
+      if (_isAssistant) {
+        _isBotTyping = true;
+      }
+    });
+    _saveMessages();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom();
+    });
+
+    if (_isAssistant) {
+      // 助手回复
+      final reply = HealthBotService.getReply(text, _healthData!);
+      Future.delayed(const Duration(seconds: 1), () {
+        if (!mounted) return;
+        setState(() {
+          _isBotTyping = false;
+          _messages.add({'fromMe': false, 'text': reply, 'time': _getCurrentTime()});
+        });
+        _saveMessages();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToBottom();
+        });
+      });
+    } else {
+      // 普通会话：发送到后端
+      final token = await _getToken();
+      if (token == null) return;
+      try {
+        final response = await http.post(
+          Uri.parse('${_getBaseUrl()}/api/chat/conversations/${widget.chatId}/messages'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({'text': text}),
+        );
+        if (response.statusCode == 200) {
+          // 后端返回的消息已经包含时间等信息，但我们已经添加了临时消息，可以替换或追加
+          // 这里简单处理，重新加载消息
+          await _loadMessages();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _scrollToBottom();
+          });
+        } else {
+          print('Failed to send message: ${response.statusCode}');
+          // 移除刚添加的消息
+          setState(() {
+            _messages.removeLast();
+          });
+        }
+      } catch (e) {
+        print('Send error: $e');
+        setState(() {
+          _messages.removeLast();
+        });
+      }
+    }
+  }
+
+  void _handleSend() {
+    String text = _controller.text.trim();
+    if (text.isEmpty) return;
+    _controller.clear();
+    _sendMessage(text);
+  }
+
   String _getCurrentTime() {
     final now = TimeOfDay.now();
     return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+  }
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  Future<void> _confirmClearChat() async {
+    if (!_isAssistant) return; // 只有助手可以清除本地聊天记录
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear Conversation'),
+        content: const Text('Are you sure you want to delete all messages?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      _clearChat();
+    }
+  }
+
+  void _clearChat() {
+    setState(() {
+      _messages.clear();
+    });
+    _saveMessages();
+    _addWelcomeMessage();
+  }
+
+  void _addWelcomeMessage() {
+    setState(() {
+      _messages.add({
+        'fromMe': false,
+        'text': 'Hi $_userName! What can I help you with?',
+        'time': _getCurrentTime(),
+      });
+    });
+    _saveMessages();
+    _scrollToBottom();
   }
 
   @override
@@ -159,38 +342,30 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('🤖 ', style: const TextStyle(fontSize: 18)),
+            Text(_isAssistant ? '🤖 ' : '', style: const TextStyle(fontSize: 18)),
             _isBotTyping
                 ? const Text(
                     'typing...',
-                    style: TextStyle(
-                      color: Colors.black87,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 17,
-                    ),
+                    style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 17),
                   )
                 : Text(
                     widget.chatName,
-                    style: const TextStyle(
-                      color: Colors.black87,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 17,
-                    ),
+                    style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 17),
                   ),
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.delete, color: Colors.black87),
-            onPressed: _confirmClearChat,
-          ),
+          if (_isAssistant)
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.black87),
+              onPressed: _confirmClearChat,
+            ),
         ],
       ),
-      body: _loadingHealth
+      body: _loadingMessages || (_isAssistant && _loadingHealth)
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // messages
                 Expanded(
                   child: ListView.builder(
                     controller: _scrollController,
@@ -206,30 +381,25 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                     },
                   ),
                 ),
-
-                // typing indicator
-                if (_isBotTyping)
+                if (_isAssistant && _isBotTyping)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
                     child: _buildTypingIndicator(),
                   ),
-
-                // quick questions
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _buildQuickQuestion('📊 Health'),
-                      _buildQuickQuestion('🚶 Steps'),
-                      _buildQuickQuestion('😴 Sleep'),
-                      _buildQuickQuestion('❤️ Heart'),
-                    ],
+                if (_isAssistant)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _buildQuickQuestion('📊 Health'),
+                        _buildQuickQuestion('🚶 Steps'),
+                        _buildQuickQuestion('😴 Sleep'),
+                        _buildQuickQuestion('❤️ Heart'),
+                      ],
+                    ),
                   ),
-                ),
-
-                // input bar
                 Container(
                   padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
                   color: background,
@@ -239,31 +409,14 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                         child: TextField(
                           controller: _controller,
                           onSubmitted: (_) => _handleSend(),
-                          style: const TextStyle(
-                            color: Colors.black87,
-                            fontSize: 14,
-                          ),
+                          style: const TextStyle(color: Colors.black87, fontSize: 14),
                           decoration: InputDecoration(
                             hintText: 'Type a message...',
-                            hintStyle: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 14,
-                            ),
+                            hintStyle: TextStyle(color: Colors.grey[600], fontSize: 14),
                             filled: true,
                             fillColor: Colors.white,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 10,
-                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                             border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(24),
-                              borderSide: BorderSide.none,
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(24),
-                              borderSide: BorderSide.none,
-                            ),
-                            focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(24),
                               borderSide: BorderSide.none,
                             ),
@@ -294,42 +447,29 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         margin: fromMe
             ? const EdgeInsets.fromLTRB(80, 4, 0, 4)
             : const EdgeInsets.fromLTRB(0, 4, 80, 4),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.72,
-          ),
-          child: IntrinsicWidth(
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-              decoration: BoxDecoration(
-                color: fromMe ? Colors.blue[50] : Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment:
-                    fromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    text,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.black87,
-                    ),
-                    softWrap: true,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    time,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.72,
+        ),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+        decoration: BoxDecoration(
+          color: fromMe ? Colors.blue[50] : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: fromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            Text(
+              text,
+              style: const TextStyle(fontSize: 14, color: Colors.black87),
+              softWrap: true,
             ),
-          ),
+            const SizedBox(height: 4),
+            Text(
+              time,
+              style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+            ),
+          ],
         ),
       ),
     );
@@ -339,11 +479,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     return ActionChip(
       label: Text(
         question,
-        style: const TextStyle(
-          fontSize: 12,
-          color: Colors.black,
-          fontWeight: FontWeight.w500,
-        ),
+        style: const TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.w500),
       ),
       backgroundColor: Colors.white,
       elevation: 2,
@@ -400,106 +536,5 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         );
       },
     );
-  }
-
-  void _handleSend() {
-    String text = _controller.text.trim();
-    if (text.isEmpty || _healthData == null) return;
-
-    final timeText = _getCurrentTime();
-
-    setState(() {
-      _messages.add({'fromMe': true, 'text': text, 'time': timeText});
-      _isBotTyping = true;
-    });
-    _saveMessages();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToBottom();
-    });
-    _controller.clear();
-
-    final reply = HealthBotService.getReply(text, _healthData!);
-
-    Future.delayed(const Duration(seconds: 1), () {
-      if (!mounted) return;
-      setState(() {
-        _isBotTyping = false;
-        _messages.add({'fromMe': false, 'text': reply, 'time': _getCurrentTime()});
-      });
-      _saveMessages();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToBottom();
-      });
-    });
-  }
-
-  Future<void> _saveMessages() async {
-    final prefs = await SharedPreferences.getInstance();
-    final messagesJson = _messages.map((msg) => jsonEncode(msg)).toList();
-    await prefs.setStringList('chat_${widget.chatId}', messagesJson);
-  }
-
-  Future<void> _loadMessages() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getStringList('chat_${widget.chatId}');
-    if (saved != null) {
-      setState(() {
-        _messages = saved.map((jsonStr) => jsonDecode(jsonStr) as Map<String, dynamic>).toList();
-      });
-    }
-  }
-
-  void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-    }
-  }
-
-  Future<void> _confirmClearChat() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Clear Conversation'),
-        content: const Text('Are you sure you want to delete all messages?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Clear'),
-          ),
-        ],
-      ),
-    );
-    if (confirm == true) {
-      _clearChat();
-    }
-  }
-
-  void _clearChat() {
-    setState(() {
-      _messages.clear();
-    });
-    _saveMessages();
-    _addWelcomeMessage();
-  }
-
-  void _addWelcomeMessage() {
-    setState(() {
-      _messages.add({
-        'fromMe': false,
-        'text': 'Hi $_userName! What can I help you with?',
-        'time': _getCurrentTime(),
-      });
-    });
-    _saveMessages();
-    _scrollToBottom();
   }
 }

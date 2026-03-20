@@ -17,6 +17,7 @@ const Notification = require('./models/Notification');
 const notificationRoutes = require('./routes/notifications');
 const goalRoutes = require('./routes/goals');
 const doctorRoutes = require('./routes/doctor');
+const chatRoutes = require('./routes/chat');
 
 const { User, Doctor, Patient, HealthMetric, MedicalRecord, EmergencyContact, DoctorPatientRelation, HealthGoal, SymptomLog, Device, HealthReport, Conversation, ChatMessage} = require('./models/index');
 
@@ -35,6 +36,7 @@ app.use('/api/thresholds', thresholdRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/goals', goalRoutes);
 app.use('/api/doctor', doctorRoutes);
+app.use('/api/chat', chatRoutes);
 
 app.use((req, res, next) => {
   console.log('=== REQUEST LOG ===');
@@ -2673,7 +2675,7 @@ app.get('/api/user/health-summary', authenticateToken, async (req, res) => {
         case 'calories_burned':
           caloriesTotal += val;
           break;
-        // 可添加其他指标
+        // TODO: add more metrics as needed
       }
     });
 

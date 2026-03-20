@@ -1,11 +1,14 @@
 import 'package:auth2_flutter/features/chat/presentation/pages/chat_detail_page.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ChatPage extends StatefulWidget {
-  ChatPage({super.key});
+  const ChatPage({super.key});
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -13,50 +16,171 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   List<Map<String, dynamic>> _chats = [];
+  bool _loading = true;
   String _searchText = '';
-  String? _lastMessage;
-  String? _lastTime;
 
   @override
   void initState() {
     super.initState();
-    _loadLastMessage();
+    _loadChats();
   }
 
-  Future<void> _loadLastMessage() async {
+  Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getStringList('chat_assistant');
-    if (saved != null && saved.isNotEmpty) {
-      final lastMsg = jsonDecode(saved.last) as Map<String, dynamic>;
-      setState(() {
-        _lastMessage = lastMsg['text'];
-        _lastTime = lastMsg['time'];
-      });
-    } else {
-      // 没有消息时，使用默认占位
-      setState(() {
-        _lastMessage = 'Ask me about your health';
-        _lastTime = '';
-      });
+    return prefs.getString('auth_token');
+  }
+
+  String _getBaseUrl() {
+    if (kIsWeb) return 'http://localhost:3001';
+    if (Platform.isAndroid) return 'http://10.0.2.2:3001';
+    if (Platform.isIOS) return 'http://localhost:3001';
+    return 'http://localhost:3001';
+  }
+
+  Future<void> _loadChats() async {
+    setState(() => _loading = true);
+    try {
+      final token = await _getToken();
+      if (token == null) return;
+      final response = await http.get(
+        Uri.parse('${_getBaseUrl()}/api/chat/conversations'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      print('chat response: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        List<Map<String, dynamic>> sessions = List<Map<String, dynamic>>.from(json['data']);
+
+        final prefs = await SharedPreferences.getInstance();
+        final assistantMessages = prefs.getStringList('chat_assistant');
+        if (assistantMessages != null && assistantMessages.isNotEmpty) {
+          final lastMsg = jsonDecode(assistantMessages.last) as Map<String, dynamic>;
+          final assistantIndex = sessions.indexWhere((s) => s['id'] == 'assistant');
+          if (assistantIndex != -1) {
+            sessions[assistantIndex]['lastMessage'] = lastMsg['text'] ?? 'Ask me about your health';
+            sessions[assistantIndex]['time'] = lastMsg['time'] ?? '';
+          }
+        }
+
+        setState(() {
+          _chats = sessions;
+          _loading = false;
+        });
+      } else {
+        setState(() => _loading = false);
+      }
+    } catch (e) {
+      setState(() => _loading = false);
+      print('Error loading chats: $e');
     }
+  }
+
+  Future<void> _createConversation(String targetUserId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return;
+      final response = await http.post(
+        Uri.parse('${_getBaseUrl()}/api/chat/conversations/user/$targetUserId'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        final convId = json['data']['id'];
+        final name = json['data']['name'];
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChatDetailPage(
+              chatId: convId,
+              chatName: name,
+            ),
+          ),
+        );
+        _loadChats();
+      } else {
+        final error = jsonDecode(response.body)['error'] ?? 'Failed to create chat';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
+  void _showAddUserDialog() {
+    final searchController = TextEditingController();
+    List<Map<String, dynamic>> _searchResults = [];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) {
+          Future<void> searchUsers() async {
+            final token = await _getToken();
+            if (token == null) return;
+            final response = await http.get(
+              Uri.parse('${_getBaseUrl()}/api/chat/users/search?q=${Uri.encodeComponent(searchController.text)}'),
+              headers: {'Authorization': 'Bearer $token'},
+            );
+            if (response.statusCode == 200) {
+              final json = jsonDecode(response.body);
+              setState(() {
+                _searchResults = List<Map<String, dynamic>>.from(json['data']);
+              });
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Start a chat'),
+            content: SizedBox(
+              width: 300,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: searchController,
+                    decoration: const InputDecoration(hintText: 'Search by name or email'),
+                    onSubmitted: (_) => searchUsers(),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: _searchResults.length,
+                      itemBuilder: (_, idx) {
+                        final user = _searchResults[idx];
+                        return ListTile(
+                          title: Text(user['fullName'] ?? user['email']),
+                          subtitle: Text(user['role'] ?? ''),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _createConversation(user['_id']);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    Color background = Color(0xFFE6F5E6);
+    Color background = const Color(0xFFE6F5E6);
 
-    // 构建动态的聊天列表（目前只有一个助手，但可扩展）
-    final List<Map<String, dynamic>> chats = [
-      {
-        'id': 'assistant',
-        'name': 'Health Assistant',
-        'lastMessage': _lastMessage ?? 'Ask me about your health',
-        'time': _lastTime ?? '',
-        'initials': 'HA',
-      }
-    ];
-
-    List<Map<String, dynamic>> filteredChats = chats.where((chat) {
+    List<Map<String, dynamic>> filteredChats = _chats.where((chat) {
       if (_searchText.trim().isEmpty) return true;
       String query = _searchText.toLowerCase();
       String name = (chat['name'] ?? '').toString().toLowerCase();
@@ -68,7 +192,7 @@ class _ChatPageState extends State<ChatPage> {
       backgroundColor: background,
       appBar: DefaultAppBar(),
       body: Padding(
-        padding: EdgeInsets.fromLTRB(16, 8, 16, 16),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         child: Column(
           children: [
             SizedBox(
@@ -79,20 +203,14 @@ class _ChatPageState extends State<ChatPage> {
                   const Center(
                     child: Text(
                       'Chat',
-                      style: TextStyle(
-                        color: Colors.black87,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 18,
-                      ),
+                      style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 18),
                     ),
                   ),
                   Positioned(
                     right: 0,
                     child: IconButton(
                       icon: const Icon(Icons.add, color: Colors.black87),
-                      onPressed: () {
-                        // TODO: start new chat
-                      },
+                      onPressed: _showAddUserDialog,
                     ),
                   ),
                 ],
@@ -106,10 +224,7 @@ class _ChatPageState extends State<ChatPage> {
                 hintStyle: TextStyle(color: Colors.grey[400]),
                 filled: true,
                 fillColor: Colors.white,
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(24),
                   borderSide: BorderSide.none,
@@ -117,8 +232,12 @@ class _ChatPageState extends State<ChatPage> {
                 prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
               ),
             ),
-            SizedBox(height: 16),
-            Expanded(child: _buildBody(filteredChats)),
+            const SizedBox(height: 16),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _buildBody(filteredChats),
+            ),
           ],
         ),
       ),
@@ -128,7 +247,19 @@ class _ChatPageState extends State<ChatPage> {
   Widget _buildBody(List<Map<String, dynamic>> filteredChats) {
     if (filteredChats.isEmpty) {
       return Center(
-        child: Text('No chats yet', style: TextStyle(color: Colors.grey[600])),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.chat_bubble_outline, size: 48, color: Colors.grey[400]),
+            const SizedBox(height: 12),
+            Text('No chats yet', style: TextStyle(color: Colors.grey[600])),
+            const SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: _showAddUserDialog,
+              child: const Text('Start new chat'),
+            ),
+          ],
+        ),
       );
     }
 
@@ -142,14 +273,18 @@ class _ChatPageState extends State<ChatPage> {
         separatorBuilder: (context, index) => Divider(height: 1, thickness: 0.5, color: Colors.grey[300]),
         itemBuilder: (context, index) {
           final chat = filteredChats[index];
-          final name = chat['name'];
-          final lastMessage = chat['lastMessage'];
-          final time = chat['time'];
-          final initials = chat['initials'];
+          final name = (chat['name'] ?? 'Unknown Chat').toString();
+          final lastMessage = (chat['lastMessage'] ?? 'No messages yet').toString();
+          final time = (chat['time'] ?? '').toString();
+
+          final initials = (chat['initials'] != null &&
+                  chat['initials'].toString().trim().isNotEmpty)
+              ? chat['initials'].toString()
+              : name.characters.take(2).join().toUpperCase();
 
           return InkWell(
-            onTap: () {
-              Navigator.push(
+            onTap: () async {
+              await Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) => ChatDetailPage(
@@ -157,42 +292,34 @@ class _ChatPageState extends State<ChatPage> {
                     chatName: name,
                   ),
                 ),
-              ).then((_) => _loadLastMessage()); // 返回时刷新预览
+              );
+              _loadChats();
             },
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
               child: Row(
                 children: [
                   CircleAvatar(
                     radius: 22,
-                    backgroundColor: Color(0xFFB6D9B6),
+                    backgroundColor: const Color(0xFFB6D9B6),
                     child: Text(
                       initials,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                     ),
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           name,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
                         ),
+                        const SizedBox(height: 2),
                         Text(
-                          lastMessage,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[700],
-                          ),
+                          lastMessage.isNotEmpty ? lastMessage : 'No messages yet',
+                          style: TextStyle(fontSize: 13, color: Colors.grey[700]),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -207,7 +334,7 @@ class _ChatPageState extends State<ChatPage> {
                           time,
                           style: TextStyle(fontSize: 11, color: Colors.grey[700]),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 4),
                         Icon(Icons.done_all, size: 16, color: Colors.grey[500]),
                       ],
                     ),

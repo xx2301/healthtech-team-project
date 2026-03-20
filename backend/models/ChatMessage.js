@@ -128,4 +128,4 @@ chatMessageSchema.methods.addReaction = function(userId, emoji) {
 
 const ChatMessage = mongoose.model('ChatMessage', chatMessageSchema);
 
-module.exports = ChatMessage;
+module.exports = mongoose.models.ChatMessage || mongoose.model('ChatMessage', chatMessageSchema);
