@@ -204,6 +204,41 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  String _formatChatTime(dynamic rawTime) {
+    if (rawTime == null) return '';
+
+    final raw = rawTime.toString().trim();
+    if (raw.isEmpty) return '';
+
+    final parsed = DateTime.tryParse(raw);
+
+    if (parsed == null) {
+      return raw;
+    }
+
+    final date = parsed.toLocal();
+    final now = DateTime.now();
+
+    final isToday =
+        date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day;
+
+    final yesterday = now.subtract(const Duration(days: 1));
+    final isYesterday =
+        date.year == yesterday.year &&
+        date.month == yesterday.month &&
+        date.day == yesterday.day;
+
+    if (isToday) {
+      return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } else if (isYesterday) {
+      return 'Yesterday';
+    } else {
+      return '${date.day}/${date.month}/${date.year}';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -344,7 +379,7 @@ class _ChatPageState extends State<ChatPage> {
           final chat = filteredChats[index];
           final name = (chat['name'] ?? 'Unknown Chat').toString();
           final lastMessage = (chat['lastMessage'] ?? 'No messages yet').toString();
-          final time = (chat['time'] ?? '').toString();
+          final time = _formatChatTime(chat['time']);
 
           final initials = (chat['initials'] != null &&
                   chat['initials'].toString().trim().isNotEmpty)
@@ -412,7 +447,7 @@ class _ChatPageState extends State<ChatPage> {
                           ],
                         ),
                       ),
-                      if (time.isNotEmpty || unreadCount > 0)
+                      if (time.isNotEmpty || unreadCount > 0 || lastMessageFromMe)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
@@ -424,23 +459,30 @@ class _ChatPageState extends State<ChatPage> {
                                   color: secondaryTextColor,
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              if (unreadCount > 0)
-                                Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
+                            const SizedBox(height: 4),
+                            if (unreadCount > 0)
+                              Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                                constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                                child: Text(
+                                  unreadCount.toString(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
                                   ),
-                                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                                  child: Text(
-                                    unreadCount.toString(),
-                                    style: const TextStyle(color: Colors.white, fontSize: 10),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                )
-                              else if (lastMessageFromMe)
-                                Icon(Icons.done_all, size: 16, color: Colors.grey[500]),
+                                  textAlign: TextAlign.center,
+                                ),
+                              )
+                            else if (lastMessageFromMe)
+                              Icon(
+                                Icons.done_all,
+                                size: 16,
+                                color: Colors.grey[500],
+                              ),
                           ],
                         ),
                       

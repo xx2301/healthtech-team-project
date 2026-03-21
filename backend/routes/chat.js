@@ -16,10 +16,12 @@ router.get('/conversations', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
 
+    console.log('userId:', userId);
     const conversations = await Conversation.find({
       participants: { $elemMatch: { userId } },
       isArchived: false
     }).populate('participants.userId', 'fullName email role');
+    console.log('conversations count:', conversations.length);
 
     const sessions = [];
 
@@ -36,12 +38,12 @@ router.get('/conversations', authenticateToken, async (req, res) => {
         .select('messageContent timestamp senderId');
 
       let lastMessage = '';
-      let time = '';
+      let time = null;
       let lastMessageFromMe = false;
 
       if (lastMessageDoc) {
         lastMessage = lastMessageDoc.messageContent;
-        time = formatTime(lastMessageDoc.timestamp);
+        time = lastMessageDoc.timestamp;
         lastMessageFromMe = lastMessageDoc.senderId.toString() === userId;
       }
 
@@ -79,10 +81,11 @@ router.get('/conversations', authenticateToken, async (req, res) => {
       id: 'assistant',
       name: 'Health Assistant',
       lastMessage: 'Ask me about your health',
-      time: '',
+      time: null,
       initials: 'HA',
       lastMessageDate: null,
       unreadCount: 0,
+      lastMessageFromMe: false,
     });
 
     res.json({ success: true, data: sessions });
