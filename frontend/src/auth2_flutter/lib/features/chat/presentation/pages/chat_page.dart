@@ -350,6 +350,9 @@ class _ChatPageState extends State<ChatPage> {
                   chat['initials'].toString().trim().isNotEmpty)
               ? chat['initials'].toString()
               : name.characters.take(2).join().toUpperCase();
+          
+          final unreadCount = (chat['unreadCount'] ?? 0) as int;
+          final bool lastMessageFromMe = chat['lastMessageFromMe'] == true;
 
           return InkWell(
             onTap: () async {
@@ -366,66 +369,83 @@ class _ChatPageState extends State<ChatPage> {
             },
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
-              child: Row(
+              child: Stack(
                 children: [
-                  CircleAvatar(
-                    radius: 22,
-                    backgroundColor: isDark
-                        ? const Color(0xFF3A5A40)
-                        : const Color(0xFFB6D9B6),
-                    child: Text(
-                      initials,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 22,
+                        backgroundColor: isDark
+                            ? const Color(0xFF3A5A40)
+                            : const Color(0xFFB6D9B6),
+                        child: Text(
+                          initials,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: textColor,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              lastMessage.isNotEmpty ? lastMessage : 'No messages yet',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: secondaryTextColor,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (time.isNotEmpty || unreadCount > 0)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            if (time.isNotEmpty)
+                              Text(
+                                time,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: secondaryTextColor,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              if (unreadCount > 0)
+                                Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                                  child: Text(
+                                    unreadCount.toString(),
+                                    style: const TextStyle(color: Colors.white, fontSize: 10),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                )
+                              else if (lastMessageFromMe)
+                                Icon(Icons.done_all, size: 16, color: Colors.grey[500]),
+                          ],
+                        ),
+                      
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          lastMessage.isNotEmpty ? lastMessage : 'No messages yet',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: secondaryTextColor,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (time.isNotEmpty)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          time,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: secondaryTextColor,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Icon(
-                          Icons.done_all,
-                          size: 16,
-                          color: isDark ? Colors.grey[500] : Colors.grey[500],
-                        ),
-                      ],
-                    ),
                 ],
               ),
             ),

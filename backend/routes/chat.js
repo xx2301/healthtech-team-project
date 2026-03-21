@@ -1,24 +1,21 @@
 const express = require('express');
 const router = express.Router();
-const mongoose = require('mongoose'); // 添加这一行
+const mongoose = require('mongoose');
 const Conversation = require('../models/conversation');
 const ChatMessage = require('../models/ChatMessage');
 const User = require('../models/User');
 const DoctorPatientRelation = require('../models/DoctorPatientRelation');
 const authenticateToken = require('../middleware/auth');
 
-// 辅助函数：格式化时间显示
 function formatTime(date) {
   const d = new Date(date);
   return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
 }
 
-// 获取当前用户的所有会话列表（包括助手会话）
 router.get('/conversations', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
 
-    // 获取所有普通会话（Conversation）
     const conversations = await Conversation.find({
       participants: { $elemMatch: { userId } },
       isArchived: false
@@ -27,39 +24,65 @@ router.get('/conversations', authenticateToken, async (req, res) => {
     const sessions = [];
 
     for (const conv of conversations) {
-      // 找到对方用户
-      const other = conv.participants.find(p => p.userId._id.toString() !== userId);
-      const name = other?.userId.fullName || 'Unknown';
+      const other = conv.participants.find(
+        p => p.userId?._id?.toString() !== userId
+      );
+
+      const name = other?.userId?.fullName || 'Unknown';
       const initials = name[0]?.toUpperCase() || '?';
 
-      // 查询该会话的最后一条消息（按时间降序取第一条）
       const lastMessageDoc = await ChatMessage.findOne({ conversationId: conv._id })
         .sort({ timestamp: -1 })
-        .select('messageContent timestamp');
+        .select('messageContent timestamp senderId');
 
       let lastMessage = '';
       let time = '';
+      let lastMessageFromMe = false;
+
       if (lastMessageDoc) {
         lastMessage = lastMessageDoc.messageContent;
         time = formatTime(lastMessageDoc.timestamp);
+        lastMessageFromMe = lastMessageDoc.senderId.toString() === userId;
       }
+
+      const participant = conv.participants.find(
+        p => p.userId?._id?.toString() === userId
+      );
+
+      const lastReadAt = participant?.lastReadAt || new Date(0);
+
+      const unreadCount = await ChatMessage.countDocuments({
+        conversationId: conv._id,
+        senderId: { $ne: new mongoose.Types.ObjectId(userId) },
+        timestamp: { $gt: lastReadAt }
+      });
 
       sessions.push({
         id: conv._id,
-        name: name,
-        lastMessage: lastMessage,
-        time: time,
-        initials: initials,
+        name,
+        lastMessage,
+        time,
+        initials,
+        lastMessageDate: conv.lastMessageDate,
+        unreadCount,
+        lastMessageFromMe,
       });
     }
 
-    // 固定助手会话
+    sessions.sort((a, b) => {
+      const dateA = a.lastMessageDate ? new Date(a.lastMessageDate) : new Date(0);
+      const dateB = b.lastMessageDate ? new Date(b.lastMessageDate) : new Date(0);
+      return dateB - dateA;
+    });
+
     sessions.unshift({
       id: 'assistant',
       name: 'Health Assistant',
       lastMessage: 'Ask me about your health',
       time: '',
       initials: 'HA',
+      lastMessageDate: null,
+      unreadCount: 0,
     });
 
     res.json({ success: true, data: sessions });
@@ -69,7 +92,6 @@ router.get('/conversations', authenticateToken, async (req, res) => {
   }
 });
 
-// 获取某个会话的消息列表
 router.get('/conversations/:conversationId/messages', authenticateToken, async (req, res) => {
   try {
     const { conversationId } = req.params;
@@ -153,6 +175,32 @@ router.post('/conversations/:conversationId/messages', authenticateToken, async 
   }
 });
 
+router.post('/conversations/:conversationId/read', authenticateToken, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user.userId;
+    const now = new Date();
+
+    const result = await Conversation.findOneAndUpdate(
+      { _id: conversationId, 'participants.userId': userId },
+      { $set: { 'participants.$.lastReadAt': now } },
+      { new: true }
+    );
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        error: 'Conversation or participant not found'
+      });
+    }
+
+    res.json({ success: true, lastReadAt: now });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Failed to mark as read' });
+  }
+});
+
 router.post('/conversations/user/:targetUserId', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -200,8 +248,8 @@ router.post('/conversations/user/:targetUserId', authenticateToken, async (req, 
     conversation = new Conversation({
       conversationType: 'patient_doctor',
       participants: [
-        { userId: userIdObj, role: currentUser.role },
-        { userId: targetUserIdObj, role: targetUser.role }
+        { userId: userIdObj, role: currentUser.role, lastReadAt: new Date() },
+        { userId: targetUserIdObj, role: targetUser.role, lastReadAt: new Date() }
       ],
       createdDate: new Date(),
       lastMessageDate: new Date()

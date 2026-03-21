@@ -175,6 +175,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
             _messages = List<Map<String, dynamic>>.from(json['data']);
             _loadingMessages = false;
           });
+          await _markAsRead();
         } else {
           setState(() => _loadingMessages = false);
         }
@@ -182,6 +183,20 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     } catch (e) {
       print('Error loading messages: $e');
       setState(() => _loadingMessages = false);
+    }
+  }
+
+  Future<void> _markAsRead() async {
+    if (_isAssistant) return;
+    final token = await _getToken();
+    if (token == null) return;
+    try {
+      final response = await http.post(
+        Uri.parse('${_getBaseUrl()}/api/chat/conversations/${widget.chatId}/read'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+    } catch (e) {
+      print('Error marking as read: $e');
     }
   }
 
@@ -236,7 +251,6 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
           body: jsonEncode({'text': text}),
         );
         if (response.statusCode == 200) {
-          await _loadMessages();
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _scrollToBottom();
           });
