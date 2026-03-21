@@ -96,11 +96,15 @@ chatMessageSchema.index({ senderId: 1 });
 chatMessageSchema.index({ timestamp: 1 });
 
 chatMessageSchema.post('save', async function() {
-  const Conversation = require('models\conversation.js');
-  await Conversation.findByIdAndUpdate(
-    this.conversationId,
-    { lastMessageDate: this.timestamp }
-  );
+  try {
+    const Conversation = require('./conversation');
+    await Conversation.findByIdAndUpdate(
+      this.conversationId,
+      { lastMessageDate: this.timestamp }
+    );
+  } catch (err) {
+    console.error('Error updating conversation lastMessageDate:', err);
+  }
 });
 
 chatMessageSchema.methods.markAsRead = function(userId) {

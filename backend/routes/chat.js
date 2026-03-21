@@ -104,7 +104,6 @@ router.get('/conversations/:conversationId/messages', authenticateToken, async (
   }
 });
 
-// 发送消息
 router.post('/conversations/:conversationId/messages', authenticateToken, async (req, res) => {
   try {
     const { conversationId } = req.params;
@@ -149,12 +148,11 @@ router.post('/conversations/:conversationId/messages', authenticateToken, async 
       }
     });
   } catch (err) {
-    console.error(err);
+    console.error('Error in send message route:', err.stack);
     res.status(500).json({ success: false, error: 'Failed to send message' });
   }
 });
 
-// 创建与某个用户的会话（供前端发起新聊天）
 router.post('/conversations/user/:targetUserId', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -164,7 +162,6 @@ router.post('/conversations/user/:targetUserId', authenticateToken, async (req, 
       return res.status(400).json({ success: false, error: 'Cannot chat with yourself' });
     }
 
-    // 检查是否存在现有会话
     let conversation = await Conversation.findOne({
       participants: { $all: [
         { $elemMatch: { userId } },
@@ -197,11 +194,9 @@ router.post('/conversations/user/:targetUserId', authenticateToken, async (req, 
       return res.status(403).json({ success: false, error: 'You are not allowed to chat with this user' });
     }
 
-    // 将字符串 ID 转换为 ObjectId
     const userIdObj = new mongoose.Types.ObjectId(userId);
     const targetUserIdObj = new mongoose.Types.ObjectId(targetUserId);
 
-    // 创建新会话
     conversation = new Conversation({
       conversationType: 'patient_doctor',
       participants: [
@@ -220,7 +215,6 @@ router.post('/conversations/user/:targetUserId', authenticateToken, async (req, 
   }
 });
 
-// 搜索用户
 router.get('/users/search', authenticateToken, async (req, res) => {
   try {
     const { q } = req.query;

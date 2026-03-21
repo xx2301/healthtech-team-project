@@ -29,6 +29,8 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   final ScrollController _scrollController = ScrollController();
   bool _isBotTyping = false;
   Timer? _refreshTimer;
+  String? _userId;
+  final FocusNode _focusNode = FocusNode();
 
   bool get _isAssistant => widget.chatId == 'assistant';
 
@@ -39,6 +41,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       final user = context.read<AuthCubit>().currentUser;
       setState(() {
         _userName = user?.fullName ?? user?.email.split('@')[0] ?? 'there';
+        _userId = user?.uid;
       });
       _loadMessages().then((_) {
         WidgetsBinding.instance.addPostFrameCallback((__) {
@@ -61,8 +64,10 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
 
   @override
   void dispose() {
+    _focusNode.dispose();
     _refreshTimer?.cancel();
     _scrollController.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
@@ -78,7 +83,6 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     return 'http://localhost:3001';
   }
 
-  // 仅用于助手会话的健康数据获取
   Future<void> _fetchHealthSummary({required bool isInitialLoad}) async {
     try {
       final token = await _getToken();
@@ -145,13 +149,13 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     }
   }
 
-  // 加载消息（助手从本地存储，普通会话从后端）
   Future<void> _loadMessages() async {
     setState(() => _loadingMessages = true);
     try {
       if (_isAssistant) {
         final prefs = await SharedPreferences.getInstance();
-        final saved = prefs.getStringList('chat_${widget.chatId}');
+        final key = 'chat_assistant_${_userId ?? ''}';
+        final saved = prefs.getStringList(key);
         if (saved != null) {
           setState(() {
             _messages = saved.map((jsonStr) => jsonDecode(jsonStr) as Map<String, dynamic>).toList();
@@ -181,17 +185,15 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     }
   }
 
-  // 保存消息（助手保存到本地，普通会话自动通过后端保存）
   Future<void> _saveMessages() async {
     if (_isAssistant) {
       final prefs = await SharedPreferences.getInstance();
+      final key = 'chat_assistant_${_userId ?? ''}';
       final messagesJson = _messages.map((msg) => jsonEncode(msg)).toList();
-      await prefs.setStringList('chat_${widget.chatId}', messagesJson);
+      await prefs.setStringList(key, messagesJson);
     }
-    // 普通会话的消息已由后端保存，无需额外操作
   }
 
-  // 发送消息
   Future<void> _sendMessage(String text) async {
     if (text.isEmpty || (_isAssistant && _healthData == null)) return;
 
@@ -209,7 +211,6 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     });
 
     if (_isAssistant) {
-      // 助手回复
       final reply = HealthBotService.getReply(text, _healthData!);
       Future.delayed(const Duration(seconds: 1), () {
         if (!mounted) return;
@@ -223,7 +224,6 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         });
       });
     } else {
-      // 普通会话：发送到后端
       final token = await _getToken();
       if (token == null) return;
       try {
@@ -236,24 +236,23 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
           body: jsonEncode({'text': text}),
         );
         if (response.statusCode == 200) {
-          // 后端返回的消息已经包含时间等信息，但我们已经添加了临时消息，可以替换或追加
-          // 这里简单处理，重新加载消息
           await _loadMessages();
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _scrollToBottom();
           });
         } else {
-          print('Failed to send message: ${response.statusCode}');
-          // 移除刚添加的消息
           setState(() {
             _messages.removeLast();
           });
+          final error = jsonDecode(response.body)['error'] ?? 'Failed to send message';
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
         }
       } catch (e) {
         print('Send error: $e');
         setState(() {
           _messages.removeLast();
         });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -263,6 +262,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     if (text.isEmpty) return;
     _controller.clear();
     _sendMessage(text);
+    _focusNode.requestFocus();
   }
 
   String _getCurrentTime() {
@@ -281,25 +281,42 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   }
 
   Future<void> _confirmClearChat() async {
-    if (!_isAssistant) return; // 只有助手可以清除本地聊天记录
+    if (!_isAssistant) return;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Clear Conversation'),
-        content: const Text('Are you sure you want to delete all messages?'),
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        title: Text(
+          'Clear Conversation',
+          style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+        ),
+        content: Text(
+          'Are you sure you want to delete all messages?',
+          style: TextStyle(color: isDark ? Colors.grey[300] : Colors.black87),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Clear'),
           ),
         ],
       ),
     );
+
     if (confirm == true) {
       _clearChat();
     }
@@ -327,7 +344,14 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    Color background = const Color(0xFFE6F5E6);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final Color background =
+        isDark ? const Color(0xFF121212) : const Color(0xFFE6F5E6);
+    final Color appBarTextColor = isDark ? Colors.white : Colors.black87;
+    final Color inputFillColor =
+        isDark ? const Color(0xFF1E1E1E) : Colors.white;
 
     return Scaffold(
       backgroundColor: background,
@@ -335,7 +359,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         backgroundColor: background,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: Colors.black87),
+          icon: Icon(Icons.arrow_back_ios_new, color: appBarTextColor),
           onPressed: () => Navigator.of(context).pop(),
         ),
         centerTitle: true,
@@ -344,20 +368,28 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
           children: [
             Text(_isAssistant ? '🤖 ' : '', style: const TextStyle(fontSize: 18)),
             _isBotTyping
-                ? const Text(
+                ? Text(
                     'typing...',
-                    style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 17),
+                    style: TextStyle(
+                      color: appBarTextColor,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 17,
+                    ),
                   )
                 : Text(
                     widget.chatName,
-                    style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 17),
+                    style: TextStyle(
+                      color: appBarTextColor,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 17,
+                    ),
                   ),
           ],
         ),
         actions: [
           if (_isAssistant)
             IconButton(
-              icon: const Icon(Icons.delete, color: Colors.black87),
+              icon: Icon(Icons.delete, color: appBarTextColor),
               onPressed: _confirmClearChat,
             ),
         ],
@@ -408,14 +440,24 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                       Expanded(
                         child: TextField(
                           controller: _controller,
+                          focusNode: _focusNode,
                           onSubmitted: (_) => _handleSend(),
-                          style: const TextStyle(color: Colors.black87, fontSize: 14),
+                          style: TextStyle(
+                            color: appBarTextColor,
+                            fontSize: 14,
+                          ),
                           decoration: InputDecoration(
                             hintText: 'Type a message...',
-                            hintStyle: TextStyle(color: Colors.grey[600], fontSize: 14),
+                            hintStyle: TextStyle(
+                              color: isDark ? Colors.grey[500] : Colors.grey[600],
+                              fontSize: 14,
+                            ),
                             filled: true,
-                            fillColor: Colors.white,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            fillColor: inputFillColor,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(24),
                               borderSide: BorderSide.none,
@@ -425,7 +467,10 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                       ),
                       const SizedBox(width: 8),
                       IconButton(
-                        icon: Icon(Icons.send, color: Colors.green[700]),
+                        icon: Icon(
+                          Icons.send,
+                          color: isDark ? Colors.green[300] : Colors.green[700],
+                        ),
                         onPressed: _handleSend,
                       ),
                     ],
@@ -441,6 +486,16 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     required String time,
     required bool fromMe,
   }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final Color myBubbleColor =
+        isDark ? const Color(0xFF1E3A5F) : Colors.blue[50]!;
+    final Color otherBubbleColor =
+        isDark ? const Color(0xFF1F1F1F) : Colors.white;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color timeColor = isDark ? Colors.grey[400]! : Colors.grey[600]!;
+
     return Align(
       alignment: fromMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -452,22 +507,29 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         ),
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
         decoration: BoxDecoration(
-          color: fromMe ? Colors.blue[50] : Colors.white,
+          color: fromMe ? myBubbleColor : otherBubbleColor,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: fromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          crossAxisAlignment:
+              fromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
             Text(
               text,
-              style: const TextStyle(fontSize: 14, color: Colors.black87),
+              style: TextStyle(
+                fontSize: 14,
+                color: textColor,
+              ),
               softWrap: true,
             ),
             const SizedBox(height: 4),
             Text(
               time,
-              style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+              style: TextStyle(
+                fontSize: 10,
+                color: timeColor,
+              ),
             ),
           ],
         ),
@@ -476,18 +538,27 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   }
 
   Widget _buildQuickQuestion(String question) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return ActionChip(
       label: Text(
         question,
-        style: const TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.w500),
+        style: TextStyle(
+          fontSize: 12,
+          color: isDark ? Colors.white : Colors.black,
+          fontWeight: FontWeight.w500,
+        ),
       ),
-      backgroundColor: Colors.white,
+      backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
       elevation: 2,
       shadowColor: Colors.black26,
       labelPadding: const EdgeInsets.symmetric(horizontal: 8),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: Colors.grey.shade300),
+        side: BorderSide(
+          color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+        ),
       ),
       onPressed: () {
         _controller.text = question;
@@ -497,12 +568,17 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   }
 
   Widget _buildTypingIndicator() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.fromLTRB(0, 4, 80, 4),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1F1F1F) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -518,6 +594,8 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   }
 
   Widget _buildTypingDot(int delayMs) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.3, end: 1.0),
       duration: const Duration(milliseconds: 600),
@@ -528,8 +606,8 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
           child: Container(
             width: 8,
             height: 8,
-            decoration: const BoxDecoration(
-              color: Colors.grey,
+            decoration: BoxDecoration(
+              color: isDark ? Colors.grey[400] : Colors.grey,
               shape: BoxShape.circle,
             ),
           ),
