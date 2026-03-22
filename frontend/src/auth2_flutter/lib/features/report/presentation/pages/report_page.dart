@@ -1031,14 +1031,7 @@ class _ReportPageState extends State<ReportPage> {
 
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.pop(context),
-          ),
-          title: const Text('Health Report'),
-          backgroundColor: Colors.green[500],
-        ),
+        appBar: DefaultAppBar(),
         drawer: DefaultDrawer(),
         body: const Center(child: CircularProgressIndicator()),
       );
@@ -1046,28 +1039,14 @@ class _ReportPageState extends State<ReportPage> {
 
     if (_error != null) {
       return Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.pop(context),
-          ),
-          title: const Text('Health Report'),
-          backgroundColor: Colors.green[500],
-        ),
+        appBar: DefaultAppBar(),
         drawer: DefaultDrawer(),
         body: Center(child: Text('Error: $_error')),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text('Health Report'),
-        backgroundColor: Colors.green[500],
-      ),
+      appBar: DefaultAppBar(),
       drawer: DefaultDrawer(),
       body: SingleChildScrollView(
         child: Padding(

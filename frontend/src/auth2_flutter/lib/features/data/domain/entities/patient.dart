@@ -13,6 +13,7 @@ class Patient {
   final int? age;
   final DateTime? deletedAt;
   final String? primaryDoctorName;
+  final DateTime? lastAppointmentDate;
 
   Patient({
     required this.pid,
@@ -29,6 +30,7 @@ class Patient {
     this.age,
     this.deletedAt,
     this.primaryDoctorName,
+    this.lastAppointmentDate,
   })  : allergies = allergies ?? const [],
         chronicConditions = chronicConditions ?? const [];
 
@@ -159,6 +161,10 @@ class Patient {
       }
     }
 
+    final lastAppointmentDate = json['lastAppointmentDate'] != null
+        ? DateTime.parse(json['lastAppointmentDate'])
+        : null;
+
     return Patient(
       pid: (json['pid'] ?? '').toString(),
       fname: (json['fname'] ?? '').toString(),
@@ -173,6 +179,7 @@ class Patient {
       patientCode: (json['patientCode'] ?? '').toString(),
       age: safeInt(json['age']),
       primaryDoctorName: primaryDoctorName,
+      lastAppointmentDate: lastAppointmentDate,
     );
   }
 }

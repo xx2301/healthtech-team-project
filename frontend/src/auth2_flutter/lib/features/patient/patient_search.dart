@@ -765,6 +765,75 @@ class _PatientSearchState extends State<PatientSearch> {
     return ListToCsvConverter().convert(rows);
   }
 
+  Future<void> _createAppointment(Patient patient) async {
+    final dateController = TextEditingController();
+    final timeController = TextEditingController();
+    final reasonController = TextEditingController();
+
+    print('Patient Code: ${patient.patientCode}');
+
+    return showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Create Appointment for ${patient.fname}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: dateController,
+              decoration: InputDecoration(labelText: 'Date (YYYY-MM-DD)'),
+            ),
+            TextField(
+              controller: timeController,
+              decoration: InputDecoration(labelText: 'Time (e.g., 10:30)'),
+            ),
+            TextField(
+              controller: reasonController,
+              decoration: InputDecoration(labelText: 'Reason'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              final token = await _getToken();
+              if (token == null) return;
+
+              final response = await http.post(
+                Uri.parse('${_getBaseUrl()}/api/appointments'),
+                headers: {
+                  'Authorization': 'Bearer $token',
+                  'Content-Type': 'application/json',
+                },
+                body: jsonEncode({
+                  'patientCode': patient.patientCode, // 改为 patientCode
+                  'date': dateController.text,
+                  'time': timeController.text,
+                  'reason': reasonController.text,
+                }),
+              );
+
+              if (response.statusCode == 201) {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Appointment created')),
+                );
+                _fetchPatients(); // 刷新列表以更新 lastAppt
+              } else {
+                final error = jsonDecode(response.body)['error'] ?? 'Failed to create';
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: $error')),
+                );
+              }
+            },
+            child: Text('Create'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = context.read<AuthCubit>().currentUser;
@@ -987,6 +1056,7 @@ class _PatientSearchState extends State<PatientSearch> {
                 onEdit: _showEditPatientDialog,
                 canDelete: canDelete,
                 canEdit: canEdit,
+                onCreateAppointment: _createAppointment,
               ),
           ],
         ),

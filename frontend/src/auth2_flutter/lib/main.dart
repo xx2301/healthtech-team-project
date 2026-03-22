@@ -26,6 +26,9 @@ import 'package:auth2_flutter/features/auth/pages/apply_doctor_page.dart';
 import 'package:auth2_flutter/features/admin/admin_page.dart';
 import 'package:auth2_flutter/features/admin/admin_review_application.dart';
 import 'package:auth2_flutter/features/doctor/pages/doctor_report_page.dart';
+import 'package:auth2_flutter/features/appointments/pages/appointments_page.dart';
+import 'package:auth2_flutter/features/appointments/pages/doctor_appointments_page.dart';
+import 'package:auth2_flutter/features/appointments/pages/request_appointment_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -79,6 +82,9 @@ class MyApp extends StatelessWidget {
                 '/admin': (context) => const AdminDashboard(),
                 '/admin/review': (context) => const AdminReviewApplications(),
                 '/doctor-report': (context) => const DoctorReportPage(),
+                '/appointments': (context) => const AppointmentsPage(),
+                '/doctor-appointments': (context) => const DoctorAppointmentsPage(),
+                '/request-appointment': (context) => const RequestAppointmentPage(),
               },
               theme: mainTheme,
               darkTheme: darkTheme,

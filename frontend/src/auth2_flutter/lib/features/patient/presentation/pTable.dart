@@ -7,6 +7,7 @@ class PatientSearchTable extends StatelessWidget {
   final Function(Patient) onEdit;
   final bool canDelete;
   final bool canEdit;
+  final Function(Patient)? onCreateAppointment;
 
   const PatientSearchTable({
     super.key,
@@ -15,6 +16,7 @@ class PatientSearchTable extends StatelessWidget {
     required this.onEdit,
     this.canDelete = false,
     this.canEdit = false,
+    this.onCreateAppointment,
   });
 
   Widget _dataRow(BuildContext context, Patient p) {
@@ -28,7 +30,9 @@ class PatientSearchTable extends StatelessWidget {
     }
 
     final String status = "Available"; // change to p.status if exists
-    final DateTime lastVisit = DateTime(2026, 3, 18);
+    final String lastVisitText = p.lastAppointmentDate != null
+        ? '${p.lastAppointmentDate!.day}/${p.lastAppointmentDate!.month}/${p.lastAppointmentDate!.year}'
+        : 'No visit';
 
     return Container(
       padding: EdgeInsets.all(12),
@@ -79,7 +83,7 @@ class PatientSearchTable extends StatelessWidget {
                 child: Align(
                   alignment: Alignment.center,
                   child: Text(
-                    '${lastVisit.day}/${lastVisit.month}/${lastVisit.year}',
+                    lastVisitText,
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 12,
@@ -157,6 +161,13 @@ class PatientSearchTable extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                if (onCreateAppointment != null)
+                  IconButton(
+                    icon: Icon(Icons.calendar_today, size: 20, color: Colors.blue[400]),
+                    onPressed: () => onCreateAppointment!(p),
+                    constraints: const BoxConstraints(),
+                    padding: EdgeInsets.zero,
+                  ),
                 if (canEdit)
                   IconButton(
                     icon: Icon(Icons.edit, color: Colors.blue[400], size: 20),

@@ -565,6 +565,103 @@ class _HomePageState extends State<HomePage> {
     return "evening";
   }
 
+  Future<void> _requestAppointment() async {
+    final doctorIdController = TextEditingController();
+    final dateController = TextEditingController();
+    final timeController = TextEditingController();
+    final reasonController = TextEditingController();
+
+    return showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Request Appointment'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: doctorIdController,
+                decoration: const InputDecoration(labelText: 'Doctor ID *'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: dateController,
+                decoration: const InputDecoration(labelText: 'Date (YYYY-MM-DD) *'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: timeController,
+                decoration: const InputDecoration(labelText: 'Time (e.g., 10:30) *'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: reasonController,
+                decoration: const InputDecoration(labelText: 'Reason'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final doctorId = doctorIdController.text.trim();
+              final date = dateController.text.trim();
+              final time = timeController.text.trim();
+              if (doctorId.isEmpty || date.isEmpty || time.isEmpty) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('Doctor ID, date, and time are required')),
+                );
+                return;
+              }
+              Navigator.pop(ctx);
+              await _submitAppointmentRequest(doctorId, date, time, reasonController.text.trim());
+            },
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submitAppointmentRequest(String doctorId, String date, String time, String reason) async {
+    final token = await _getToken();
+    if (token == null) return;
+
+    try {
+      final response = await http.post(
+        Uri.parse('${_getBaseUrl()}/api/appointments'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'doctorId': doctorId,
+          'date': date,
+          'time': time,
+          'reason': reason,
+        }),
+      );
+      if (response.statusCode == 201) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Appointment request sent')),
+        );
+      } else {
+        final error = jsonDecode(response.body)['error'] ?? 'Failed to request';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $error')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<AuthCubit, AuthState>(

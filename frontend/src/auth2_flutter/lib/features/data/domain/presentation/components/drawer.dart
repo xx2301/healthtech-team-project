@@ -65,6 +65,26 @@ class DefaultDrawer extends StatelessWidget {
                 },
               ),
 
+            if (user?.role == 'patient')
+              ListTile(
+                leading: const Icon(Icons.calendar_today),
+                title: const Text('My Appointments'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/appointments');
+                },
+              ),
+
+            if (user?.role == 'doctor')
+              ListTile(
+                leading: const Icon(Icons.calendar_month),
+                title: const Text('M Y   A P P O I N T M E N T S'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/doctor-appointments');
+                },
+              ),
+
             if (user?.role == 'admin' || user?.role == 'super_admin')
               ListTile(
                 leading: const Icon(Icons.admin_panel_settings),
@@ -82,6 +102,16 @@ class DefaultDrawer extends StatelessWidget {
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.pushNamed(context, '/doctor-dashboard');
+                },
+              ),
+
+            if (user?.role == 'patient')
+              ListTile(
+                leading: const Icon(Icons.add_alert),
+                title: const Text('Request Appointment'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/request-appointment');
                 },
               ),
 

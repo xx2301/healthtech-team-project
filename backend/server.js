@@ -18,6 +18,8 @@ const notificationRoutes = require('./routes/notifications');
 const goalRoutes = require('./routes/goals');
 const doctorRoutes = require('./routes/doctor');
 const chatRoutes = require('./routes/chat');
+const Appointment = require('./models/Appointment');
+const appointmentRoutes = require('./routes/appointments');
 
 const { User, Doctor, Patient, HealthMetric, MedicalRecord, EmergencyContact, DoctorPatientRelation, HealthGoal, SymptomLog, Device, HealthReport, Conversation, ChatMessage} = require('./models/index');
 
@@ -37,6 +39,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/goals', goalRoutes);
 app.use('/api/doctor', doctorRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/appointments', appointmentRoutes);
 
 app.use((req, res, next) => {
   console.log('=== REQUEST LOG ===');
@@ -277,6 +280,21 @@ app.get('/api/health', async (req, res) => {
     });
   }
 });
+
+async function createNotification(userId, type, message, data = {}) {
+  try {
+    const notification = new Notification({
+      userId,
+      type,
+      title: type === 'appointment_confirmed' ? 'Appointment Confirmed' : (type === 'appointment_request' ? 'New Appointment Request' : 'Appointment Updated'),
+      message,
+      data
+    });
+    await notification.save();
+  } catch (err) {
+    console.error('Failed to send notification:', err);
+  }
+}
 
 app.post('/api/auth/register', [
   body('email').isEmail().normalizeEmail(),
@@ -1450,13 +1468,26 @@ app.get('/api/patients/all', authenticateToken, async (req, res) => {
         path: 'primaryDoctor',
         populate: { path: 'userId', select: 'fullName' }
       })
-      .select('-__v');
+      .lean();
 
-    console.log(JSON.stringify(patients, null, 2));
+    const patientsWithLastAppt = await Promise.all(patients.map(async (patient) => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const futureAppointment = await Appointment.findOne({
+        patientId: patient._id,
+        date: { $gte: today },
+        status: { $ne: 'cancelled' }
+      }).sort({ date: 1 });
+      return {
+        ...patient,
+        lastAppointmentDate: futureAppointment ? futureAppointment.date : null
+      };
+    }));
+
     res.json({
       success: true,
-      data: patients,
-      count: patients.length
+      data: patientsWithLastAppt,
+      count: patientsWithLastAppt.length
     });
   } catch (error) {
     console.error('Get patients list error:', error);
