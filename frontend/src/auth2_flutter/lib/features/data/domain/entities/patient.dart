@@ -12,6 +12,7 @@ class Patient {
   final String patientCode;
   final int? age;
   final DateTime? deletedAt;
+  final String? primaryDoctorName;
 
   Patient({
     required this.pid,
@@ -27,6 +28,7 @@ class Patient {
     required this.patientCode,
     this.age,
     this.deletedAt,
+    this.primaryDoctorName,
   })  : allergies = allergies ?? const [],
         chronicConditions = chronicConditions ?? const [];
 
@@ -145,6 +147,18 @@ class Patient {
       return int.tryParse(x.toString());
     }
 
+    final doctor = json['primaryDoctor'];
+    String? primaryDoctorName;
+
+    if (doctor is Map<String, dynamic>) {
+      final userId = doctor['userId'];
+      if (userId is Map<String, dynamic>) {
+        primaryDoctorName = userId['fullName']?.toString();
+      } else {
+        primaryDoctorName = doctor['fullName']?.toString();
+      }
+    }
+
     return Patient(
       pid: (json['pid'] ?? '').toString(),
       fname: (json['fname'] ?? '').toString(),
@@ -158,46 +172,7 @@ class Patient {
       emergencyContactID: safeInt(json['emergencyContactID']),
       patientCode: (json['patientCode'] ?? '').toString(),
       age: safeInt(json['age']),
+      primaryDoctorName: primaryDoctorName,
     );
   }
 }
-
-/*final List<Patient> allPatients = [
-  Patient(
-    pid: 'P001',
-    fname: 'Adam Lee',
-    dateOfBirth: DateTime(1974, 5, 12),
-    gender: 'Male',
-    height: 175,
-    weight: 78,
-    bloodType: 'O+',
-    allergies: ['Peanuts'],
-    chronicConditions: ['Hypertension'],
-    emergencyContactID: 101,
-  ),
-  Patient(
-    pid: 'P002',
-    fname: 'Noor Aisyah',
-    dateOfBirth: DateTime(1961, 8, 21),
-    gender: 'Female',
-    height: 160,
-    weight: 65,
-    bloodType: 'A+',
-    allergies: ['Penicillin'],
-    chronicConditions: ['Diabetes'],
-    emergencyContactID: 102,
-  ),
-  Patient(
-    pid: 'P003',
-    fname: 'Ivan Tan',
-    dateOfBirth: DateTime(1965, 3, 2),
-    gender: 'Male',
-    height: 180,
-    weight: 85,
-    bloodType: 'B+',
-    allergies: [],
-    chronicConditions: ['Asthma'],
-    emergencyContactID: 103,
-  ),
-];*/
-

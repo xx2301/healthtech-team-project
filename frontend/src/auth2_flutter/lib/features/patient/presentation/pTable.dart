@@ -38,136 +38,147 @@ class PatientSearchTable extends StatelessWidget {
         ),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end
-        ,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // Patient Infos (Name, ID, Doctor)
               Expanded(
-          flex: 2,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                p.fname,
-                style: const TextStyle(fontWeight: FontWeight.w800),
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      p.fname,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      "ID: ${p.patientCode}",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.black.withOpacity(0.6),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      "Primary Dr.: ${p.primaryDoctorName ?? 'No doctor'}",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.black.withOpacity(0.6),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                "ID: ${p.patientCode}",
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.black.withOpacity(0.6),
+              // Last Appt
+              Expanded(
+                flex: 1,
+                child: Align(
+                  alignment: Alignment.center,
+                  child: Text(
+                    '${lastVisit.day}/${lastVisit.month}/${lastVisit.year}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+              // Age
+              Expanded(
+                flex: 1,
+                child: Align(
+                  alignment: Alignment.center,
+                  child: Text(
+                    p.age?.toString() ?? '-',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: getFontSize(),
+                      color: Colors.black.withOpacity(0.75),
+                    ),
+                  ),
+                ),
+              ),
+              // Sex
+              Expanded(
+                flex: 1,
+                child: Align(
+                  alignment: Alignment.center,
+                  child: Text(
+                    p.gender,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: getFontSize(),
+                      color: Colors.black.withOpacity(0.75),
+                    ),
+                  ),
+                ),
+              ),
+              // Chronic Conditions
+              Expanded(
+                flex: 2,
+                child: Align(
+                  alignment: Alignment.center,
+                  child: Text(
+                    (p.chronicConditions != null && p.chronicConditions!.isNotEmpty)
+                        ? p.chronicConditions!.join(', ')
+                        : '-',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: getFontSize(),
+                      color: Colors.black.withOpacity(0.75),
+                    ),
+                  ),
+                ),
+              ),
+              // Status
+              Expanded(
+                flex: 1,
+                child: Align(
+                  alignment: Alignment.center,
+                  child: Text(
+                    status,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: getFontSize(),
+                      color: Colors.black.withOpacity(0.75),
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
-              ),
-              Expanded(
-          flex: 1,
-          child: Align(
-            alignment: Alignment.center,
-            child: Text(
-              '${lastVisit.day}/${lastVisit.month}/${lastVisit.year}' ?.toString() ?? '-',
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-              ),
+          SizedBox(height: 10),
+          SizedBox(
+            width: 72,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (canEdit)
+                  IconButton(
+                    icon: Icon(Icons.edit, color: Colors.blue[400], size: 20),
+                    onPressed: () => onEdit(p),
+                    constraints: const BoxConstraints(),
+                    padding: EdgeInsets.zero,
+                  ),
+                if (canDelete)
+                  IconButton(
+                    icon: Icon(
+                      Icons.delete_outline,
+                      color: Colors.red[400],
+                      size: 20,
+                    ),
+                    onPressed: () => _confirmDelete(context, p),
+                    constraints: const BoxConstraints(),
+                    padding: EdgeInsets.zero,
+                  ),
+              ],
             ),
           ),
-              ),
-              Expanded(
-          flex: 1,
-          child: Align(
-            alignment: Alignment.center,
-            child: Text(
-              p.age?.toString() ?? '-',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: getFontSize(),
-                color: Colors.black.withOpacity(0.75),
-              ),
-            ),
-          ),
-              ),
-              Expanded(
-          flex: 1,
-          child: Align(
-            alignment: Alignment.center,
-            child: Text(
-              p.gender,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: getFontSize(),
-                color: Colors.black.withOpacity(0.75),
-              ),
-            ),
-          ),
-              ),
-              Expanded(
-          flex: 2,
-          child: Align(
-            alignment: Alignment.center,
-            child: Text(
-              (p.chronicConditions != null && p.chronicConditions!.isNotEmpty)
-                  ? p.chronicConditions!.join(', ')
-                  : '-',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: getFontSize(),
-                color: Colors.black.withOpacity(0.75),
-              ),
-            ),
-          ),
-              ),
-              Expanded(
-          flex: 1,
-          child: Align(
-            alignment: Alignment.center,
-            child: Text(
-              status,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: getFontSize(),
-                color: Colors.black.withOpacity(0.75),
-              ),
-            ),
-          ),
-              ),
-              
-            ],
-          ),
-        
-        SizedBox(height: 10),
-        SizedBox(
-      width: 72,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          if (canEdit)
-            IconButton(
-              icon: Icon(Icons.edit, color: Colors.blue[400], size: 20),
-              onPressed: () => onEdit(p),
-              constraints: const BoxConstraints(),
-              padding: EdgeInsets.zero,
-            ),
-          if (canDelete)
-            IconButton(
-              icon: Icon(
-                Icons.delete_outline,
-                color: Colors.red[400],
-                size: 20,
-              ),
-              onPressed: () => _confirmDelete(context, p),
-              constraints: const BoxConstraints(),
-              padding: EdgeInsets.zero,
-            ),
         ],
-      ),
-    
-          ),],
       ),
     );
   }
@@ -233,8 +244,8 @@ class PatientSearchTable extends StatelessWidget {
             padding: EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Theme.of(context).brightness == Brightness.dark
-                  ? const Color.fromARGB(255, 62, 99, 79)   // dark mode (muted green)
-                  : const Color.fromARGB(255, 104, 167, 109),  // light mode (soft green)
+                  ? const Color.fromARGB(255, 62, 99, 79)
+                  : const Color.fromARGB(255, 104, 167, 109),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
@@ -289,13 +300,9 @@ class PatientSearchTable extends StatelessWidget {
                     style: headerStyle.copyWith(color: Colors.white),
                   ),
                 ),
-               
               ],
             ),
-
-            
           ),
-          
           // Data Rows
           ...patients.map((p) => _dataRow(context, p)).toList(),
         ],

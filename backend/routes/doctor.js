@@ -147,6 +147,7 @@ router.post('/add-patient', authenticateToken, requireRole('doctor'), async (req
       accessLevel: 'full'
     });
     await relation.save();
+    await Patient.findByIdAndUpdate(patient._id, { primaryDoctor: doctorId });
 
     res.json({ success: true, message: 'Patient added successfully' });
   } catch (error) {

@@ -233,12 +233,12 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                                   children: [
                                     Text('Code: $patientCode  |  Gender: $gender'),
                                     const SizedBox(height: 4),
-                                    Text(
-                                      'Steps (7d): ${summary['steps7Days'] ?? 0} | '
-                                      'Heart: ${summary['latestHeartRate'] ?? '--'} bpm | '
-                                      'Sleep: ${summary['latestSleep'] ?? '--'} hrs',
-                                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                                    ),
+                                    // Text(
+                                    //   'Steps (7d): ${summary['steps7Days'] ?? 0} | '
+                                    //   'Heart: ${summary['latestHeartRate'] ?? '--'} bpm | '
+                                    //   'Sleep: ${summary['latestSleep'] ?? '--'} hrs',
+                                    //   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                    // ),
                                   ],
                                 ),
                                 trailing: const Icon(Icons.arrow_forward_ios, size: 16),

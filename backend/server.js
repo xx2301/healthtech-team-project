@@ -943,6 +943,8 @@ app.post('/api/doctor/create-patient', authenticateToken, [
     
     await relation.save();
     
+    await Patient.findByIdAndUpdate(patient._id, { primaryDoctor: doctor._id });
+
     res.status(201).json({
       success: true,
       message: 'Patient profile created successfully',
@@ -1296,10 +1298,8 @@ app.put('/api/user/profile', authenticateToken, [
     if (req.body.height !== undefined) user.heightUpdatedAt = new Date();
     if (req.body.weight !== undefined) user.weightUpdatedAt = new Date();
 
-    console.log('Received avatarColor:', req.body.avatarColor);
     if (req.body.avatarColor !== undefined) {
       user.avatarColor = req.body.avatarColor;
-      console.log('Saved avatarColor to user');
     }
 
     user.updatedAt = new Date();
@@ -1446,8 +1446,13 @@ app.get('/api/patients/all', authenticateToken, async (req, res) => {
 
     const patients = await Patient.find()
       .populate('userId', 'fullName email age height weight gender dateOfBirth')
+      .populate({
+        path: 'primaryDoctor',
+        populate: { path: 'userId', select: 'fullName' }
+      })
       .select('-__v');
 
+    console.log(JSON.stringify(patients, null, 2));
     res.json({
       success: true,
       data: patients,
@@ -1815,26 +1820,16 @@ app.get('/api/health-metrics', authenticateToken, async (req, res) => {
       query.userId = user._id;
     }
     else if (user.userType === 'doctor' || user.role === 'doctor') {
-      console.log('=== Doctor branch ===');
-      console.log('requestedUserId:', requestedUserId);
-      console.log('doctorProfileId:', user.doctorProfileId);
-
       if (requestedUserId) {
         if (requestedUserId.toString() === req.user.userId.toString()) {
-          console.log('Doctor viewing own data');
           query.userId = requestedUserId;
         } else {
-          console.log('Fetching data for specific userId:', requestedUserId);
           const patientUser = await User.findById(requestedUserId);
-          console.log('patientUser found:', !!patientUser);
           if (!patientUser || patientUser.role !== 'patient') {
-            console.log('Patient user not found or role not patient');
             return res.status(404).json({ success: false, error: 'Patient user not found' });
           }
           const patient = await Patient.findOne({ userId: patientUser._id });
-          console.log('patient found:', !!patient);
           if (!patient) {
-            console.log('Patient profile not found');
             return res.status(404).json({ success: false, error: 'Patient profile not found' });
           }
           const relation = await DoctorPatientRelation.findOne({
@@ -1842,28 +1837,20 @@ app.get('/api/health-metrics', authenticateToken, async (req, res) => {
             patientId: patient._id,
             status: 'active'
           });
-          console.log('relation found:', !!relation);
           if (!relation) {
-            console.log('No active relation');
             return res.status(403).json({ success: false, error: 'You are not authorized to view this patient\'s data' });
           }
           query.userId = requestedUserId;
-          console.log('Final query:', query);
         }
       } else {
-        console.log('No specific userId, fetching all patients data');
         const relations = await DoctorPatientRelation.find({ doctorId: user.doctorProfileId, status: 'active' }).select('patientId');
-        console.log('relations count:', relations.length);
         const patientIds = relations.map(r => r.patientId);
         if (patientIds.length === 0) {
-          console.log('No relations found');
           return res.json({ success: true, data: [], pagination: { total: 0, page: parseInt(page), limit: parseInt(limit), pages: 0 } });
         }
         const patients = await Patient.find({ _id: { $in: patientIds } }).select('userId');
-        console.log('patients count:', patients.length);
         const userIds = patients.map(p => p.userId);
         query.userId = { $in: userIds };
-        console.log('userIds:', userIds);
       }
     }
     else {
@@ -2344,7 +2331,11 @@ app.post('/api/doctor-patient-relations', authenticateToken, requireRole('doctor
     });
     
     await relation.save();
-    
+
+    if (relationType === 'primary') {
+      await Patient.findByIdAndUpdate(patientId, { primaryDoctor: req.user._id });
+    }
+
     await sendNotification({
       userId: patientId,
       type: 'doctor_request',

@@ -8,8 +8,13 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:io' show Platform;
+import 'dart:io' show File, Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:cross_file/cross_file.dart';
+import 'package:open_file/open_file.dart';
+import 'package:csv/csv.dart';
 
 class PatientSearch extends StatefulWidget {
   const PatientSearch({super.key});
@@ -38,47 +43,6 @@ class _PatientSearchState extends State<PatientSearch> {
     super.initState();
     _checkPermissionAndFetch();
   }
-  /*allPatients = [
-      Patient(
-        pid: 'P001',
-        fname: 'Adam Lee',
-        dateOfBirth: DateTime(1974, 5, 12),
-        gender: 'Male',
-        height: 175,
-        weight: 78,
-        bloodType: 'O+',
-        allergies: ['Peanuts'],
-        chronicConditions: ['Hypertension'],
-        emergencyContactID: 101,
-      ),
-      Patient(
-        pid: 'P002',
-        fname: 'Noor Aisyah',
-        dateOfBirth: DateTime(1961, 8, 21),
-        gender: 'Female',
-        height: 160,
-        weight: 65,
-        bloodType: 'A+',
-        allergies: ['Penicillin'],
-        chronicConditions: ['Diabetes'],
-        emergencyContactID: 102,
-      ),
-      Patient(
-        pid: 'P003',
-        fname: 'Ivan Tan',
-        dateOfBirth: DateTime(1965, 3, 2),
-        gender: 'Male',
-        height: 180,
-        weight: 85,
-        bloodType: 'B+',
-        allergies: [],
-        chronicConditions: ['Asthma'],
-        emergencyContactID: 103,
-      ),
-    ];
-
-    filteredPatients = List.of(allPatients);
-  }*/
 
   Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -145,38 +109,8 @@ class _PatientSearchState extends State<PatientSearch> {
           final jsonData = jsonDecode(response.body);
           final List<dynamic> patientsJson = jsonData['data'];
           final List<Patient> patients = patientsJson.map((json) {
-          final userInfo = json['userId'] ?? {};
-
-            int? age;
-            if (json['age'] != null) {
-              if (json['age'] is int) {
-                age = json['age'];
-              } else if (json['age'] is num) {
-                age = json['age'].toInt();
-              } else {
-                age = int.tryParse(json['age'].toString());
-              }
-            }
-
-            return Patient(
-              pid: json['_id'] ?? json['patientCode'] ?? 'Unknown',
-              fname: userInfo['fullName'] ?? 'Unknown',
-              dateOfBirth: userInfo['dateOfBirth'] != null
-                  ? DateTime.parse(userInfo['dateOfBirth'])
-                  : DateTime.now(),
-              gender: userInfo['gender'] ?? 'Unknown',
-              height: (json['height'] as num?)?.toDouble() ?? 0,
-              weight: (json['weight'] as num?)?.toDouble() ?? 0,
-              bloodType: json['bloodType'] ?? 'Unknown',
-              allergies: (json['allergies'] as List?)?.cast<String>() ?? [],
-              chronicConditions:
-                  (json['chronicConditions'] as List?)?.cast<String>() ?? [],
-              emergencyContactID: json['emergencyContactId'] ?? 0,
-              patientCode: json['patientCode'] ?? json['patient_code'] ?? '',
-              age: age,
-            );
+            return Patient.fromJson(json);
           }).toList();
-
           setState(() {
             _allPatients = patients;
             filteredPatients = List.of(_allPatients);
@@ -369,11 +303,7 @@ class _PatientSearchState extends State<PatientSearch> {
       text: patient.weight?.toString() ?? '',
     );
     String selectedBloodType = patient.bloodType ?? 'unknown';
-    /*ring selectedSmoking = patient.smokingStatus ?? 'never';
-    String selectedAlcohol = patient.alcoholConsumption ?? 'none';
-    String selectedExercise = patient.exerciseFrequency ?? 'sedentary';*/
 
-    // 注意：allergies 和 chronicConditions 在您的 Patient 类中是 List<String>，可以直接使用
     final allergiesText = patient.allergies.join(', ');
     final chronicConditionsText = patient.chronicConditions.join(', ');
 
@@ -672,20 +602,6 @@ class _PatientSearchState extends State<PatientSearch> {
     }
   }
 
-  bool _userCanDelete() {
-    final authCubit = context.read<AuthCubit>();
-    final user = authCubit.currentUser;
-    return user?.role == 'admin' || user?.role == 'super_admin';
-  }
-
-  bool _userCanEdit() {
-    final authCubit = context.read<AuthCubit>();
-    final user = authCubit.currentUser;
-    return user?.role == 'doctor' ||
-        user?.role == 'admin' ||
-        user?.role == 'super_admin';
-  }
-
   Future<void> _deletePatient(Patient patient) async {
     setState(() => _isLoading = true);
     try {
@@ -735,25 +651,118 @@ class _PatientSearchState extends State<PatientSearch> {
 
   void _applySearch() {
     final nameQ = pNameController.text.trim().toLowerCase();
-    final idQ = pIDController.text.trim().toLowerCase();
+    final codeQ = pIDController.text.trim().toLowerCase();
 
     setState(() {
       filteredPatients = _allPatients.where((p) {
-        // 原来是 allPatients
-        final matchesName =
-            nameQ.isEmpty || p.fname.toLowerCase().contains(nameQ);
-        final matchesId = idQ.isEmpty || p.pid.toLowerCase().contains(idQ);
-
-        // status: you currently don't have p.status, so we only filter if you add it later.
-        // For now, this will always be true.
-        final matchesStatus = true;
-
-        // date of visit: you also don't have visit dates in Patient model, so can't filter yet.
-        final matchesDate = true;
-
-        return matchesName && matchesId && matchesStatus && matchesDate;
+        final matchesName = nameQ.isEmpty || p.fname.toLowerCase().contains(nameQ);
+        final matchesCode = codeQ.isEmpty || p.patientCode.toLowerCase().contains(codeQ);
+        return matchesName && matchesCode;
       }).toList();
     });
+  }
+
+  Future<void> _showExportDialog() async {
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Export Data'),
+        content: const Text('Choose format:'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'json'),
+            child: const Text('JSON'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'csv'),
+            child: const Text('CSV'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+    if (choice != null) {
+      await _exportData(format: choice);
+    }
+  }
+
+  Future<void> _exportData({required String format}) async {
+    if (_allPatients.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No patients to export')),
+      );
+      return;
+    }
+
+    final List<Map<String, dynamic>> exportList = _allPatients.map((p) {
+      return {
+        'Patient Code': p.patientCode,
+        'Name': p.fname,
+        'Gender': p.gender,
+        'Age': p.age,
+        'Height': p.height,
+        'Weight': p.weight,
+        'Blood Type': p.bloodType,
+        'Allergies': p.allergies.join(', '),
+        'Chronic Conditions': p.chronicConditions.join(', '),
+      };
+    }).toList();
+
+    String content;
+    String fileName;
+    if (format == 'json') {
+      content = JsonEncoder.withIndent('  ').convert(exportList);
+      fileName = 'patients_export.json';
+    } else {
+      content = _listToCsv(exportList);
+      fileName = 'patients_export.csv';
+    }
+
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/$fileName');
+    await file.writeAsString(content);
+
+    if (kIsWeb) {
+      await SharePlus.instance.share(
+        ShareParams(
+          text: 'Patient list',
+          files: [XFile(file.path)],
+          downloadFallbackEnabled: true,
+        ),
+      );
+    } else {
+      if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+        await OpenFile.open(file.path);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('File opened: $fileName')),
+        );
+      } else {
+        await SharePlus.instance.share(
+          ShareParams(
+            text: 'Patient list',
+            files: [XFile(file.path)],
+          ),
+        );
+      }
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Exported ${_allPatients.length} patients as $format')),
+    );
+  }
+
+  String _listToCsv(List<Map<String, dynamic>> data) {
+    if (data.isEmpty) return '';
+    final headers = data.first.keys.toList();
+    final rows = <List<dynamic>>[headers];
+    for (var item in data) {
+      final row = headers.map((h) => item[h]?.toString() ?? '').toList();
+      rows.add(row);
+    }
+    return ListToCsvConverter().convert(rows);
   }
 
   @override
@@ -944,20 +953,41 @@ class _PatientSearchState extends State<PatientSearch> {
                     foregroundColor: Colors.black,
                   ),
                   child: Text("Export Data"),
-                  onPressed: () {},
+                  onPressed: _showExportDialog,
                 ),
               ],
             ),
 
             const SizedBox(height: 10),
 
-            PatientSearchTable(
-              patients: filteredPatients,
-              onDelete: _deletePatient,
-              onEdit: _showEditPatientDialog,
-              canDelete: canDelete,
-              canEdit: canEdit,
-            ),
+            if (filteredPatients.isEmpty)
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 50),
+                    Icon(Icons.search_off, size: 80, color: Colors.grey),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No patients found',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[700]),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Try a different name or patient code.',
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              )
+            else
+              PatientSearchTable(
+                patients: filteredPatients,
+                onDelete: _deletePatient,
+                onEdit: _showEditPatientDialog,
+                canDelete: canDelete,
+                canEdit: canEdit,
+              ),
           ],
         ),
       ),
