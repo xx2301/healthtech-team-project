@@ -80,6 +80,54 @@ const List<MetricConfig> allMetrics = [
     'mmHg',
     'bloodPressure',
   ),
+  MetricConfig(
+    'weight', 
+    'Weight', 
+    Icons.monitor_weight, 
+    Colors.blue, 
+    'kg', 
+    'todayWeight'
+  ),
+  MetricConfig(
+    'height', 
+    'Height', 
+    Icons.straighten, 
+    Colors.purple, 
+    'cm', 
+    'todayHeight'
+  ),
+  MetricConfig(
+    'body_temperature', 
+    'Body Temp', 
+    Icons.thermostat, 
+    Colors.red, 
+    '°C', 
+    'todayTemp'
+  ),
+  MetricConfig(
+    'oxygen_saturation', 
+    'Oxygen', 
+    Icons.air, 
+    Colors.teal, 
+    '%', 
+    'todayOxygen'
+  ),
+  MetricConfig(
+    'water_intake', 
+    'Water', 
+    Icons.water_drop,
+     Colors.cyan, 
+     'ml', 
+     'todayWater'
+    ),
+  MetricConfig(
+    'respiratory_rate', 
+    'Respiratory', 
+    Icons.airline_seat_recline_normal, 
+    Colors.orange, 
+    'breaths/min', 
+    'todayRespiratory'
+  ),
 ];
 
 class HomePage extends StatefulWidget {
@@ -326,6 +374,12 @@ class _HomePageState extends State<HomePage> {
     double avgHeartRate = 0;
     int todayCalories = 0;
     double todaySleep = 0;
+    double todayWeight = 0;
+    double todayHeight = 0;
+    double todayTemp = 0;
+    double todayOxygen = 0;
+    double todayWater = 0;
+    double todayRespiratory = 0;
 
     final stepsMetricsToday = todayMetrics
         .where((m) => m.metricType == 'steps')
@@ -434,6 +488,24 @@ class _HomePageState extends State<HomePage> {
 
     bool isGoalAchievedToday = todaySteps >= stepsGoal;
 
+    final weightMetrics = todayMetrics.where((m) => m.metricType == 'weight').toList();
+    if (weightMetrics.isNotEmpty) todayWeight = weightMetrics.last.value;
+
+    final heightMetrics = todayMetrics.where((m) => m.metricType == 'height').toList();
+    if (heightMetrics.isNotEmpty) todayHeight = heightMetrics.last.value;
+
+    final tempMetrics = todayMetrics.where((m) => m.metricType == 'body_temperature').toList();
+    if (tempMetrics.isNotEmpty) todayTemp = tempMetrics.last.value;
+
+    final oxygenMetrics = todayMetrics.where((m) => m.metricType == 'oxygen_saturation').toList();
+    if (oxygenMetrics.isNotEmpty) todayOxygen = oxygenMetrics.last.value;
+
+    final waterMetrics = todayMetrics.where((m) => m.metricType == 'water_intake').toList();
+    todayWater = waterMetrics.fold(0.0, (sum, m) => sum + (m.value as num).toDouble());
+
+    final respiratoryMetrics = todayMetrics.where((m) => m.metricType == 'respiratory_rate').toList();
+    if (respiratoryMetrics.isNotEmpty) todayRespiratory = respiratoryMetrics.last.value;
+
     return {
       'todaySteps': todaySteps,
       'avgHeartRate': avgHeartRate,
@@ -451,6 +523,12 @@ class _HomePageState extends State<HomePage> {
       'sleepDeviceError': sleepDeviceError,
       'glucoseDeviceError': glucoseDeviceError,
       'bpDeviceError': bpDeviceError,
+      'todayWeight': todayWeight,
+      'todayHeight': todayHeight,
+      'todayTemp': todayTemp,
+      'todayOxygen': todayOxygen,
+      'todayWater': todayWater,
+      'todayRespiratory': todayRespiratory,
     };
   }
 
@@ -976,63 +1054,73 @@ class _HomePageState extends State<HomePage> {
                 child: const Text('No health cards yet, click + to add'),
               )
             else
-              GridView.count(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                shrinkWrap: true, // let it size to content
-                physics:
-                    const NeverScrollableScrollPhysics(), // disable its own scrolling
-                childAspectRatio: 1.1,
-                //health cards
-                children: _selectedMetricTypes.map((type) {
-                  final config = allMetrics.firstWhere((c) => c.type == type);
-                  dynamic value = data[config.dataKey];
-
-                  if (config.type == 'heart_rate' && value is double)
-                    value = value.toInt();
-                  else if (config.type == 'sleep' && value is double)
-                    value = value.toStringAsFixed(1);
-                  else if (config.type == 'glucose' && value is double)
-                    value = value.toStringAsFixed(1);
-                  if (value == null) value = '--';
-
-                  bool isDeviceError = false;
-                  switch (config.type) {
-                    case 'steps':
-                      isDeviceError = data['stepsDeviceError'] ?? false;
-                      break;
-                    case 'heart_rate':
-                      isDeviceError = data['heartRateDeviceError'] ?? false;
-                      break;
-                    case 'calories':
-                      isDeviceError = data['caloriesDeviceError'] ?? false;
-                      break;
-                    case 'sleep':
-                      isDeviceError = data['sleepDeviceError'] ?? false;
-                      break;
-                    case 'glucose':
-                      isDeviceError = data['glucoseDeviceError'] ?? false;
-                      break;
-                    case 'blood_pressure':
-                      isDeviceError = data['bpDeviceError'] ?? false;
-                      break;
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  int crossAxisCount = 2;
+                  if (constraints.maxWidth >= 800) {
+                    crossAxisCount = 3;
+                  } else if (constraints.maxWidth >= 600) {
+                    crossAxisCount = 2;
                   }
+                  return GridView.count(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    shrinkWrap: true, // let it size to content
+                    physics:
+                        const NeverScrollableScrollPhysics(), // disable its own scrolling
+                    childAspectRatio: 1.1,
+                    //health cards
+                    children: _selectedMetricTypes.map((type) {
+                      final config = allMetrics.firstWhere((c) => c.type == type);
+                      dynamic value = data[config.dataKey];
 
-                  return _buildHealthCard(
-                    title: config.title,
-                    value: value,
-                    unit: config.unit,
-                    icon: config.icon,
-                    color: config.color,
-                    progress: config.type == 'steps'
-                        ? stepsProgress
-                        : null, // Only the steps show the progress percentage
-                    onRemove: () => _removeMetric(type),
-                    metricType: config.type,
-                    isDeviceError: isDeviceError,
+                      if (config.type == 'heart_rate' && value is double)
+                        value = value.toInt();
+                      else if (config.type == 'sleep' && value is double)
+                        value = value.toStringAsFixed(1);
+                      else if (config.type == 'glucose' && value is double)
+                        value = value.toStringAsFixed(1);
+                      if (value == null) value = '--';
+
+                      bool isDeviceError = false;
+                      switch (config.type) {
+                        case 'steps':
+                          isDeviceError = data['stepsDeviceError'] ?? false;
+                          break;
+                        case 'heart_rate':
+                          isDeviceError = data['heartRateDeviceError'] ?? false;
+                          break;
+                        case 'calories':
+                          isDeviceError = data['caloriesDeviceError'] ?? false;
+                          break;
+                        case 'sleep':
+                          isDeviceError = data['sleepDeviceError'] ?? false;
+                          break;
+                        case 'glucose':
+                          isDeviceError = data['glucoseDeviceError'] ?? false;
+                          break;
+                        case 'blood_pressure':
+                          isDeviceError = data['bpDeviceError'] ?? false;
+                          break;
+                      }
+
+                      return _buildHealthCard(
+                        title: config.title,
+                        value: value,
+                        unit: config.unit,
+                        icon: config.icon,
+                        color: config.color,
+                        progress: config.type == 'steps'
+                            ? stepsProgress
+                            : null, // Only the steps show the progress percentage
+                        onRemove: () => _removeMetric(type),
+                        metricType: config.type,
+                        isDeviceError: isDeviceError,
+                      );
+                    }).toList(),
                   );
-                }).toList(),
+                },
               ),
             const SizedBox(height: 24),
 

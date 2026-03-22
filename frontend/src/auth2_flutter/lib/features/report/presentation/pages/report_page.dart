@@ -69,6 +69,10 @@ class _ReportPageState extends State<ReportPage> {
   double _systolicChangePercent = 0.0;
   double _diastolicChangePercent = 0.0;
 
+  double _totalWater = 0;
+  bool _hasWaterChange = false;
+  double _waterChangePercent = 0;
+
   DateTime? _selectedStartDate;
   DateTime? _selectedEndDate;
   final ValueNotifier<Color?> _periodCardHoverColor = ValueNotifier(null);
@@ -386,6 +390,9 @@ class _ReportPageState extends State<ReportPage> {
     } else {
       _bloodPressure = '--/--';
     }
+
+    final waterMetrics = metrics.where((m) => m.metricType == 'water_intake').toList();
+    _totalWater = waterMetrics.fold<double>(0, (sum, m) => sum + (m.value as num).toDouble());
   }
 
   void _prepareChartData(List<HealthMetric> metrics) {
@@ -572,6 +579,17 @@ class _ReportPageState extends State<ReportPage> {
     } else {
       _hasBpChange = false;
     }
+
+    double thisWater = thisWeek.where((m) => m.metricType == 'water_intake').fold<double>(
+      0, (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0));
+    double lastWater = lastWeek.where((m) => m.metricType == 'water_intake').fold<double>(
+      0, (sum, m) => sum + (m.value is num ? (m.value as num).toDouble() : 0));
+    if (lastWater > 0) {
+      _waterChangePercent = ((thisWater - lastWater) / lastWater) * 100;
+      _hasWaterChange = true;
+    } else {
+      _hasWaterChange = false;
+    }
   }
 
   String _formatDate(DateTime date) {
@@ -594,6 +612,37 @@ class _ReportPageState extends State<ReportPage> {
       'Dec',
     ];
     return months[month - 1];
+  }
+
+  String _getDefaultUnit(String metricType) {
+    switch (metricType) {
+      case 'steps':
+        return 'steps';
+      case 'heart_rate':
+        return 'bpm';
+      case 'blood_pressure':
+        return 'mmHg';
+      case 'glucose':
+        return 'mmol/L';
+      case 'weight':
+        return 'kg';
+      case 'height':
+        return 'cm';
+      case 'body_temperature':
+        return '°C';
+      case 'oxygen_saturation':
+        return '%';
+      case 'sleep_duration':
+        return 'hours';
+      case 'calories_burned':
+        return 'kcal';
+      case 'water_intake':
+        return 'ml';
+      case 'respiratory_rate':
+        return 'breaths/min';
+      default:
+        return '';
+    }
   }
 
   Future<void> _generateSimulatedData() async {
@@ -756,9 +805,7 @@ class _ReportPageState extends State<ReportPage> {
                     final data = {
                       'metricType': selectedMetric,
                       'value': value,
-                      'unit': unitController.text.isEmpty
-                          ? null
-                          : unitController.text,
+                      'unit': unitController.text.isNotEmpty ? unitController.text : _getDefaultUnit(selectedMetric),
                       'timestamp': selectedDateTime.toIso8601String(),
                       'source': 'manual',
                     };
@@ -1839,6 +1886,91 @@ class _ReportPageState extends State<ReportPage> {
                         ),
                       ],
                     ),
+                  ),
+                ),
+                const SizedBox(height: 15),
+
+                // Water Intake Card
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isLight ? Colors.white : const Color(0xFF0A3B3B),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Water Intake",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.only(left: 5, right: 5),
+                            decoration: BoxDecoration(
+                              color: (_hasWaterChange && _waterChangePercent >= 0)
+                                  ? (isLight ? Colors.green[100] : Colors.green[700])
+                                  : (isLight ? Colors.red[100] : Colors.red[600]),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              _hasWaterChange
+                                  ? '${_waterChangePercent >= 0 ? '+' : ''}${_waterChangePercent.toStringAsFixed(1)}%'
+                                  : '—',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: isLight ? Colors.black : Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        '${_totalWater.toStringAsFixed(0)} ml',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+                      ),
+                      const Text("Total water intake this week", style: TextStyle(fontSize: 10)),
+                      const SizedBox(height: 10),
+                      LinearProgressIndicator(
+                        value: 0.0, // 可根据目标值设置
+                        valueColor: const AlwaysStoppedAnimation(Colors.blue),
+                        backgroundColor: isLight ? Colors.grey[300] : Colors.grey[800],
+                        minHeight: 8,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            children: [
+                              Text(
+                                (_totalWater / 7).toStringAsFixed(0),
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              const Text("Daily Average", style: TextStyle(fontSize: 10)),
+                            ],
+                          ),
+                          Column(
+                            children: const [
+                              Text("N/A", style: TextStyle(fontWeight: FontWeight.bold)),
+                              Text("Last Week", style: TextStyle(fontSize: 10)),
+                            ],
+                          ),
+                          // 可以添加目标编辑，但暂不需要
+                          const SizedBox(width: 30),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 10),
