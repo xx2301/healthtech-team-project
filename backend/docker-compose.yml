@@ -14,7 +14,7 @@ services:
       MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-healthtech}
     volumes:
       - mongodb_data:/data/db
-      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+      # - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
       - ./backups:/backups
     command: mongod --auth
     healthcheck:
