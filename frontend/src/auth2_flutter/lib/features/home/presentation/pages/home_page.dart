@@ -138,7 +138,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  // max limit is 6
   List<String> _selectedMetricTypes = [];
 
   final String _storageKey = 'selected_metrics';
@@ -218,10 +217,12 @@ class _HomePageState extends State<HomePage> {
     await prefs.setStringList(_storageKey, _selectedMetricTypes);
   }
 
+  // limit 8
   void _addMetric(String type) {
-    if (_selectedMetricTypes.length >= 6) {
+    const int maxLimit = 8;
+    if (_selectedMetricTypes.length >= maxLimit) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Can display up to 6 indicators')),
+        const SnackBar(content: Text('Can display up to 8 indicators')),
       );
       return;
     }
@@ -736,6 +737,7 @@ class _HomePageState extends State<HomePage> {
     final stepsProgress = data['stepsProgress'] as double;
     final isGoalAchievedToday = data['isGoalAchievedToday'] as bool;
     final weeklyDailyStatus = data['weeklyDailyStatus'] as List<bool>;
+    const int maxLimit = 8;
 
     bool hasUserInfo =
         (user.age != null && user.age!.isNotEmpty) ||
@@ -752,9 +754,9 @@ class _HomePageState extends State<HomePage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  "Health Tech",
+                  "Dashboard",
                   style: TextStyle(
-                    fontSize: 28,
+                    fontSize: 30,
                     fontWeight: FontWeight.bold,
                     color: Colors.blue[800],
                   ),
@@ -1021,7 +1023,7 @@ class _HomePageState extends State<HomePage> {
 
                 const SizedBox(height: 20),*/
 
-            // My Health 标题
+            // My Health Title
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -1029,19 +1031,18 @@ class _HomePageState extends State<HomePage> {
                   "My Health",
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                if (_availableMetrics.isNotEmpty &&
-                    _selectedMetricTypes.length < 6)
+                if (_availableMetrics.isNotEmpty)
                   IconButton(
-                    icon: const Icon(
-                      Icons.add_circle_outline,
+                    icon: Icon(
+                      _selectedMetricTypes.length >= maxLimit
+                          ? Icons.edit
+                          : Icons.add_circle_outline,
                       color: Colors.blue,
                     ),
                     onPressed: () => _showAddMetricDialog(context),
-                  )
-                else if (_selectedMetricTypes.length >= 6)
-                  const Text(
-                    'Limit reached',
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                    tooltip: _selectedMetricTypes.length >= maxLimit
+                        ? 'Edit indicators'
+                        : 'Add indicator',
                   ),
               ],
             ),
@@ -1054,71 +1055,58 @@ class _HomePageState extends State<HomePage> {
                 child: const Text('No health cards yet, click + to add'),
               )
             else
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  int crossAxisCount = 2;
-                  if (constraints.maxWidth >= 800) {
-                    crossAxisCount = 3;
-                  } else if (constraints.maxWidth >= 600) {
-                    crossAxisCount = 2;
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 300,
+                  childAspectRatio: 1.1,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+                itemCount: _selectedMetricTypes.length,
+                itemBuilder: (context, index) {
+                  final type = _selectedMetricTypes[index];
+                  final config = allMetrics.firstWhere((c) => c.type == type);
+                  dynamic value = data[config.dataKey];
+
+                  if (config.type == 'heart_rate' && value is double) value = value.toInt();
+                  else if (config.type == 'sleep' && value is double) value = value.toStringAsFixed(1);
+                  else if (config.type == 'glucose' && value is double) value = value.toStringAsFixed(1);
+                  if (value == null) value = '--';
+
+                  bool isDeviceError = false;
+                  switch (config.type) {
+                    case 'steps':
+                      isDeviceError = data['stepsDeviceError'] ?? false;
+                      break;
+                    case 'heart_rate':
+                      isDeviceError = data['heartRateDeviceError'] ?? false;
+                      break;
+                    case 'calories':
+                      isDeviceError = data['caloriesDeviceError'] ?? false;
+                      break;
+                    case 'sleep':
+                      isDeviceError = data['sleepDeviceError'] ?? false;
+                      break;
+                    case 'glucose':
+                      isDeviceError = data['glucoseDeviceError'] ?? false;
+                      break;
+                    case 'blood_pressure':
+                      isDeviceError = data['bpDeviceError'] ?? false;
+                      break;
                   }
-                  return GridView.count(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    shrinkWrap: true, // let it size to content
-                    physics:
-                        const NeverScrollableScrollPhysics(), // disable its own scrolling
-                    childAspectRatio: 1.1,
-                    //health cards
-                    children: _selectedMetricTypes.map((type) {
-                      final config = allMetrics.firstWhere((c) => c.type == type);
-                      dynamic value = data[config.dataKey];
 
-                      if (config.type == 'heart_rate' && value is double)
-                        value = value.toInt();
-                      else if (config.type == 'sleep' && value is double)
-                        value = value.toStringAsFixed(1);
-                      else if (config.type == 'glucose' && value is double)
-                        value = value.toStringAsFixed(1);
-                      if (value == null) value = '--';
-
-                      bool isDeviceError = false;
-                      switch (config.type) {
-                        case 'steps':
-                          isDeviceError = data['stepsDeviceError'] ?? false;
-                          break;
-                        case 'heart_rate':
-                          isDeviceError = data['heartRateDeviceError'] ?? false;
-                          break;
-                        case 'calories':
-                          isDeviceError = data['caloriesDeviceError'] ?? false;
-                          break;
-                        case 'sleep':
-                          isDeviceError = data['sleepDeviceError'] ?? false;
-                          break;
-                        case 'glucose':
-                          isDeviceError = data['glucoseDeviceError'] ?? false;
-                          break;
-                        case 'blood_pressure':
-                          isDeviceError = data['bpDeviceError'] ?? false;
-                          break;
-                      }
-
-                      return _buildHealthCard(
-                        title: config.title,
-                        value: value,
-                        unit: config.unit,
-                        icon: config.icon,
-                        color: config.color,
-                        progress: config.type == 'steps'
-                            ? stepsProgress
-                            : null, // Only the steps show the progress percentage
-                        onRemove: () => _removeMetric(type),
-                        metricType: config.type,
-                        isDeviceError: isDeviceError,
-                      );
-                    }).toList(),
+                  return _buildHealthCard(
+                    title: config.title,
+                    value: value,
+                    unit: config.unit,
+                    icon: config.icon,
+                    color: config.color,
+                    progress: config.type == 'steps' ? stepsProgress : null,
+                    onRemove: () => _removeMetric(type),
+                    metricType: config.type,
+                    isDeviceError: isDeviceError,
                   );
                 },
               ),
