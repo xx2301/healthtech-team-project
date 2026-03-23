@@ -3,11 +3,26 @@ const router = express.Router();
 const Appointment = require('../models/Appointment');
 const Patient = require('../models/patient');
 const Doctor = require('../models/doctor');
-const authenticateToken = require('../middleware/auth');
-const { requireRole } = require('../middleware/role');
 const User = require('../models/User');
 const DoctorPatientRelation = require('../models/DoctorPatientRelation');
 const Notification = require('../models/Notification');
+const authenticateToken = require('../middleware/auth');
+const { requireRole } = require('../middleware/role');
+
+async function createNotification(userId, type, title, message, data = {}) {
+  try {
+    const notification = new Notification({
+      userId,
+      type,
+      title,
+      message,
+      data,
+    });
+    await notification.save();
+  } catch (err) {
+    console.error('Failed to send notification:', err);
+  }
+}
 
 router.get('/patient/:patientId/last', authenticateToken, async (req, res) => {
   try {
@@ -41,18 +56,18 @@ router.get('/doctor', authenticateToken, requireRole('doctor'), async (req, res)
     }
     const doctorId = doctorUser.doctorProfileId;
     const appointments = await Appointment.find({ doctorId })
-      .populate('patientId', 'userId')
+      .populate({
+        path: 'patientId',
+        populate: { path: 'userId', select: 'fullName' }
+      })
       .sort({ date: -1 });
-    const result = await Promise.all(appointments.map(async (apt) => {
-      const patient = await Patient.findById(apt.patientId).populate('userId', 'fullName');
-      return {
-        _id: apt._id,
-        patientName: patient?.userId?.fullName || 'Unknown',
-        date: apt.date,
-        time: apt.time,
-        reason: apt.reason,
-        status: apt.status,
-      };
+    const result = appointments.map(apt => ({
+      _id: apt._id,
+      patientName: apt.patientId?.userId?.fullName || 'Unknown',
+      date: apt.date,
+      time: apt.time,
+      reason: apt.reason,
+      status: apt.status,
     }));
     res.json({ success: true, data: result });
   } catch (err) {
@@ -66,6 +81,9 @@ router.post('/', authenticateToken, async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Unauthorized' });
 
   let doctorId, patientId, status;
+  let patientUserId;
+  let doctorUserId;
+
   if (user.role === 'doctor') {
     const doctorUser = await User.findById(req.user.userId);
     if (!doctorUser || !doctorUser.doctorProfileId) {
@@ -79,15 +97,18 @@ router.post('/', authenticateToken, async (req, res) => {
     else if (patientCode) patient = await Patient.findOne({ patientCode });
     if (!patient) return res.status(404).json({ success: false, error: 'Patient not found' });
     patientId = patient._id;
+    patientUserId = patient.userId;
   } else if (user.role === 'patient') {
     const { doctorId: targetDoctorId, date, time, reason } = req.body;
     if (!targetDoctorId) return res.status(400).json({ success: false, error: 'Doctor ID required' });
-    const doctor = await Doctor.findById(targetDoctorId);
+    const doctor = await Doctor.findById(targetDoctorId).populate('userId');
     if (!doctor) return res.status(404).json({ success: false, error: 'Doctor not found' });
     const patient = await Patient.findOne({ userId: req.user.userId });
     if (!patient) return res.status(404).json({ success: false, error: 'Patient profile not found' });
     doctorId = targetDoctorId;
     patientId = patient._id;
+    patientUserId = patient.userId;
+    doctorUserId = doctor.userId._id;
     status = 'pending';
   } else {
     return res.status(403).json({ success: false, error: 'Forbidden' });
@@ -119,9 +140,21 @@ router.post('/', authenticateToken, async (req, res) => {
   await appointment.save();
 
   if (status === 'confirmed') {
-    await createNotification(patientId, 'appointment_confirmed', `Your appointment on ${date} at ${time} has been confirmed.`);
+    await createNotification(
+      patientUserId,
+      'appointment_created',
+      'New Appointment',
+      `Your appointment on ${date} at ${time} has been confirmed.`,
+      { appointmentId: appointment._id }
+    );
   } else {
-    await createNotification(doctorId, 'appointment_request', `New appointment request on ${date} at ${time} from ${user.fullName}.`);
+    await createNotification(
+      doctorUserId,
+      'appointment_request',
+      'New Appointment Request',
+      `New appointment request on ${date} at ${time} from ${user.fullName}.`,
+      { appointmentId: appointment._id }
+    );
   }
 
   res.status(201).json({ success: true, data: appointment });
@@ -133,7 +166,15 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const { date, time, reason, status } = req.body;
     const userId = req.user.userId;
 
-    const appointment = await Appointment.findById(id).populate('doctorId patientId');
+    const appointment = await Appointment.findById(id)
+      .populate({
+        path: 'doctorId',
+        populate: { path: 'userId', select: 'fullName' }
+      })
+      .populate({
+        path: 'patientId',
+        populate: { path: 'userId', select: 'fullName' }
+      });
     if (!appointment) return res.status(404).json({ success: false, error: 'Appointment not found' });
 
     const isDoctor = await Doctor.findOne({ userId }) && appointment.doctorId.equals(await Doctor.findOne({ userId }).select('_id'));
@@ -142,27 +183,36 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(403).json({ success: false, error: 'Not authorized to modify this appointment' });
     }
 
-    const oldDate = appointment.date;
-    const oldTime = appointment.time;
-    const oldStatus = appointment.status;
+    if (isPatient && (date || time || status)) {
+      return res.status(403).json({ success: false, error: 'Patients can only modify the reason' });
+    }
 
     if (date) appointment.date = new Date(date);
     if (time) appointment.time = time;
     if (reason) appointment.reason = reason;
-    if (status) appointment.status = status;
+    if (status && isDoctor) appointment.status = status;
     await appointment.save();
 
-    const recipientId = isDoctor ? appointment.patientId.userId : appointment.doctorId.userId;
-    const senderName = isDoctor ? 'Doctor' : 'Patient';
+    const recipientId = isDoctor
+      ? appointment.patientId.userId._id
+      : appointment.doctorId.userId._id;
     let message = '';
     if (date || time) {
       message = `Appointment changed to ${appointment.date.toISOString().slice(0,10)} at ${appointment.time}`;
     } else if (status) {
       message = `Appointment ${status}`;
+    } else if (reason) {
+      message = `Appointment reason updated to: ${reason}`;
     } else {
       message = `Appointment details updated`;
     }
-    await createNotification(recipientId, 'appointment_updated', message);
+    await createNotification(
+      recipientId,
+      'appointment_updated',
+      'Appointment Updated',
+      message,
+      { appointmentId: appointment._id }
+    );
 
     res.json({ success: true, data: appointment });
   } catch (err) {

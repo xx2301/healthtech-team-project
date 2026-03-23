@@ -116,6 +116,67 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
+  Future<void> _editAppointment(Map<String, dynamic> apt) async {
+    final reasonController = TextEditingController(text: apt['reason'] ?? '');
+    return showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Appointment Reason'),
+        content: TextField(
+          controller: reasonController,
+          decoration: const InputDecoration(labelText: 'Reason'),
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              final newReason = reasonController.text.trim();
+              if (newReason == (apt['reason'] ?? '')) {
+                Navigator.pop(ctx);
+                return;
+              }
+              await _updateAppointment(apt['_id'], {'reason': newReason});
+              Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _updateAppointment(String id, Map<String, dynamic> data) async {
+    final token = await _getToken();
+    if (token == null) return;
+
+    try {
+      final response = await http.put(
+        Uri.parse('${_getBaseUrl()}/api/appointments/$id'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(data),
+      );
+      if (response.statusCode == 200) {
+        _fetchAppointments();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Appointment updated')),
+        );
+      } else {
+        final error = jsonDecode(response.body)['error'] ?? 'Failed to update';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $error')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -135,6 +196,7 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
                     final reason = apt['reason'] ?? '';
                     final status = apt['status'] ?? 'pending';
                     final isCancellable = status == 'pending' || status == 'confirmed';
+                    final isEditable = status != 'cancelled' && status != 'completed'; // 允许编辑未取消/未完成的预约
 
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -151,12 +213,21 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
                             Text('Status: $status'),
                           ],
                         ),
-                        trailing: isCancellable
-                            ? IconButton(
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (isEditable)
+                              IconButton(
+                                icon: Icon(Icons.edit, color: Colors.blue[400]),
+                                onPressed: () => _editAppointment(apt),
+                              ),
+                            if (isCancellable)
+                              IconButton(
                                 icon: const Icon(Icons.cancel, color: Colors.red),
                                 onPressed: () => _cancelAppointment(apt['_id']),
-                              )
-                            : null,
+                              ),
+                          ],
+                        ),
                       ),
                     );
                   },

@@ -4,42 +4,62 @@ const Patient = require('../models/patient');
 const User = require('../models/User');
 const Doctor = require('../models/doctor');
 const EmergencyContact = require('../models/EmergencyContact');
-const auth = require('../middleware/auth');
-const role = require('../middleware/role');
+const DoctorPatientRelation = require('../models/DoctorPatientRelation');
+const authenticateToken = require('../middleware/auth');
+const { requireRole } = require('../middleware/role');
 const mongoose = require('mongoose');
 
-router.delete('/:id', auth, role(['admin', 'super_admin']), async (req, res) => {
+router.get('/my-doctors', authenticateToken, requireRole('patient'), async (req, res) => {
+  try {
+    const patient = await Patient.findOne({ userId: req.user.userId });
+    if (!patient) {
+      return res.status(404).json({ success: false, error: 'Patient not found' });
+    }
+
+    const relations = await DoctorPatientRelation.find({
+      patientId: patient._id,
+      status: 'active'
+    }).populate({
+      path: 'doctorId',
+      populate: { path: 'userId', select: 'fullName' }
+    });
+
+    const doctors = relations.map(rel => ({
+      id: rel.doctorId._id,
+      name: rel.doctorId.userId?.fullName || 'Unknown',
+    }));
+
+    console.log('Fetching doctors for patient:', patient._id);
+    console.log('Relations found:', relations);
+    console.log('Doctors to return:', doctors);
+    
+    res.json({ success: true, data: doctors });
+  } catch (err) {
+    console.error('Error fetching patient doctors:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/:id', authenticateToken, requireRole('admin', 'super_admin'), async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
     const patientIdRaw = req.params.id;
-    console.log('[DELETE] 原始ID:', patientIdRaw);
-    console.log('[DELETE] ID长度:', patientIdRaw.length);
-    console.log('[DELETE] ID字符编码:', patientIdRaw.split('').map(c => c.charCodeAt(0)));
-
     const patientId = patientIdRaw.trim();
 
     let objectId;
     try {
       objectId = new mongoose.Types.ObjectId(patientId);
     } catch (err) {
-      console.log('[DELETE] 无效的ObjectId格式');
       await session.abortTransaction();
       return res.status(400).json({ message: 'Invalid patient ID format' });
     }
 
     let patient = await Patient.findById(objectId).session(session);
-    console.log('[DELETE] findById结果:', patient ? '找到' : '未找到');
-
-    if (!patient) {
-      patient = await Patient.findById(objectId).bypassMiddleware().session(session);
-      console.log('[DELETE] bypassMiddleware结果:', patient ? '找到' : '未找到');
-    }
 
     if (!patient) {
       patient = await Patient.findOne({ _id: objectId, deletedAt: { $ne: null } }).session(session);
-      console.log('[DELETE] 查找已删除结果:', patient ? '找到' : '未找到');
     }
 
     if (!patient) {

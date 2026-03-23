@@ -129,12 +129,16 @@ class Patient {
 
   /// Local JSON → Patient
   factory Patient.fromJson(Map<String, dynamic> json) {
+    if (json == null) {
+      throw ArgumentError('Patient JSON cannot be null');
+    }
     DateTime? dob;
-    final v = json['dateOfBirth'];
-    if (v is String && v.isNotEmpty) dob = DateTime.tryParse(v);
-
-    List<String> safeList(dynamic x) =>
-        (x is List) ? x.map((e) => e.toString()).toList() : <String>[];
+    final dobValue = json['dateOfBirth'];
+    if (dobValue is String && dobValue.isNotEmpty) {
+      dob = DateTime.tryParse(dobValue);
+    } else if (dobValue is DateTime) {
+      dob = dobValue;
+    }
 
     double? safeDouble(dynamic x) {
       if (x == null) return null;
@@ -149,35 +153,46 @@ class Patient {
       return int.tryParse(x.toString());
     }
 
-    final doctor = json['primaryDoctor'];
-    String? primaryDoctorName;
+    List<String> safeList(dynamic x) {
+      if (x == null) return [];
+      if (x is List) return x.map((e) => e.toString()).toList();
+      return [];
+    }
 
-    if (doctor is Map<String, dynamic>) {
-      final userId = doctor['userId'];
-      if (userId is Map<String, dynamic>) {
-        primaryDoctorName = userId['fullName']?.toString();
+    final fullName = (json['userId']?['fullName'] ?? json['fullName'] ?? '').toString();
+    final gender = (json['userId']?['gender'] ?? json['gender'] ?? '').toString();
+
+    final primaryDoctorField = json['primaryDoctor'];
+    String? primaryDoctorName;
+    if (primaryDoctorField is Map) {
+      final doctorUserId = primaryDoctorField['userId'];
+      if (doctorUserId is Map) {
+        primaryDoctorName = doctorUserId['fullName']?.toString();
       } else {
-        primaryDoctorName = doctor['fullName']?.toString();
+        primaryDoctorName = primaryDoctorField['fullName']?.toString();
       }
     }
 
-    final lastAppointmentDate = json['lastAppointmentDate'] != null
-        ? DateTime.parse(json['lastAppointmentDate'])
-        : null;
+    DateTime? lastAppointmentDate;
+    final lastApptStr = json['lastAppointmentDate'];
+    if (lastApptStr is String && lastApptStr.isNotEmpty) {
+      lastAppointmentDate = DateTime.tryParse(lastApptStr);
+    }
 
     return Patient(
-      pid: (json['pid'] ?? '').toString(),
-      fname: (json['fname'] ?? '').toString(),
+      pid: (json['_id'] ?? '').toString(),
+      fname: fullName,
       dateOfBirth: dob,
-      gender: (json['gender'] ?? '').toString(),
+      gender: gender,
       height: safeDouble(json['height']),
       weight: safeDouble(json['weight']),
       bloodType: json['bloodType']?.toString(),
       allergies: safeList(json['allergies']),
       chronicConditions: safeList(json['chronicConditions']),
-      emergencyContactID: safeInt(json['emergencyContactID']),
+      emergencyContactID: safeInt(json['emergencyContactId']),
       patientCode: (json['patientCode'] ?? '').toString(),
       age: safeInt(json['age']),
+      deletedAt: json['deletedAt'] != null ? DateTime.tryParse(json['deletedAt'].toString()) : null,
       primaryDoctorName: primaryDoctorName,
       lastAppointmentDate: lastAppointmentDate,
     );

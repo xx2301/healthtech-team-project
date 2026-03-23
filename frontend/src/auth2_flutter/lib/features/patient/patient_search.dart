@@ -108,9 +108,15 @@ class _PatientSearchState extends State<PatientSearch> {
         if (response.statusCode == 200) {
           final jsonData = jsonDecode(response.body);
           final List<dynamic> patientsJson = jsonData['data'];
-          final List<Patient> patients = patientsJson.map((json) {
-            return Patient.fromJson(json);
-          }).toList();
+          final List<Patient> patients = patientsJson
+              .where((json) => json != null)
+              .map((json) {
+                try {
+                  return Patient.fromJson(json);
+                } catch (e) {
+                  rethrow;
+                }
+              }).toList();
           setState(() {
             _allPatients = patients;
             filteredPatients = List.of(_allPatients);
@@ -819,7 +825,7 @@ class _PatientSearchState extends State<PatientSearch> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Appointment created')),
                 );
-                _fetchPatients(); // 刷新列表以更新 lastAppt
+                _fetchPatients();
               } else {
                 final error = jsonDecode(response.body)['error'] ?? 'Failed to create';
                 ScaffoldMessenger.of(context).showSnackBar(

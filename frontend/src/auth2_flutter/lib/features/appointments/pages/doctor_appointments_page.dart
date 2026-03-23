@@ -267,10 +267,11 @@ class _DoctorAppointmentsPageState extends State<DoctorAppointmentsPage> {
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    IconButton(
-                                      icon: Icon(Icons.edit, color: Colors.blue[400]),
-                                      onPressed: () => _editAppointment(apt),
-                                    ),
+                                    if (apt['status'] != 'completed' && apt['status'] != 'cancelled')
+                                      IconButton(
+                                        icon: Icon(Icons.edit, color: Colors.blue[400]),
+                                        onPressed: () => _editAppointment(apt),
+                                      ),
                                     if (status == 'pending')
                                       IconButton(
                                         icon: const Icon(Icons.check_circle, color: Colors.green),

@@ -156,4 +156,21 @@ router.post('/add-patient', authenticateToken, requireRole('doctor'), async (req
   }
 });
 
+router.get('/patient-doctors', authenticateToken, requireRole('patient'), async (req, res) => {
+  try {
+    const patient = await Patient.findOne({ userId: req.user.userId });
+    if (!patient) return res.status(404).json({ success: false, error: 'Patient not found' });
+    const relations = await DoctorPatientRelation.find({ patientId: patient._id, status: 'active' })
+      .populate('doctorId');
+    const doctors = relations.map(r => ({
+      _id: r.doctorId._id,
+      fullName: r.doctorId.userId?.fullName || 'Unknown',
+    }));
+    res.json({ success: true, data: doctors });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Failed to fetch doctors' });
+  }
+});
+
 module.exports = router;
