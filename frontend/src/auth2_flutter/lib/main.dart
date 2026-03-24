@@ -92,10 +92,7 @@ class MyApp extends StatelessWidget {
               theme: mainTheme,
               darkTheme: darkTheme,
               themeMode: themeNotifier.themeMode,
-              home: 
-              
-              
-              BlocConsumer<AuthCubit, AuthState>(
+              home: BlocConsumer<AuthCubit, AuthState>(
                 builder: (context, state) {
                   print('AuthState in builder: $state');
                   if (state is Unauthenticated) {
