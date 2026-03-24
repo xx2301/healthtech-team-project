@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubit.dart';
 import 'package:auth2_flutter/features/data/domain/entities/health_metric.dart';
-import 'package:auth2_flutter/features/data/domain/presentation/components/appbar.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/drawer.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/info_cards.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/line_graph.dart';
@@ -72,7 +69,6 @@ class _DoctorReportPageState extends State<DoctorReportPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final args = ModalRoute.of(context)?.settings.arguments as Map?;
-      print('DoctorReportPage received args: $args');
       if (args != null && args.containsKey('userId')) {
         final userId = args['userId'] as String;
         final userName = args['userName'] as String? ?? 'Patient';
@@ -106,7 +102,6 @@ class _DoctorReportPageState extends State<DoctorReportPage> {
     setState(() => _isLoading = true);
 
     try {
-      print('specificUserId in _fetchHealthData: $specificUserId');
       final token = await _getToken();
       if (token == null) throw Exception('Not authenticated');
 
@@ -128,13 +123,11 @@ class _DoctorReportPageState extends State<DoctorReportPage> {
       String mainUrlStr = '${_getBaseUrl()}/api/doctor/patient-metrics/$specificUserId?limit=500';
       mainUrlStr += '&startDate=${Uri.encodeComponent(start.toIso8601String())}&endDate=${Uri.encodeComponent(end.toIso8601String())}';
       Uri mainUrl = Uri.parse(mainUrlStr);
-      print('Fetching health metrics from: $mainUrl');
 
       var request = http.Request('GET', mainUrl);
       request.headers['Authorization'] = 'Bearer $token';
       var streamedResponse = await request.send();
       var mainResponse = await http.Response.fromStream(streamedResponse);
-      print('Response status: ${mainResponse.statusCode}');
 
       String lastWeekUrlStr = '${_getBaseUrl()}/api/doctor/patient-metrics/$specificUserId?limit=500';
       lastWeekUrlStr += '&startDate=${Uri.encodeComponent(lastWeekStart.toIso8601String())}&endDate=${Uri.encodeComponent(lastWeekEnd.toIso8601String())}';
@@ -261,7 +254,7 @@ class _DoctorReportPageState extends State<DoctorReportPage> {
     _totalSleepHours = sleepMetrics.fold<double>(
         0, (sum, m) => sum + (m.value as num).toDouble());
 
-    final glucoseMetrics = metrics.where((m) => m.metricType == 'blood_glucose').toList();
+    final glucoseMetrics = metrics.where((m) => m.metricType == 'glucose').toList();
     if (glucoseMetrics.isNotEmpty) {
       _avgGlucose = glucoseMetrics.fold<double>(
           0, (sum, m) => sum + (m.value as num).toDouble()) / glucoseMetrics.length;
@@ -355,7 +348,7 @@ class _DoctorReportPageState extends State<DoctorReportPage> {
     double thisGlucose = 0;
     int glucoseCount = 0;
     for (var m in thisWeek) {
-      if (m.metricType == 'blood_glucose') {
+      if (m.metricType == 'glucose') {
         thisGlucose += (m.value as num).toDouble();
         glucoseCount++;
       }
@@ -363,7 +356,7 @@ class _DoctorReportPageState extends State<DoctorReportPage> {
     double lastGlucose = 0;
     int lastGlucoseCount = 0;
     for (var m in lastWeek) {
-      if (m.metricType == 'blood_glucose') {
+      if (m.metricType == 'glucose') {
         lastGlucose += (m.value as num).toDouble();
         lastGlucoseCount++;
       }

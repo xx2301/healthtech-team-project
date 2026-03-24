@@ -1924,7 +1924,7 @@ app.get('/api/health-metrics', authenticateToken, async (req, res) => {
 
 app.post('/api/health-metrics', authenticateToken, [
   body('metricType').isIn([
-    'steps', 'heart_rate', 'blood_pressure', 'blood_glucose',
+    'steps', 'heart_rate', 'blood_pressure', 'glucose',
     'weight', 'height', 'bmi', 'body_temperature',
     'oxygen_saturation', 'sleep_duration', 'calories_burned',
     'water_intake', 'respiratory_rate'
@@ -2832,7 +2832,30 @@ app.post('/api/dev/simulate-health-data', authenticateToken, async (req, res) =>
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    
+    const existingSleep = await HealthMetric.findOne({
+      userId: user._id,
+      metricType: 'sleep_duration',
+      timestamp: { $gte: todayStart, $lt: todayEnd },
+    });
+    
     const metrics = [];
+    
+    if (!existingSleep) {
+      const sleepHours = 6 + Math.random() * 3; // 6-9 小时
+      metrics.push({
+        userId: user._id,
+        metricType: 'sleep_duration',
+        value: sleepHours,
+        unit: 'hours',
+        source: 'device',
+        deviceName: 'Sleep Tracker',
+        timestamp: now,
+        isAbnormal: false,
+      });
+    }
 
     const heartRate = 60 + Math.floor(Math.random() * 40); // 60-100 bpm
     metrics.push({

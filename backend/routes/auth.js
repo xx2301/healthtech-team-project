@@ -7,6 +7,7 @@ const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const Session = require('../models/Session');
 const emailService = require('../services/emailService');
+const HealthGoal = require('../models/HealthGoal');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
@@ -54,6 +55,53 @@ router.post('/register', [
     });
 
     await user.save();
+
+    try {
+      const defaultGoals = [
+        {
+          goalType: 'steps',
+          title: 'Daily Steps Goal',
+          targetValue: 6000,
+          frequency: 'daily',
+          targetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          priority: 'medium',
+          description: 'Aim to walk 6000 steps per day',
+        },
+        {
+          goalType: 'calories_burned',
+          title: 'Daily Calories Goal',
+          targetValue: 12700,
+          frequency: 'daily',
+          targetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          priority: 'medium',
+          description: 'Burn 12700 active calories per day',
+        },
+        {
+          goalType: 'sleep_duration',
+          title: 'Daily Sleep Goal',
+          targetValue: 8,
+          frequency: 'daily',
+          targetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          priority: 'medium',
+          description: 'Get 8 hours of sleep per night',
+        },
+        {
+          goalType: 'water_intake',
+          title: 'Daily Water Intake Goal',
+          targetValue: 2000,
+          frequency: 'daily',
+          targetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          priority: 'medium',
+          description: 'Drink 2000 ml of water per day',
+        },
+      ];
+
+      await HealthGoal.insertMany(
+        defaultGoals.map(g => ({ ...g, userId: user._id }))
+      );
+    } catch (goalError) {
+      console.error('Failed to create default goals for user', user.email, goalError);
+    }
 
     const userAgent = req.headers['user-agent'] || 'Unknown';
     const ip = req.ip || req.connection.remoteAddress;

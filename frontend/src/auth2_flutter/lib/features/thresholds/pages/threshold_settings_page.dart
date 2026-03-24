@@ -18,7 +18,7 @@ class _ThresholdSettingsPageState extends State<ThresholdSettingsPage> {
     'heart_rate',
     'blood_pressure_systolic',
     'blood_pressure_diastolic',
-    'blood_glucose',
+    'glucose',
     'weight',
     'body_temperature',
     'oxygen_saturation',

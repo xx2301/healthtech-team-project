@@ -17,7 +17,7 @@ const healthGoalSchema = new mongoose.Schema({
     type: String,
     required: true,
     enum: [
-      'steps', 'calories_burned', 'heart_rate', 'sleep_duration',
+      'steps', 'calories_burned', 'heart_rate', 'sleep_duration', 'water_intake',
       'weight_loss', 'fitness', 'nutrition', 'medication', 'other'
     ]
   },

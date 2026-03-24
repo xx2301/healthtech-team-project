@@ -139,7 +139,7 @@ function generateMockData(deviceType, deviceId, userId) {
   if (!normalizedType) return [];
 
   const validTypes = [
-    'steps', 'heart_rate', 'blood_pressure', 'blood_glucose',
+    'steps', 'heart_rate', 'blood_pressure', 'glucose',
     'weight', 'height', 'bmi', 'body_temperature',
     'oxygen_saturation', 'sleep_duration', 'calories_burned',
     'water_intake', 'respiratory_rate'

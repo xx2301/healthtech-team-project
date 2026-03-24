@@ -68,6 +68,8 @@ class _ReportPageState extends State<ReportPage> {
   bool _hasBpChange = false;
   double _systolicChangePercent = 0.0;
   double _diastolicChangePercent = 0.0;
+  DateTime? _latestBpDate;
+  String _weeklyInsight = '';
 
   double _totalWater = 0;
   bool _hasWaterChange = false;
@@ -77,8 +79,10 @@ class _ReportPageState extends State<ReportPage> {
   DateTime? _selectedEndDate;
   final ValueNotifier<Color?> _periodCardHoverColor = ValueNotifier(null);
 
-  int _stepsGoal = 6700;
+  int _stepsGoal = 6000;
   int _caloriesGoal = 12700;
+  int _waterGoal = 2000;
+  int _sleepGoal = 8;
   int _goalsAchievedDays = 3;
 
   @override
@@ -86,7 +90,6 @@ class _ReportPageState extends State<ReportPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final args = ModalRoute.of(context)?.settings.arguments as Map?;
-      print('ReportPage received args: $args');
       if (args != null && args.containsKey('userId')) {
         final userId = args['userId'] as String;
         final userName = args['userName'] as String? ?? 'Patient';
@@ -177,13 +180,10 @@ class _ReportPageState extends State<ReportPage> {
         '${_getBaseUrl()}/api/health-metrics',
       ).replace(queryParameters: mainParams);
 
-      print('My Data URL: $mainUrl');
-
       final mainResponse = await http.get(
         mainUrl,
         headers: {'Authorization': 'Bearer $token'},
       );
-      print('Response status: ${mainResponse.statusCode}');
 
       // fetch goals
       try {
@@ -211,6 +211,22 @@ class _ReportPageState extends State<ReportPage> {
             _caloriesGoal =
                 caloriesGoalObj['targetValue']?.toInt() ?? _caloriesGoal;
           }
+
+          final waterGoalObj = goalsData.firstWhere(
+            (g) => g['goalType'] == 'water_intake',
+            orElse: () => null,
+          );
+          if (waterGoalObj != null) {
+            _waterGoal = waterGoalObj['targetValue']?.toInt() ?? 2000;
+          }
+
+          final sleepGoalObj = goalsData.firstWhere(
+            (g) => g['goalType'] == 'sleep_duration',
+            orElse: () => null,
+          );
+          if (sleepGoalObj != null) {
+            _sleepGoal = sleepGoalObj['targetValue']?.toInt() ?? 8;
+          }
         }
       } catch (e) {
         print('Error fetching goals: $e');
@@ -236,7 +252,6 @@ class _ReportPageState extends State<ReportPage> {
         final userIds = mainData
             .map<String>((e) => e['userId'] as String)
             .toSet();
-        print('Fetched metrics from users: $userIds');
 
         final mainMetrics = mainData
             .map<HealthMetric?>((e) {
@@ -299,6 +314,8 @@ class _ReportPageState extends State<ReportPage> {
           _viewingAll = true;
         }
 
+        _weeklyInsight = _generateInsight();
+
         setState(() {
           _metrics = mainMetrics;
           _isLoading = false;
@@ -324,13 +341,11 @@ class _ReportPageState extends State<ReportPage> {
       return sum;
     });
 
-    print('Total steps: $_totalSteps');
     final stepsByUser = <String, int>{};
     for (var m in metrics.where((m) => m.metricType == 'steps')) {
       stepsByUser[m.userId] =
           (stepsByUser[m.userId] ?? 0) + (m.value as num).toInt();
     }
-    print('Steps by user: $stepsByUser');
 
     final heartMetrics = metrics
         .where((m) => m.metricType == 'heart_rate')
@@ -375,11 +390,12 @@ class _ReportPageState extends State<ReportPage> {
       _avgGlucose = 0;
     }
 
-    final bpMetrics =
-        metrics.where((m) => m.metricType == 'blood_pressure').toList()
-          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    final bpMetrics = metrics.where((m) => m.metricType == 'blood_pressure').toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
     if (bpMetrics.isNotEmpty) {
-      final val = bpMetrics.first.value;
+      final latest = bpMetrics.first;
+      _latestBpDate = latest.timestamp;
+      final val = latest.value;
       if (val is Map) {
         _systolic = (val['systolic'] as num?)?.toInt() ?? 0;
         _diastolic = (val['diastolic'] as num?)?.toInt() ?? 0;
@@ -389,6 +405,7 @@ class _ReportPageState extends State<ReportPage> {
       }
     } else {
       _bloodPressure = '--/--';
+      _latestBpDate = null;
     }
 
     final waterMetrics = metrics.where((m) => m.metricType == 'water_intake').toList();
@@ -396,8 +413,7 @@ class _ReportPageState extends State<ReportPage> {
   }
 
   void _prepareChartData(List<HealthMetric> metrics) {
-    final heartMetrics =
-        metrics
+    final heartMetrics = metrics
             .where((m) => m.metricType == 'heart_rate' && !m.isAbnormal)
             .toList()
           ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
@@ -405,20 +421,22 @@ class _ReportPageState extends State<ReportPage> {
         .map((m) => (m.value as num).toDouble())
         .toList();
 
-    _sleepDataPoints = List.filled(7, 0.0);
+    DateTime start = _selectedStartDate ?? DateTime.now().subtract(const Duration(days: 6));
+    DateTime end = _selectedEndDate ?? DateTime.now();
+    int days = end.difference(start).inDays + 1;
+    _sleepDataPoints = List.filled(days, 0.0);
+    
     final sleepMetrics = metrics
         .where((m) => m.metricType == 'sleep_duration')
         .toList();
-    final now = DateTime.now();
-    for (int i = 0; i < 7; i++) {
-      final day = DateTime(now.year, now.month, now.day - (6 - i));
+
+    for (int i = 0; i < days; i++) {
+      final day = start.add(Duration(days: i));
       final dayStart = DateTime(day.year, day.month, day.day);
       final dayEnd = DateTime(day.year, day.month, day.day, 23, 59, 59);
       final daySleep = sleepMetrics
-          .where(
-            (m) =>
-                m.timestamp.isAfter(dayStart) && m.timestamp.isBefore(dayEnd),
-          )
+          .where((m) =>
+              m.timestamp.isAfter(dayStart) && m.timestamp.isBefore(dayEnd))
           .fold<double>(0, (sum, m) => sum + (m.value as num).toDouble());
       _sleepDataPoints[i] = daySleep;
     }
@@ -832,7 +850,10 @@ class _ReportPageState extends State<ReportPage> {
       builder: (ctx) {
         return AlertDialog(
           title: Text(
-            'Edit ${goalType == 'steps' ? 'Steps' : 'Calories'} Goal',
+            'Edit ${goalType == 'steps' ? 'Steps' :
+                    goalType == 'calories_burned' ? 'Calories' :
+                    goalType == 'water_intake' ? 'Water Intake' :
+                    'Sleep'} Goal',
           ),
           content: TextField(
             controller: controller,
@@ -914,7 +935,10 @@ class _ReportPageState extends State<ReportPage> {
               'targetDate': now
                   .add(const Duration(days: 30))
                   .toIso8601String(), // dafault after 30 days
-              'title': goalType == 'steps' ? 'Steps Goal' : 'Calories Goal',
+              'title': goalType == 'steps' ? 'Steps Goal' :
+                        goalType == 'calories_burned' ? 'Calories Goal' :
+                        goalType == 'water_intake' ? 'Water Intake Goal' :
+                        'Sleep Goal',
             }),
           );
           if (createResponse.statusCode == 201) {
@@ -973,6 +997,62 @@ class _ReportPageState extends State<ReportPage> {
     }
   }
 
+  String _generateInsight() {
+    List<String> points = [];
+
+    if (_hasStepsChange) {
+      if (_stepsChangePercent > 10) {
+        points.add("Big step count increase, great job! 🎉");
+      } else if (_stepsChangePercent > 0) {
+        points.add("Steps increased a bit, keep going! 👍");
+      } else if (_stepsChangePercent < -10) {
+        points.add("Steps dropped significantly, try to move more. 👣");
+      } else if (_stepsChangePercent < 0) {
+        points.add("Steps decreased slightly, stay active. 💪");
+      }
+    } else {
+      points.add("Insufficient step data to compare with last week.");
+    }
+
+    if (_hasSleepChange) {
+      if (_sleepChangePercent > 5) {
+        points.add("Sleep duration increased, better recovery! 😴");
+      } else if (_sleepChangePercent < -5) {
+        points.add("Lack of sleep, make sure to rest. 🌙");
+      } else if (_sleepChangePercent.abs() <= 5) {
+        points.add("Sleep stable, keep it up. 💤");
+      }
+    } else {
+      points.add("Insufficient sleep data to compare with last week.");
+    }
+
+    final waterWeekTarget = _waterGoal * 7;
+    final waterRatio = waterWeekTarget > 0 ? _totalWater / waterWeekTarget : 0;
+    if (waterRatio >= 1.0) {
+      points.add("Hydration goal met, stay hydrated! 💧");
+    } else if (waterRatio >= 0.8) {
+      points.add("Close to water intake goal, keep it up. 🥤");
+    } else if (waterRatio > 0) {
+      points.add("Water intake low, don't forget to drink. 🚰");
+    } else {
+      points.add("No water intake data yet, remember to stay hydrated.");
+    }
+
+    if (_avgHeartRate > 0) {
+      if (_avgHeartRate >= 60 && _avgHeartRate <= 100) {
+        points.add("Heart rate in normal range, heart healthy. ❤️");
+      } else {
+        points.add("Heart rate slightly high/low, monitor closely. 📊");
+      }
+    }
+
+    if (points.isEmpty) {
+      points.add("Your data looks steady this week, keep up the healthy habits! 🌟");
+    }
+
+    return points.join(' ');
+  }
+
   Widget _buildEmptyState() {
     String message = _isAdmin && _searchName.isNotEmpty
         ? 'No data found for "$_searchName".'
@@ -1028,6 +1108,12 @@ class _ReportPageState extends State<ReportPage> {
   @override
   Widget build(BuildContext context) {
     final isLight = Theme.of(context).brightness == Brightness.light;
+    final stepsWeekTarget = _stepsGoal * 7;
+    final stepsProgress = stepsWeekTarget > 0 ? (_totalSteps / stepsWeekTarget).clamp(0.0, 1.0) : 0.0;
+    final caloriesWeekTarget = _caloriesGoal * 7;
+    final caloriesProgress = caloriesWeekTarget > 0 ? (_totalCalories / caloriesWeekTarget).clamp(0.0, 1.0) : 0.0;
+    final waterWeekTarget = _waterGoal * 7;
+    final waterProgress = waterWeekTarget > 0 ? (_totalWater / waterWeekTarget).clamp(0.0, 1.0) : 0.0;
 
     if (_isLoading) {
       return Scaffold(
@@ -1285,7 +1371,7 @@ class _ReportPageState extends State<ReportPage> {
                       ),
                       const SizedBox(height: 10),
                       LinearProgressIndicator(
-                        value: 0.75,
+                        value: stepsProgress,
                         valueColor: const AlwaysStoppedAnimation(Colors.green),
                         backgroundColor: isLight ? Colors.grey[300] : Colors.grey[800],
                         minHeight: 8,
@@ -1497,7 +1583,7 @@ class _ReportPageState extends State<ReportPage> {
                       ),
                       const SizedBox(height: 10),
                       LinearProgressIndicator(
-                        value: 0.55,
+                        value: caloriesProgress,
                         valueColor: const AlwaysStoppedAnimation(Colors.green),
                         backgroundColor: isLight ? Colors.grey[300] : Colors.grey[800],
                         minHeight: 8,
@@ -1619,25 +1705,24 @@ class _ReportPageState extends State<ReportPage> {
                             children: [
                               Text(
                                 '${(_totalSleepHours / 7).toStringAsFixed(1)} hours',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
+                                style: const TextStyle(fontWeight: FontWeight.bold),
                               ),
-                              const Text(
-                                "Daily Average",
-                                style: TextStyle(fontSize: 10),
-                              ),
+                              const Text("Daily Average", style: TextStyle(fontSize: 10)),
                             ],
                           ),
                           Column(
                             children: const [
-                              Text(
-                                "N/A",
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
+                              Text("N/A", style: TextStyle(fontWeight: FontWeight.bold)),
                               Text("Last Week", style: TextStyle(fontSize: 10)),
                             ],
                           ),
+                          if (_canEditGoal)
+                            GestureDetector(
+                              onTap: () => _showEditGoalDialog('sleep_duration', _sleepGoal),
+                              child: _buildGoalColumn(_sleepGoal),
+                            )
+                          else
+                            _buildGoalColumn(_sleepGoal),
                         ],
                       ),
                     ],
@@ -1843,8 +1928,8 @@ class _ReportPageState extends State<ReportPage> {
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                const Text(
-                                  "Today",
+                                Text(
+                                  _latestBpDate != null ? _formatDate(_latestBpDate!) : 'No data',
                                   style: TextStyle(fontSize: 10),
                                 ),
                               ],
@@ -1920,7 +2005,7 @@ class _ReportPageState extends State<ReportPage> {
                       const Text("Total water intake this week", style: TextStyle(fontSize: 10)),
                       const SizedBox(height: 10),
                       LinearProgressIndicator(
-                        value: 0.0, // 可根据目标值设置
+                        value: waterProgress,
                         valueColor: const AlwaysStoppedAnimation(Colors.blue),
                         backgroundColor: isLight ? Colors.grey[300] : Colors.grey[800],
                         minHeight: 8,
@@ -1945,8 +2030,13 @@ class _ReportPageState extends State<ReportPage> {
                               Text("Last Week", style: TextStyle(fontSize: 10)),
                             ],
                           ),
-                          // 可以添加目标编辑，但暂不需要
-                          const SizedBox(width: 30),
+                          if (_canEditGoal)
+                            GestureDetector(
+                              onTap: () => _showEditGoalDialog('water_intake', _waterGoal),
+                              child: _buildGoalColumn(_waterGoal),
+                            )
+                          else
+                            _buildGoalColumn(_waterGoal),
                         ],
                       ),
                     ],
@@ -2007,7 +2097,7 @@ class _ReportPageState extends State<ReportPage> {
                             left: BorderSide(width: 3, color: Colors.blue),
                           ),
                         ),
-                        child: const Column(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
@@ -2019,7 +2109,11 @@ class _ReportPageState extends State<ReportPage> {
                             ),
                             SizedBox(height: 4),
                             Text(
-                              "He knew what he was supposed to do. Tas supposed to do and what he would do were not the same. This would have been fine if he were willing to face the inevitable consequences, but he wasn't.",
+                              _weeklyInsight,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Theme.of(context).textTheme.bodyMedium?.color ?? Colors.black,
+                              ),
                             ),
                           ],
                         ),

@@ -12,7 +12,7 @@ const thresholdSchema = new mongoose.Schema({
     required: true,
     enum: [
       'steps', 'heart_rate', 'blood_pressure_systolic', 'blood_pressure_diastolic',
-      'blood_glucose', 'weight', 'body_temperature', 'oxygen_saturation',
+      'glucose', 'weight', 'body_temperature', 'oxygen_saturation',
       'sleep_duration', 'calories_burned'
     ]
   },

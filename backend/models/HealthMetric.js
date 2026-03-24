@@ -36,7 +36,7 @@ const healthMetricSchema = new mongoose.Schema({
     type: String,
     required: true,
     enum: [
-      'steps', 'heart_rate', 'blood_pressure', 'blood_glucose',
+      'steps', 'heart_rate', 'blood_pressure', 'glucose',
       'weight', 'height', 'bmi', 'body_temperature',
       'oxygen_saturation', 'sleep_duration', 'calories_burned',
       'water_intake', 'respiratory_rate'
@@ -116,7 +116,7 @@ healthMetricSchema.pre('save', function(next) {
       steps: 'steps',
       heart_rate: 'bpm',
       blood_pressure: 'mmHg',
-      blood_glucose: 'mg/dL',
+      glucose: 'mg/dL',
       weight: 'kg',
       height: 'cm',
       body_temperature: '°C',
@@ -145,7 +145,7 @@ healthMetricSchema.methods.detectAbnormal = function() {
     heart_rate: { min: 60, max: 100 },
     blood_pressure_systolic: { min: 90, max: 120 },
     blood_pressure_diastolic: { min: 60, max: 80 },
-    blood_glucose: { min: 70, max: 140 },
+    glucose: { min: 70, max: 140 },
     body_temperature: { min: 36.1, max: 37.2 },
     oxygen_saturation: { min: 95, max: 100 },
     respiratory_rate: { min: 12, max: 20 }

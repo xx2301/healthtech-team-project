@@ -8,7 +8,30 @@ const isTestUser = (user) => {
 
  async function generateLiveDataForUser(user) {
   const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+
+  const existingSleep = await HealthMetric.findOne({
+    userId: user._id,
+    metricType: 'sleep_duration',
+    timestamp: { $gte: todayStart, $lt: todayEnd },
+  });
+
   const metrics = [];
+
+  if (!existingSleep) {
+    const sleepHours = 6 + Math.random() * 3; // 6-9hrs
+    metrics.push({
+      userId: user._id,
+      metricType: 'sleep_duration',
+      value: sleepHours,
+      unit: 'hours',
+      source: 'device',
+      deviceName: 'Sleep Tracker',
+      timestamp: now,
+      isAbnormal: false,
+    });
+  }
 
 // 1. Heart rate (one per minute, consistent with real monitoring)
 // Access medical records (available to doctors and admin)
@@ -58,7 +81,7 @@ const isTestUser = (user) => {
   metrics.push({
     userId: user._id,
     patientId: null,
-    metricType: 'blood_glucose',
+    metricType: 'glucose',
     value: glucose,
     unit: 'mmol/L',
     source: 'device',
@@ -80,20 +103,6 @@ const isTestUser = (user) => {
     deviceName: 'BP Monitor',
     timestamp: now,
     isAbnormal: systolic > 140 || systolic < 90 || diastolic > 90 || diastolic < 60,
-  });
-
-  // 6. Sleep Duration (simulate sleep data every minute, which is not realistic but for demonstration)
-  const sleepIncrement = Math.random() * 0.5; // 0-0.5hrs
-  metrics.push({
-    userId: user._id,
-    patientId: null,
-    metricType: 'sleep_duration',
-    value: sleepIncrement,
-    unit: 'hours',
-    source: 'device',
-    deviceName: 'Sleep Tracker',
-    timestamp: now,
-    isAbnormal: false,
   });
 
   // Batch insert (ignore duplicate key and other errors)

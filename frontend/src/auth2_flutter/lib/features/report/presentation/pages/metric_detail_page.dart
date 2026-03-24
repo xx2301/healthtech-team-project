@@ -42,7 +42,7 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
       case 'sleep':
         return 'sleep_duration';
       case 'glucose':
-        return 'blood_glucose';
+        return 'glucose';
       default:
         return widget.metricType;
     }
