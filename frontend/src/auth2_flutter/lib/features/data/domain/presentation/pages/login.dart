@@ -6,8 +6,10 @@ import 'package:auth2_flutter/features/data/domain/presentation/components/appba
 import 'package:auth2_flutter/features/data/domain/presentation/components/my_button.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/my_textfield.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubit.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_states.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/pages/reset_password_page.dart';
 
 class LoginPage extends StatefulWidget {
   final void Function()? togglePages;
@@ -44,6 +46,7 @@ class _LoginPageState extends State<LoginPage> {
 
   //forgot password box
   void openForgotPasswordBox() {
+    final emailController = TextEditingController();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -54,34 +57,24 @@ class _LoginPageState extends State<LoginPage> {
           obsecureText: false,
         ),
         actions: [
-          //cancel button
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel", style: TextStyle(fontWeight: FontWeight.bold),),
+            child: const Text("Cancel", style: TextStyle(fontWeight: FontWeight.bold)),
           ),
-
-          //reset button
           TextButton(
             onPressed: () async {
-              String message = await authCubit.forgotPassword(
-                emailController.text,
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Sending reset email... Please check your inbox!')),
               );
-
-              //make sure the context is still valid
+              String message = await authCubit.forgotPassword(emailController.text);
               if (!mounted) return;
-
-              if (message == "Password reset email! Check your inbox.") {
-                Navigator.pop(context);
-                emailController.clear();
-              }
-
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(message))
-                );
-              }
+              ScaffoldMessenger.of(context).removeCurrentSnackBar();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(message)),
+              );
             },
-            child: const Text("Reset", style: TextStyle(fontWeight: FontWeight.bold),),
+            child: const Text("Send", style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -98,95 +91,110 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: Appbar2(),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(15.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              //page name
-              Row(
-                children: [
-                  Text(
-                    "LOGIN PAGE",
-                    style: TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-
-              //email textfield
-              MyTextfield(
-                controller: emailController,
-                hintText: "Email",
-                obsecureText: false,
-                keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.next,
-                onSubmitted: () {
-                  FocusScope.of(context).requestFocus(passwordFocusNode);
-                },
-              ),
-
-              const SizedBox(height: 15),
-              //password textfield
-              MyTextfield(
-                controller: passwordController,
-                hintText: "Password",
-                obsecureText: true,
-                focusNode: passwordFocusNode,
-                textInputAction: TextInputAction.done,
-                onSubmitted: login,
-              ),
-              const SizedBox(height: 10),
-
-              //forgot password
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  GestureDetector(
-                    onTap: () => openForgotPasswordBox(),
-                    child: Text(
-                      "Forgot Password?",
+    return BlocListener<AuthCubit, AuthState>(
+      listener: (context, state) {
+        if (state is Authenticated) {
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
+        appBar: Appbar2(),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(15.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                //page name
+                Row(
+                  children: [
+                    Text(
+                      "LOGIN PAGE",
                       style: TextStyle(
-                        color: Colors.green,
+                        fontSize: 30,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 25),
-              //login button
-              MyButton(onTap: login, text: "LOGIN"),
+                  ],
+                ),
+                const SizedBox(height: 10),
 
-              const SizedBox(height: 15),
-              //dont have an account?
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    "Don't have an account? "
-                  ),
-                  GestureDetector(
-                    onTap: widget.togglePages,
-                    child: Text(
-                      "Register Now",
-                      style: TextStyle(
-                        color: Colors.green,
-                        fontWeight: FontWeight.bold,
+                //email textfield
+                MyTextfield(
+                  controller: emailController,
+                  hintText: "Email",
+                  obsecureText: false,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: () {
+                    FocusScope.of(context).requestFocus(passwordFocusNode);
+                  },
+                ),
+
+                const SizedBox(height: 15),
+                //password textfield
+                MyTextfield(
+                  controller: passwordController,
+                  hintText: "Password",
+                  obsecureText: true,
+                  focusNode: passwordFocusNode,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: login,
+                ),
+                const SizedBox(height: 10),
+
+                //forgot password
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    GestureDetector(
+                      onTap: () => openForgotPasswordBox(),
+                      child: Text(
+                        "Forgot Password?",
+                        style: TextStyle(
+                          color: Colors.green,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+                const SizedBox(height: 25),
+                //login button
+                MyButton(onTap: login, text: "LOGIN"),
 
-              
-            ],
+                const SizedBox(height: 15),
+                //dont have an account?
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      "Don't have an account? "
+                    ),
+                    GestureDetector(
+                      onTap: widget.togglePages,
+                      child: Text(
+                        "Register Now",
+                        style: TextStyle(
+                          color: Colors.green,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => ResetPasswordPage()),
+                    );
+                  },
+                  child: const Text("Test Reset Password by inserting token"),
+                ),
+              ],
+            ),
           ),
         ),
       ),

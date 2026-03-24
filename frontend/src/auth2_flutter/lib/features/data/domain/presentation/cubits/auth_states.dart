@@ -15,6 +15,8 @@ class Authenticated extends AuthState{
   Authenticated(this.user);
 }
 
+class ResetPasswordSuccess extends AuthState {}
+
 //unauthenticated 
 class Unauthenticated extends AuthState{}
 

@@ -64,7 +64,7 @@ class MyApp extends StatelessWidget {
                 '/patientpage': (context) => PatientSearch(),
                 '/devicepage': (context) => DevicesPage(),
                 '/personalinfopage': (context) => PersonalInfo(),
-                '/reset-password': (context) => const ResetPasswordPage(),
+                // '/reset-password': (context) => const ResetPasswordPage(),
                 '/change-password': (context) => const ChangePasswordPage(),
                 '/medicalrecords': (context) => const MedicalRecordsPage(),
                 '/metric-detail': (context) {
@@ -85,6 +85,9 @@ class MyApp extends StatelessWidget {
                 '/appointments': (context) => const AppointmentsPage(),
                 '/doctor-appointments': (context) => const DoctorAppointmentsPage(),
                 '/request-appointment': (context) => const RequestAppointmentPage(),
+                '/reset-password': (context) => ResetPasswordPage(
+                  token: ModalRoute.of(context)?.settings.arguments as String?,
+                ),
               },
               theme: mainTheme,
               darkTheme: darkTheme,

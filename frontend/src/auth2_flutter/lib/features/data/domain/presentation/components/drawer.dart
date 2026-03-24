@@ -68,7 +68,7 @@ class DefaultDrawer extends StatelessWidget {
             if (user?.role == 'patient')
               ListTile(
                 leading: const Icon(Icons.calendar_today),
-                title: const Text('My Appointments'),
+                title: const Text('M Y   A P P O I N T M E N T'),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.pushNamed(context, '/appointments');
@@ -108,7 +108,7 @@ class DefaultDrawer extends StatelessWidget {
             if (user?.role == 'patient')
               ListTile(
                 leading: const Icon(Icons.add_alert),
-                title: const Text('Request Appointment'),
+                title: const Text('R E Q U E S T   A P P T'),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.pushNamed(context, '/request-appointment');

@@ -133,10 +133,9 @@ class AuthCubit extends Cubit<AuthState> {
     try {
       emit(AuthLoading());
       final message = await authRepo.resetPassword(token, newPassword);
-      emit(Unauthenticated()); 
+      emit(ResetPasswordSuccess());
     } catch (e) {
       emit(AuthError(e.toString()));
-      emit(Unauthenticated());
     }
   }
 

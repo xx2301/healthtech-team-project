@@ -3,10 +3,6 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class BackendAuthRepository {
-  // - Android Demo: http://10.0.2.2:3001
-  // - iOS Demo: http://localhost:3001
-  // - Actual device: http://<你的电脑IP>:3001
-  // - Flutter Web: http://localhost:3001
   static const String baseUrl = 'http://localhost:3001';
   
   static const String _tokenKey = 'auth_token';
@@ -170,6 +166,45 @@ class BackendAuthRepository {
       }
     } catch (e) {
       throw Exception('Network error while fetching chats: $e');
+    }
+  }
+
+  Future<String> sendPasswordResetEmail(String email) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/forgot-password'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email}),
+      );
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return data['message'] ?? 'Reset email sent';
+      } else {
+        throw Exception(data['error'] ?? 'Failed to send reset email');
+      }
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
+
+  Future<String> resetPassword(String token, String newPassword) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/reset-password'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'token': token, 'newPassword': newPassword}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['message'] ?? 'Password reset successful';
+      } else {
+        final error = jsonDecode(response.body)['error'] ?? 'Reset failed';
+        throw Exception(error);
+      }
+    } catch (e) {
+      throw Exception('Network error: $e');
     }
   }
 }

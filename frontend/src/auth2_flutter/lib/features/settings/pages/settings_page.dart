@@ -379,19 +379,19 @@ class _SettingsPageState extends State<SettingsPage> {
                       routeName: '/thresholds',
                     ),
 
-                    SettingsTile(
-                      icon: Icons.scale,
-                      title: 'Measurement Unit',
-                      isLinkTile: true,
-                      routeName: '/homepage',
-                    ),
+                    // SettingsTile(
+                    //   icon: Icons.scale,
+                    //   title: 'Measurement Unit',
+                    //   isLinkTile: true,
+                    //   routeName: '/homepage',
+                    // ),
 
-                    SettingsTile(
-                      icon: Icons.language,
-                      title: 'Language',
-                      isLinkTile: true,
-                      routeName: '/homepage',
-                    ),
+                    // SettingsTile(
+                    //   icon: Icons.language,
+                    //   title: 'Language',
+                    //   isLinkTile: true,
+                    //   routeName: '/homepage',
+                    // ),
 
                     const SizedBox(height: 10),
 

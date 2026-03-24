@@ -21,6 +21,7 @@ const chatRoutes = require('./routes/chat');
 const Appointment = require('./models/Appointment');
 const appointmentRoutes = require('./routes/appointments');
 const patientRoutes = require('./routes/patient');
+const authRoutes = require('./routes/auth');
 
 async function createNotification(userId, type, title, message, data = {}) {
   try {
@@ -57,6 +58,7 @@ app.use('/api/doctor', doctorRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/patients', patientRoutes);
+app.use('/api/auth', authRoutes);
 
 app.use((req, res, next) => {
   console.log('=== REQUEST LOG ===');
