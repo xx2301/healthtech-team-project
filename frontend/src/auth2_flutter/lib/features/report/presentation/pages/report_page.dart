@@ -306,12 +306,19 @@ class _ReportPageState extends State<ReportPage> {
         _reportPeriod = '${_formatDate(start)} - ${_formatDate(end)}';
         _generatedDate = _formatDate(now);
 
-        if (_searchName.isNotEmpty) {
-          _viewingUserName = _searchName;
-          _viewingAll = false;
+        if (_isAdmin) {
+          if (_searchName.isNotEmpty) {
+            if (_viewingUserName.isEmpty) {
+              _viewingUserName = _searchName;
+            }
+            _viewingAll = false;
+          } else {
+            _viewingUserName = 'all users';
+            _viewingAll = true;
+          }
         } else {
-          _viewingUserName = 'all users';
-          _viewingAll = true;
+          _viewingUserName = 'your own data';
+          _viewingAll = false;
         }
 
         _weeklyInsight = _generateInsight();
@@ -1053,6 +1060,30 @@ class _ReportPageState extends State<ReportPage> {
     return points.join(' ');
   }
 
+  Future<Map<String, String>?> _searchUserByName(String name) async {
+    final token = await _getToken();
+    if (token == null) return null;
+
+    final url = Uri.parse('${_getBaseUrl()}/api/admin/users?search=$name&limit=1');
+    final response = await http.get(
+      url,
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final users = data['data'] as List<dynamic>?;
+      if (users != null && users.isNotEmpty) {
+        final user = users[0];
+        return {
+          'id': user['_id'],
+          'name': user['fullName'] ?? user['email'],
+        };
+      }
+    }
+    return null;
+  }
+
   Widget _buildEmptyState() {
     String message = _isAdmin && _searchName.isNotEmpty
         ? 'No data found for "$_searchName".'
@@ -1156,14 +1187,16 @@ class _ReportPageState extends State<ReportPage> {
                         if (_isAdmin) ...[
                           ElevatedButton(
                             onPressed: () {
-                              final currentUser = context
-                                  .read<AuthCubit>()
-                                  .currentUser;
+                              final currentUser = context.read<AuthCubit>().currentUser;
                               if (currentUser != null) {
-                                _searchName = '';
-                                _fetchHealthData(
-                                  specificUserId: currentUser.uid,
-                                );
+                                setState(() {
+                                  _searchName = '';
+                                  _searchController.clear();
+                                  _currentViewingUserId = currentUser.uid;
+                                  _viewingUserName = 'your own data';
+                                  _viewingAll = false;
+                                });
+                                _fetchHealthData(specificUserId: currentUser.uid);
                               }
                             },
                             child: const Text('My Data'),
@@ -1223,27 +1256,51 @@ class _ReportPageState extends State<ReportPage> {
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: 10,
-                          ),
+                          contentPadding: const EdgeInsets.symmetric(vertical: 10),
                         ),
-                        onSubmitted: (_) {
-                          setState(() {
-                            _searchName = _searchController.text;
-                          });
-                          _fetchHealthData(
-                            specificUserId: _currentViewingUserId,
-                          );
+                        onSubmitted: (_) async {
+                          final searchName = _searchController.text.trim();
+                          if (searchName.isEmpty) return;
+                          setState(() => _isLoading = true);
+                          final user = await _searchUserByName(searchName);
+                          if (user != null) {
+                            setState(() {
+                              _searchName = searchName;
+                              _currentViewingUserId = user['id']!;
+                              _viewingUserName = user['name']!;
+                              _viewingAll = false;
+                            });
+                            await _fetchHealthData(specificUserId: _currentViewingUserId);
+                          } else {
+                            setState(() => _isLoading = false);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('User not found')),
+                            );
+                          }
                         },
                       ),
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          _searchName = _searchController.text;
-                        });
-                        _fetchHealthData(specificUserId: _currentViewingUserId);
+                      onPressed: () async {
+                        final searchName = _searchController.text.trim();
+                        if (searchName.isEmpty) return;
+                        setState(() => _isLoading = true);
+                        final user = await _searchUserByName(searchName);
+                        if (user != null) {
+                          setState(() {
+                            _searchName = searchName;
+                            _currentViewingUserId = user['id']!;
+                            _viewingUserName = user['name']!;
+                            _viewingAll = false;
+                          });
+                          await _fetchHealthData(specificUserId: _currentViewingUserId);
+                        } else {
+                          setState(() => _isLoading = false);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('User not found')),
+                          );
+                        }
                       },
                       child: const Text('Search'),
                     ),

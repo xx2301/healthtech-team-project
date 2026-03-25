@@ -7,6 +7,69 @@ const DoctorPatientRelation = require('../models/DoctorPatientRelation');
 const HealthMetric = require('../models/HealthMetric');
 const authenticateToken = require('../middleware/auth');
 const { requireRole } = require('../middleware/role');
+const { body, validationResult } = require('express-validator');
+
+router.put('/profile', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    if (!user.doctorProfileId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'No doctor profile found for this user' 
+      });
+    }
+    
+    const doctor = await Doctor.findById(user.doctorProfileId);
+    if (!doctor) {
+      return res.status(404).json({ success: false, error: 'Doctor profile not found' });
+    }
+
+    const updates = req.body;
+    const allowedUpdates = [
+      'hospitalAffiliation', 'department', 'yearsOfExperience', 'consultationFee',
+      'availabilitySchedule', 'status', 'maxPatients', 'qualifications',
+      'bio', 'languagesSpoken'
+    ];
+
+    Object.keys(updates).forEach(key => {
+      if (allowedUpdates.includes(key)) {
+        doctor[key] = updates[key];
+      }
+      
+      if (key === 'medicalLicenseNumber' && updates[key] !== doctor.medicalLicenseNumber) {
+        return res.status(400).json({
+          success: false,
+          error: 'Medical license number cannot be changed directly. Please contact admin.'
+        });
+      }
+      
+      if (key === 'specialization' && updates[key] !== doctor.specialization) {
+        return res.status(400).json({
+          success: false,
+          error: 'Specialization change requires admin approval.'
+        });
+      }
+    });
+
+    await doctor.save();
+
+    const doctorResponse = doctor.toObject();
+
+    res.json({
+      success: true,
+      message: 'Doctor profile updated successfully',
+      doctor: doctorResponse
+    });
+
+  } catch (error) {
+    console.error('Update doctor profile error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update doctor profile' });
+  }
+});
 
 router.get('/patients', authenticateToken, async (req, res) => {
   try {
@@ -100,6 +163,94 @@ router.get('/patient-metrics/:userId', authenticateToken, requireRole('doctor'),
   }
 });
 
+router.post('/create-patient', authenticateToken, requireRole('doctor'), [
+  body('userId').isMongoId(),
+  body('weight').optional().isFloat({ min: 0, max: 500 }),
+  body('height').optional().isFloat({ min: 0, max: 300 }),
+  body('bloodType').optional().isIn(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'unknown'])
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+  
+  try {
+    const doctor = await Doctor.findOne({ 
+      userId: req.user.userId,
+      approvalStatus: 'approved'
+    });
+    
+    if (!doctor) {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Only approved doctors can create patient profiles' 
+      });
+    }
+    
+    const user = await User.findById(req.body.userId);
+    
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    if (user.patientProfileId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User already has a patient profile' 
+      });
+    }
+    
+    const patientData = {
+      userId: user._id,
+      bloodType: req.body.bloodType || 'unknown',
+      careModeEnabled: false,
+      preferredUnitSystem: 'metric',
+      age: user.age ? parseInt(user.age) : null,
+    };
+    if (req.body.weight !== undefined && req.body.weight !== null) {
+      patientData.weight = req.body.weight;
+    }
+    if (req.body.height !== undefined && req.body.height !== null) {
+      patientData.height = req.body.height;
+    }
+    
+    const patient = new Patient(patientData);
+    await patient.save();
+    
+    user.patientProfileId = patient._id;
+    user.role = 'patient';
+    await user.save();
+    
+    const relation = new DoctorPatientRelation({
+      doctorId: doctor._id,
+      patientId: patient._id,
+      relationType: 'primary',
+      status: 'active',
+      permissions: {
+        viewMedicalRecords: true,
+        viewHealthMetrics: true,
+        addMedicalNotes: true,
+        writePrescriptions: true
+      }
+    });
+    
+    await relation.save();
+    
+    await Patient.findByIdAndUpdate(patient._id, { primaryDoctor: doctor._id });
+
+    res.status(201).json({
+      success: true,
+      message: 'Patient profile created successfully',
+      patient: patient,
+      relation: relation
+    });
+    
+  } catch (error) {
+    console.error('Doctor create patient error:', error);
+    res.status(500).json({ success: false, error: 'Failed to create patient profile' });
+  }
+});
+
 router.post('/add-patient', authenticateToken, requireRole('doctor'), async (req, res) => {
   try {
     const { patientEmail } = req.body;
@@ -170,6 +321,65 @@ router.get('/patient-doctors', authenticateToken, requireRole('patient'), async 
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, error: 'Failed to fetch doctors' });
+  }
+});
+
+router.get('/patients-with-summary', authenticateToken, requireRole('doctor'), async (req, res) => {
+  try {
+    const doctorUser = await User.findById(req.user.userId).select('doctorProfileId');
+    if (!doctorUser || !doctorUser.doctorProfileId) {
+      return res.status(400).json({ success: false, error: 'Doctor profile not found' });
+    }
+    const doctorId = doctorUser.doctorProfileId;
+
+    const relations = await DoctorPatientRelation.find({ 
+      doctorId: doctorId,
+      status: 'active'
+    }).populate('patient');
+
+    const patients = await Promise.all(relations.map(async (relation) => {
+      const patient = relation.patient;
+      const user = await User.findById(patient.userId).select('fullName email gender');
+      
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const stepsMetrics = await HealthMetric.find({
+        userId: patient.userId,
+        metricType: 'steps',
+        timestamp: { $gte: sevenDaysAgo }
+      });
+      const totalSteps = stepsMetrics.reduce((sum, m) => sum + (m.value || 0), 0);
+      
+      const latestHeartRate = await HealthMetric.findOne({
+        userId: patient.userId,
+        metricType: 'heart_rate'
+      }).sort({ timestamp: -1 });
+      
+      const latestSleep = await HealthMetric.findOne({
+        userId: patient.userId,
+        metricType: 'sleep_duration'
+      }).sort({ timestamp: -1 });
+
+      return {
+        _id: patient._id,
+        patientCode: patient.patientCode,
+        fullName: user?.fullName || 'Unknown',
+        email: user?.email || '',
+        gender: user?.gender || 'unknown',
+        userId: patient.userId,
+        relationType: relation.relationType,
+        permissions: relation.permissions,
+        healthSummary: {
+          steps7Days: totalSteps,
+          latestHeartRate: latestHeartRate ? latestHeartRate.value : null,
+          latestSleep: latestSleep ? latestSleep.value : null,
+        }
+      };
+    }));
+
+    res.status(200).json({ success: true, data: patients, count: patients.length });
+  } catch (error) {
+    console.error('Fetch patients error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch patients list' });
   }
 });
 

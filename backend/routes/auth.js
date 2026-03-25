@@ -8,6 +8,8 @@ const User = require('../models/User');
 const Session = require('../models/Session');
 const emailService = require('../services/emailService');
 const HealthGoal = require('../models/HealthGoal');
+const { authenticateToken } = require('../middleware/auth');
+const { requireRole } = require('../middleware/role');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
@@ -242,6 +244,21 @@ router.post('/login', [
       success: false, 
       error: 'Login failed' 
     });
+  }
+});
+
+router.get('/me', requireRole('user'), async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    const userResponse = user.toObject();
+    delete userResponse.password;
+    res.status(200).json({ success: true, user: userResponse });
+  } catch (error) {
+    console.error('Fetch user info error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch user information' });
   }
 });
 
