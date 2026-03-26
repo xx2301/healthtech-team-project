@@ -13,6 +13,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 
+enum ViewMode { day, week, month, custom }
+
 class ReportPage extends StatefulWidget {
   const ReportPage({super.key});
 
@@ -21,6 +23,7 @@ class ReportPage extends StatefulWidget {
 }
 
 class _ReportPageState extends State<ReportPage> {
+  List<String> _sleepDateLabels = [];
   List<HealthMetric> _metrics = [];
   bool _isLoading = true;
   String? _error;
@@ -85,6 +88,8 @@ class _ReportPageState extends State<ReportPage> {
   int _sleepGoal = 8;
   int _goalsAchievedDays = 3;
 
+  ViewMode _currentMode = ViewMode.week;
+
   @override
   void initState() {
     super.initState();
@@ -131,6 +136,10 @@ class _ReportPageState extends State<ReportPage> {
   Future<void> _fetchHealthData({String? specificUserId}) async {
     setState(() => _isLoading = true);
 
+    if (_selectedStartDate == null || _selectedEndDate == null) {
+      _updateDateRangeForMode(_currentMode);
+    }
+
     try {
       final token = await _getToken();
       if (token == null) throw Exception('Not authenticated');
@@ -165,7 +174,7 @@ class _ReportPageState extends State<ReportPage> {
       );
 
       final baseParams = {
-        'limit': '500',
+        'limit': '10000',
         if (_searchName.isNotEmpty) 'search': _searchName,
         if (specificUserId != null) 'userId': specificUserId,
         if (_isAdmin && specificUserId == null) 'all': 'true',
@@ -323,6 +332,50 @@ class _ReportPageState extends State<ReportPage> {
 
         _weeklyInsight = _generateInsight();
 
+        if (_selectedStartDate == null && _selectedEndDate == null &&
+            _totalSteps == 0 && _totalCalories == 0 && _totalSleepHours == 0 &&
+            _totalWater == 0 && _avgHeartRate == 0 && _avgGlucose == 0) {
+          try {
+            final earliestRes = await http.get(
+              Uri.parse('${_getBaseUrl()}/api/health-metrics')
+                  .replace(queryParameters: {
+                    if (specificUserId != null) 'userId': specificUserId,
+                    if (_isAdmin && specificUserId == null) 'all': 'true',
+                    'limit': '1',
+                    'sort': 'timestamp',
+                  }),
+              headers: {'Authorization': 'Bearer $token'},
+            );
+            final latestRes = await http.get(
+              Uri.parse('${_getBaseUrl()}/api/health-metrics')
+                  .replace(queryParameters: {
+                    if (specificUserId != null) 'userId': specificUserId,
+                    if (_isAdmin && specificUserId == null) 'all': 'true',
+                    'limit': '1',
+                    'sort': '-timestamp',
+                  }),
+              headers: {'Authorization': 'Bearer $token'},
+            );
+
+            if (earliestRes.statusCode == 200 && latestRes.statusCode == 200) {
+              final earliestData = jsonDecode(earliestRes.body)['data'] ?? [];
+              final latestData = jsonDecode(latestRes.body)['data'] ?? [];
+              if (earliestData.isNotEmpty && latestData.isNotEmpty) {
+                final earliest = DateTime.parse(earliestData[0]['timestamp']);
+                final latest = DateTime.parse(latestData[0]['timestamp']);
+                setState(() {
+                  _selectedStartDate = earliest;
+                  _selectedEndDate = latest;
+                });
+                _fetchHealthData(specificUserId: specificUserId);
+                return;
+              }
+            }
+          } catch (e) {
+            print('Error auto-adjusting date range: $e');
+          }
+        }
+
         setState(() {
           _metrics = mainMetrics;
           _isLoading = false;
@@ -424,7 +477,13 @@ class _ReportPageState extends State<ReportPage> {
             .where((m) => m.metricType == 'heart_rate' && !m.isAbnormal)
             .toList()
           ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    _heartRatePoints = heartMetrics
+    
+    const int maxPoints = 30;
+    final recentHeartMetrics = heartMetrics.length > maxPoints
+        ? heartMetrics.sublist(heartMetrics.length - maxPoints)
+        : heartMetrics;
+
+    _heartRatePoints = recentHeartMetrics
         .map((m) => (m.value as num).toDouble())
         .toList();
 
@@ -432,20 +491,24 @@ class _ReportPageState extends State<ReportPage> {
     DateTime end = _selectedEndDate ?? DateTime.now();
     int days = end.difference(start).inDays + 1;
     _sleepDataPoints = List.filled(days, 0.0);
-    
+    _sleepDateLabels = List.filled(days, '');
+
     final sleepMetrics = metrics
         .where((m) => m.metricType == 'sleep_duration')
         .toList();
+
+    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
     for (int i = 0; i < days; i++) {
       final day = start.add(Duration(days: i));
       final dayStart = DateTime(day.year, day.month, day.day);
       final dayEnd = DateTime(day.year, day.month, day.day, 23, 59, 59);
       final daySleep = sleepMetrics
-          .where((m) =>
-              m.timestamp.isAfter(dayStart) && m.timestamp.isBefore(dayEnd))
+          .where((m) => m.timestamp.isAfter(dayStart) && m.timestamp.isBefore(dayEnd))
           .fold<double>(0, (sum, m) => sum + (m.value as num).toDouble());
       _sleepDataPoints[i] = daySleep;
+
+      _sleepDateLabels[i] = weekdays[day.weekday - 1];
     }
   }
 
@@ -670,6 +733,28 @@ class _ReportPageState extends State<ReportPage> {
     }
   }
 
+  void _updateDateRangeForMode(ViewMode mode) {
+    if (mode == ViewMode.custom) return;
+    final now = DateTime.now();
+    switch (mode) {
+      case ViewMode.day:
+        _selectedStartDate = DateTime(now.year, now.month, now.day);
+        _selectedEndDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
+        break;
+      case ViewMode.week:
+        _selectedStartDate = DateTime(now.year, now.month, now.day - 6);
+        _selectedEndDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
+        break;
+      case ViewMode.month:
+        _selectedStartDate = DateTime(now.year, now.month, 1);
+        final lastDay = DateTime(now.year, now.month + 1, 0).day;
+        _selectedEndDate = DateTime(now.year, now.month, lastDay, 23, 59, 59);
+        break;
+      default:
+        break;
+    }
+  }
+
   Future<void> _generateSimulatedData() async {
     final token = await _getToken();
     if (token == null) return;
@@ -706,7 +791,15 @@ class _ReportPageState extends State<ReportPage> {
     if (picked != null) {
       setState(() {
         _selectedStartDate = picked.start;
-        _selectedEndDate = picked.end;
+        _selectedEndDate = DateTime(
+          picked.end.year,
+          picked.end.month,
+          picked.end.day,
+          23,
+          59,
+          59,
+        );
+        _currentMode = ViewMode.custom;
       });
       _fetchHealthData(specificUserId: _currentViewingUserId);
     }
@@ -1084,6 +1177,27 @@ class _ReportPageState extends State<ReportPage> {
     return null;
   }
 
+  Widget _buildModeSelector() {
+    return SegmentedButton<ViewMode>(
+      segments: const [
+        ButtonSegment<ViewMode>(value: ViewMode.day, label: Text('Day')),
+        ButtonSegment<ViewMode>(value: ViewMode.week, label: Text('Week')),
+        ButtonSegment<ViewMode>(value: ViewMode.month, label: Text('Month')),
+      ],
+      selected: {_currentMode},
+      onSelectionChanged: (Set<ViewMode> newSelection) {
+        final newMode = newSelection.first;
+        if (newMode != _currentMode) {
+          setState(() {
+            _currentMode = newMode;
+            _updateDateRangeForMode(newMode);
+          });
+          _fetchHealthData(specificUserId: _currentViewingUserId);
+        }
+      },
+    );
+  }
+
   Widget _buildEmptyState() {
     String message = _isAdmin && _searchName.isNotEmpty
         ? 'No data found for "$_searchName".'
@@ -1131,7 +1245,7 @@ class _ReportPageState extends State<ReportPage> {
           goalValue.toString(),
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        const Text("Goal", style: TextStyle(fontSize: 10)),
+        const Text("Goal/day", style: TextStyle(fontSize: 10)),
       ],
     );
   }
@@ -1171,78 +1285,71 @@ class _ReportPageState extends State<ReportPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (_metrics.isNotEmpty) ...[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "Health Report",
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 25,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        if (_isAdmin) ...[
-                          ElevatedButton(
-                            onPressed: () {
-                              final currentUser = context.read<AuthCubit>().currentUser;
-                              if (currentUser != null) {
-                                setState(() {
-                                  _searchName = '';
-                                  _searchController.clear();
-                                  _currentViewingUserId = currentUser.uid;
-                                  _viewingUserName = 'your own data';
-                                  _viewingAll = false;
-                                });
-                                _fetchHealthData(specificUserId: currentUser.uid);
-                              }
-                            },
-                            child: const Text('My Data'),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        ElevatedButton.icon(
-                          onPressed: _showAddMetricDialog,
-                          icon: const Icon(Icons.add),
-                          label: const Text('Add'),
-                          style: ElevatedButton.styleFrom(
-                            foregroundColor: Colors.black,
-                            backgroundColor: Colors.green[100],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(Icons.refresh),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "Health Report",
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+                  ),
+                  Row(
+                    children: [
+                      // _buildModeSelector(),
+                      // const SizedBox(width: 8),
+                      if (_isAdmin) ...[
+                        ElevatedButton(
                           onPressed: () {
-                            setState(() {
-                              _selectedStartDate = null;
-                              _selectedEndDate = null;
-                            });
-                            _fetchHealthData(
-                              specificUserId: _currentViewingUserId,
-                            );
+                            final currentUser = context.read<AuthCubit>().currentUser;
+                            if (currentUser != null) {
+                              setState(() {
+                                _searchName = '';
+                                _searchController.clear();
+                                _currentViewingUserId = currentUser.uid;
+                                _viewingUserName = 'your own data';
+                                _viewingAll = false;
+                              });
+                              _fetchHealthData(specificUserId: currentUser.uid);
+                            }
                           },
+                          child: const Text('My Data'),
                         ),
                         const SizedBox(width: 8),
-                        if (kDebugMode)
-                          ElevatedButton(
-                            onPressed: _generateSimulatedData,
-                            child: Text(
-                              'Test',
-                              style: TextStyle(
-                                color: isLight ? Colors.black : Colors.white,
-                              ),
-                            ),
-                          ),
                       ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-              ],
-
+                      ElevatedButton.icon(
+                        onPressed: _showAddMetricDialog,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add'),
+                        style: ElevatedButton.styleFrom(
+                          foregroundColor: Colors.black,
+                          backgroundColor: Colors.green[100],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.refresh),
+                        onPressed: () {
+                          setState(() {
+                            _selectedStartDate = null;
+                            _selectedEndDate = null;
+                            _currentMode = ViewMode.week;
+                          });
+                          _fetchHealthData(specificUserId: _currentViewingUserId);
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      if (kDebugMode)
+                        ElevatedButton(
+                          onPressed: _generateSimulatedData,
+                          child: Text(
+                            'Test',
+                            style: TextStyle(color: isLight ? Colors.black : Colors.white),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
               if (_isAdmin) ...[
                 const SizedBox(height: 10),
                 Row(
@@ -1253,9 +1360,7 @@ class _ReportPageState extends State<ReportPage> {
                         decoration: InputDecoration(
                           hintText: 'Search by user name',
                           prefixIcon: const Icon(Icons.search),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                           contentPadding: const EdgeInsets.symmetric(vertical: 10),
                         ),
                         onSubmitted: (_) async {
@@ -1308,7 +1413,6 @@ class _ReportPageState extends State<ReportPage> {
                 ),
                 const SizedBox(height: 10),
               ],
-
               if (_metrics.isEmpty)
                 SizedBox(
                   height: MediaQuery.of(context).size.height - 150,
@@ -1318,16 +1422,12 @@ class _ReportPageState extends State<ReportPage> {
                 Text(
                   _isAdmin
                       ? (_viewingAll
-                            ? 'Your health data overview and analysis – All users'
-                            : 'Your health data overview and analysis – $_viewingUserName')
+                          ? 'Your health data overview and analysis – All users'
+                          : 'Your health data overview and analysis – $_viewingUserName')
                       : 'Your health data overview and analysis',
-                  style: TextStyle(
-                    color: isLight ? Colors.grey[700] : Colors.grey[200],
-                    fontSize: 15,
-                  ),
+                  style: TextStyle(color: isLight ? Colors.grey[700] : Colors.grey[200], fontSize: 15),
                 ),
                 const SizedBox(height: 10),
-
                 SizedBox(
                   height: 120,
                   child: GridView.count(
@@ -1337,8 +1437,7 @@ class _ReportPageState extends State<ReportPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 0),
                     children: [
                       MouseRegion(
-                        onEnter: (_) =>
-                            _periodCardHoverColor.value = Colors.grey[300],
+                        onEnter: (_) => _periodCardHoverColor.value = Colors.grey[300],
                         onExit: (_) => _periodCardHoverColor.value = null,
                         child: ValueListenableBuilder<Color?>(
                           valueListenable: _periodCardHoverColor,
@@ -1348,8 +1447,7 @@ class _ReportPageState extends State<ReportPage> {
                               child: InfoCards(
                                 title: "Report Period",
                                 subtitle: _reportPeriod,
-                                backgroundColor:
-                                    hoverColor ?? const Color(0xFFE6F2E6),
+                                backgroundColor: hoverColor ?? const Color(0xFFE6F2E6),
                               ),
                             );
                           },
@@ -1367,7 +1465,6 @@ class _ReportPageState extends State<ReportPage> {
                   ),
                 ),
                 const SizedBox(height: 20),
-
                 // Steps Card
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -1396,8 +1493,7 @@ class _ReportPageState extends State<ReportPage> {
                           Container(
                             padding: EdgeInsets.only(left: 5, right: 5),
                             decoration: BoxDecoration(
-                              color:
-                                  (_hasStepsChange && _stepsChangePercent >= 0)
+                              color: (_hasStepsChange && _stepsChangePercent >= 0)
                                   ? (isLight ? Colors.green[100] : Colors.green[700])
                                   : (isLight ? Colors.red[100] : Colors.red[600]),
                               borderRadius: BorderRadius.circular(12),
@@ -1463,8 +1559,7 @@ class _ReportPageState extends State<ReportPage> {
                           ),
                           if (_canEditGoal)
                             GestureDetector(
-                              onTap: () =>
-                                  _showEditGoalDialog('steps', _stepsGoal),
+                              onTap: () => _showEditGoalDialog('steps', _stepsGoal),
                               child: _buildGoalColumn(_stepsGoal),
                             )
                           else
@@ -1475,7 +1570,6 @@ class _ReportPageState extends State<ReportPage> {
                   ),
                 ),
                 const SizedBox(height: 15),
-
                 // Heart Rate Card
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -1506,9 +1600,7 @@ class _ReportPageState extends State<ReportPage> {
                           Container(
                             padding: const EdgeInsets.only(left: 5, right: 5),
                             decoration: BoxDecoration(
-                              color:
-                                  (_hasHeartRateChange &&
-                                      _heartRateChangePercent >= 0)
+                              color: (_hasHeartRateChange && _heartRateChangePercent >= 0)
                                   ? (isLight ? Colors.green[100] : Colors.green[700])
                                   : (isLight ? Colors.red[100] : Colors.red[600]),
                               borderRadius: BorderRadius.circular(12),
@@ -1576,7 +1668,6 @@ class _ReportPageState extends State<ReportPage> {
                   ),
                 ),
                 const SizedBox(height: 15),
-
                 // Calories Card
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -1607,9 +1698,7 @@ class _ReportPageState extends State<ReportPage> {
                           Container(
                             padding: const EdgeInsets.only(left: 5, right: 5),
                             decoration: BoxDecoration(
-                              color:
-                                  (_hasCaloriesChange &&
-                                      _caloriesChangePercent >= 0)
+                              color: (_hasCaloriesChange && _caloriesChangePercent >= 0)
                                   ? (isLight ? Colors.green[100] : Colors.green[700])
                                   : (isLight ? Colors.red[100] : Colors.red[600]),
                               borderRadius: BorderRadius.circular(12),
@@ -1689,7 +1778,6 @@ class _ReportPageState extends State<ReportPage> {
                   ),
                 ),
                 const SizedBox(height: 15),
-
                 // Sleep Card
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -1720,8 +1808,7 @@ class _ReportPageState extends State<ReportPage> {
                           Container(
                             padding: const EdgeInsets.only(left: 5, right: 5),
                             decoration: BoxDecoration(
-                              color:
-                                  (_hasSleepChange && _sleepChangePercent >= 0)
+                              color: (_hasSleepChange && _sleepChangePercent >= 0)
                                   ? (isLight ? Colors.green[100] : Colors.green[700])
                                   : (isLight ? Colors.red[100] : Colors.red[600]),
                               borderRadius: BorderRadius.circular(12),
@@ -1753,7 +1840,10 @@ class _ReportPageState extends State<ReportPage> {
                       const SizedBox(height: 10),
                       SizedBox(
                         height: 130,
-                        child: BarGraph(dataPoints: _sleepDataPoints),
+                        child: BarGraph(
+                          dataPoints: _sleepDataPoints,
+                          labels: _sleepDateLabels,
+                        ),
                       ),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1786,7 +1876,6 @@ class _ReportPageState extends State<ReportPage> {
                   ),
                 ),
                 const SizedBox(height: 15),
-
                 // Glucose Card
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -1830,9 +1919,7 @@ class _ReportPageState extends State<ReportPage> {
                                 horizontal: 5,
                               ),
                               decoration: BoxDecoration(
-                                color:
-                                    _hasGlucoseChange &&
-                                        _glucoseChangePercent >= 0
+                                color: _hasGlucoseChange && _glucoseChangePercent >= 0
                                     ? (isLight ? Colors.green[100] : Colors.green[700])
                                     : (isLight ? Colors.red[100] : Colors.red[600]),
                                 borderRadius: BorderRadius.circular(12),
@@ -1899,7 +1986,6 @@ class _ReportPageState extends State<ReportPage> {
                   ),
                 ),
                 const SizedBox(height: 15),
-
                 // Blood Pressure Card
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -1950,8 +2036,8 @@ class _ReportPageState extends State<ReportPage> {
                               ),
                               child: Text(
                                 _hasBpChange
-                                    ? '${_systolicChangePercent >= 0 ? '+' : ''}${_systolicChangePercent.toStringAsFixed(1)}%'
-                                    : '—',
+                                  ? '${_systolicChangePercent >= 0 ? '+' : ''}${_systolicChangePercent.toStringAsFixed(1)}%'
+                                  : '—',
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
@@ -2010,7 +2096,6 @@ class _ReportPageState extends State<ReportPage> {
                   ),
                 ),
                 const SizedBox(height: 15),
-
                 // Water Intake Card
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -2100,7 +2185,6 @@ class _ReportPageState extends State<ReportPage> {
                   ),
                 ),
                 const SizedBox(height: 10),
-
                 // Weekly Progress Summary Card
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -2164,7 +2248,7 @@ class _ReportPageState extends State<ReportPage> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            SizedBox(height: 4),
+                            const SizedBox(height: 4),
                             Text(
                               _weeklyInsight,
                               style: TextStyle(
@@ -2184,12 +2268,5 @@ class _ReportPageState extends State<ReportPage> {
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _periodCardHoverColor.dispose();
-    _searchController.dispose();
-    super.dispose();
   }
 }

@@ -3,12 +3,25 @@ import 'package:flutter/material.dart';
 
 class BarGraph extends StatelessWidget {
   final List<double> dataPoints;
-  const BarGraph({super.key, required this.dataPoints});
+  final List<String>? labels;
+
+  const BarGraph({super.key, required this.dataPoints, this.labels});
 
   @override
   Widget build(BuildContext context) {
     final double maxY = 12.0;
     final List<double> values = dataPoints;
+
+    final List<String> effectiveLabels;
+    if (labels != null && labels!.length == values.length) {
+      effectiveLabels = labels!;
+    } else {
+      const defaultDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+      effectiveLabels = List.generate(values.length, (i) {
+        if (i < defaultDays.length) return defaultDays[i];
+        return '';
+      });
+    }
 
     return BarChart(
       BarChartData(
@@ -26,7 +39,20 @@ class BarGraph extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 18,
-              getTitlesWidget: _bottomTitles,
+              getTitlesWidget: (value, meta) {
+                final index = value.toInt();
+                if (index < 0 || index >= effectiveLabels.length) {
+                  return const SizedBox.shrink();
+                }
+                return SideTitleWidget(
+                  meta: meta,
+                  space: 4,
+                  child: Text(
+                    effectiveLabels[index],
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
+                  ),
+                );
+              },
             ),
           ),
         ),
@@ -48,17 +74,6 @@ class BarGraph extends StatelessWidget {
           );
         }),
       ),
-    );
-  }
-
-  Widget _bottomTitles(double value, TitleMeta meta) {
-    const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-    final index = value.toInt();
-    if (index < 0 || index >= days.length) return const SizedBox.shrink();
-    return SideTitleWidget(
-      meta: meta,
-      space: 4,
-      child: Text(days[index], style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500)),
     );
   }
 }
