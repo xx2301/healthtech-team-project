@@ -11,7 +11,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 enum ViewMode { day, week, month, custom }
 
@@ -29,6 +29,9 @@ class _ReportPageState extends State<ReportPage> {
   String? _error;
   List<double> _heartRatePoints = [];
   List<double> _sleepDataPoints = List.filled(7, 0.0);
+  List<double> _glucosePoints = [];
+  List<double> _systolicPoints = [];
+  List<double> _diastolicPoints = [];
 
   int _totalSteps = 0;
   double _avgHeartRate = 0;
@@ -316,13 +319,18 @@ class _ReportPageState extends State<ReportPage> {
         _generatedDate = _formatDate(now);
 
         if (_isAdmin) {
-          if (_searchName.isNotEmpty) {
-            if (_viewingUserName.isEmpty) {
-              _viewingUserName = _searchName;
-            }
+          if (specificUserId != null) {
             _viewingAll = false;
+            if (_viewingUserName.isEmpty) {
+              final currentUser = context.read<AuthCubit>().currentUser;
+              if (currentUser != null && specificUserId == currentUser.uid) {
+                _viewingUserName = 'your own data';
+              } else {
+                _viewingUserName = 'selected user';
+              }
+            }
           } else {
-            _viewingUserName = 'all users';
+            _viewingUserName = 'all users'; // will not run through this loop anymore
             _viewingAll = true;
           }
         } else {
@@ -473,12 +481,14 @@ class _ReportPageState extends State<ReportPage> {
   }
 
   void _prepareChartData(List<HealthMetric> metrics) {
+    const int maxPoints = 30;
+
+    // heart rate chart
     final heartMetrics = metrics
             .where((m) => m.metricType == 'heart_rate' && !m.isAbnormal)
             .toList()
           ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
     
-    const int maxPoints = 30;
     final recentHeartMetrics = heartMetrics.length > maxPoints
         ? heartMetrics.sublist(heartMetrics.length - maxPoints)
         : heartMetrics;
@@ -487,6 +497,21 @@ class _ReportPageState extends State<ReportPage> {
         .map((m) => (m.value as num).toDouble())
         .toList();
 
+    // glucose chart
+    final glucoseMetrics = metrics
+        .where((m) => m.metricType == 'glucose')
+        .toList()
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    final recentGlucose = glucoseMetrics.length > maxPoints
+        ? glucoseMetrics.sublist(glucoseMetrics.length - maxPoints)
+        : glucoseMetrics;
+
+    _glucosePoints = recentGlucose
+        .map((m) => (m.value as num).toDouble())
+        .toList();
+
+    // sleep chart
     DateTime start = _selectedStartDate ?? DateTime.now().subtract(const Duration(days: 6));
     DateTime end = _selectedEndDate ?? DateTime.now();
     int days = end.difference(start).inDays + 1;
@@ -510,6 +535,38 @@ class _ReportPageState extends State<ReportPage> {
 
       _sleepDateLabels[i] = weekdays[day.weekday - 1];
     }
+
+    // blood pressure chart
+    final bpMetrics = metrics
+      .where((m) => m.metricType == 'blood_pressure')
+      .toList()
+    ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+  
+    final recentBp = bpMetrics.length > maxPoints
+        ? bpMetrics.sublist(bpMetrics.length - maxPoints)
+        : bpMetrics;
+    
+    _systolicPoints = recentBp
+        .map((m) {
+          final val = m.value;
+          if (val is Map && val['systolic'] is num) {
+            return (val['systolic'] as num).toDouble();
+          }
+          return double.nan;
+        })
+        .where((v) => v.isFinite)
+        .toList();
+    
+    _diastolicPoints = recentBp
+        .map((m) {
+          final val = m.value;
+          if (val is Map && val['diastolic'] is num) {
+            return (val['diastolic'] as num).toDouble();
+          }
+          return double.nan;
+        })
+        .where((v) => v.isFinite)
+        .toList();
   }
 
   void _calculateChangePercentages(
@@ -1296,25 +1353,25 @@ class _ReportPageState extends State<ReportPage> {
                     children: [
                       // _buildModeSelector(),
                       // const SizedBox(width: 8),
-                      if (_isAdmin) ...[
-                        ElevatedButton(
-                          onPressed: () {
-                            final currentUser = context.read<AuthCubit>().currentUser;
-                            if (currentUser != null) {
-                              setState(() {
-                                _searchName = '';
-                                _searchController.clear();
-                                _currentViewingUserId = currentUser.uid;
-                                _viewingUserName = 'your own data';
-                                _viewingAll = false;
-                              });
-                              _fetchHealthData(specificUserId: currentUser.uid);
-                            }
-                          },
-                          child: const Text('My Data'),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
+                      // if (_isAdmin) ...[
+                      //   ElevatedButton(
+                      //     onPressed: () {
+                      //       final currentUser = context.read<AuthCubit>().currentUser;
+                      //       if (currentUser != null) {
+                      //         setState(() {
+                      //           _searchName = '';
+                      //           _searchController.clear();
+                      //           _currentViewingUserId = currentUser.uid;
+                      //           _viewingUserName = 'your own data';
+                      //           _viewingAll = false;
+                      //         });
+                      //         _fetchHealthData(specificUserId: currentUser.uid);
+                      //       }
+                      //     },
+                      //     child: const Text('My Data'),
+                      //   ),
+                      //   const SizedBox(width: 8),
+                      // ],
                       ElevatedButton.icon(
                         onPressed: _showAddMetricDialog,
                         icon: const Icon(Icons.add),
@@ -1337,14 +1394,14 @@ class _ReportPageState extends State<ReportPage> {
                         },
                       ),
                       const SizedBox(width: 8),
-                      if (kDebugMode)
-                        ElevatedButton(
-                          onPressed: _generateSimulatedData,
-                          child: Text(
-                            'Test',
-                            style: TextStyle(color: isLight ? Colors.black : Colors.white),
-                          ),
-                        ),
+                      // if (kDebugMode)
+                      //   ElevatedButton(
+                      //     onPressed: _generateSimulatedData,
+                      //     child: Text(
+                      //       'Test',
+                      //       style: TextStyle(color: isLight ? Colors.black : Colors.white),
+                      //     ),
+                      //   ),
                     ],
                   ),
                 ],
@@ -1950,6 +2007,11 @@ class _ReportPageState extends State<ReportPage> {
                           style: TextStyle(fontSize: 10),
                         ),
                         const SizedBox(height: 10),
+                        SizedBox(
+                          height: 150,
+                          child: LineGraph(dataPoints: _glucosePoints),
+                        ),
+                        const SizedBox(height: 10),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -2060,6 +2122,27 @@ class _ReportPageState extends State<ReportPage> {
                           style: TextStyle(fontSize: 10),
                         ),
                         const SizedBox(height: 10),
+                        if (_systolicPoints.isNotEmpty) ...[
+                          const Text("Systolic Trend", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                          const SizedBox(height: 4),
+                          SizedBox(
+                            height: 100,
+                            child: LineGraph(
+                              dataPoints: _systolicPoints,
+                              color: Colors.red,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        if (_diastolicPoints.isNotEmpty) ...[
+                          const Text("Diastolic Trend", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                          const SizedBox(height: 4),
+                          SizedBox(
+                            height: 100,
+                            child: LineGraph(dataPoints: _diastolicPoints),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [

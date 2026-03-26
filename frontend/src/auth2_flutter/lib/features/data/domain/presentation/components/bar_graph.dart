@@ -9,8 +9,14 @@ class BarGraph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double maxY = 12.0;
     final List<double> values = dataPoints;
+
+    if (values.isEmpty) {
+      return const Center(child: Text('No sleep data'));
+    }
+
+    final double maxValue = values.reduce((a, b) => a > b ? a : b);
+    final double maxY = maxValue == 0 ? 1.0 : maxValue * 1.1;
 
     final List<String> effectiveLabels;
     if (labels != null && labels!.length == values.length) {
@@ -64,7 +70,8 @@ class BarGraph extends StatelessWidget {
               BarChartRodData(
                 toY: maxY,
                 width: 30,
-                borderRadius: BorderRadius.circular(0),
+                // borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
                 rodStackItems: [
                   BarChartRodStackItem(0, v, Colors.blue.shade200),
                   BarChartRodStackItem(v, maxY, Colors.grey.shade200),

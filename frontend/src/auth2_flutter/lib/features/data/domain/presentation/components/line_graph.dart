@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 
 class LineGraph extends StatelessWidget {
   final List<double> dataPoints;
-  const LineGraph({super.key, required this.dataPoints});
+  final Color? color;
+
+  const LineGraph({super.key, required this.dataPoints, this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +50,7 @@ class LineGraph extends StatelessWidget {
             isStrokeCapRound: true,
             dotData: const FlDotData(show: false),
             belowBarData: BarAreaData(show: false),
-            color: Colors.blue,
+            color: color ?? Colors.blue,
           ),
         ],
       ),

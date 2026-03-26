@@ -23,7 +23,6 @@ const appointmentRoutes = require('./routes/appointments');
 const patientRoutes = require('./routes/patient');
 const authRoutes = require('./routes/auth');
 const path = require('path');
-const healthMetricsRoutes = require('./routes/health-metrics');
 
 async function createNotification(userId, type, title, message, data = {}) {
   try {
@@ -62,7 +61,6 @@ app.use('/api/appointments', appointmentRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/auth', authRoutes);
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/api/health-metrics', healthMetricsRoutes);
 
 app.use((req, res, next) => {
   console.log('=== REQUEST LOG ===');
