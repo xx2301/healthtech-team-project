@@ -226,8 +226,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     });
 
     if (_isAssistant) {
-      final reply = HealthBotService.getReply(text, _healthData!);
-      Future.delayed(const Duration(seconds: 1), () {
+      final reply = await HealthBotService.getReply(text, _healthData!);
         if (!mounted) return;
         setState(() {
           _isBotTyping = false;
@@ -237,7 +236,6 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _scrollToBottom();
         });
-      });
     } else {
       final token = await _getToken();
       if (token == null) return;

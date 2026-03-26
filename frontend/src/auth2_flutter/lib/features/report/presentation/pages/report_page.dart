@@ -388,6 +388,7 @@ class _ReportPageState extends State<ReportPage> {
           _metrics = mainMetrics;
           _isLoading = false;
         });
+        _fetchAIInsight();
       } else {
         throw Exception('Failed to load health data');
       }
@@ -1232,6 +1233,57 @@ class _ReportPageState extends State<ReportPage> {
       }
     }
     return null;
+  }
+
+  Future<void> _fetchAIInsight() async {
+    if (_totalSteps == 0 && _totalSleepHours == 0 && _totalWater == 0) return;
+
+    final token = await _getToken();
+    if (token == null) return;
+
+    final url = Uri.parse('${_getBaseUrl()}/api/insight/weekly-insight');
+    final body = {
+      'stepsTotal': _totalSteps,
+      'stepsGoal': _stepsGoal,
+      'stepsChangePercent': _stepsChangePercent,
+      'sleepTotal': _totalSleepHours,
+      'sleepGoal': _sleepGoal,
+      'sleepChangePercent': _sleepChangePercent,
+      'waterTotal': _totalWater,
+      'waterGoal': _waterGoal,
+      'waterChangePercent': _waterChangePercent,
+      'avgHeartRate': _avgHeartRate,
+    };
+
+    setState(() {
+      _weeklyInsight = '✨ Generating health insight...';
+    });
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(body),
+      );
+      final data = jsonDecode(response.body);
+      if (data['success'] == true && data['insight'] != null) {
+        setState(() {
+          _weeklyInsight = data['insight'];
+        });
+      } else {
+        setState(() {
+          _weeklyInsight = _generateInsight();
+        });
+      }
+    } catch (e) {
+      print('AI insight error: $e');
+      setState(() {
+        _weeklyInsight = _generateInsight();
+      });
+    }
   }
 
   Widget _buildModeSelector() {

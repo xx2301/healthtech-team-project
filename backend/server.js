@@ -23,6 +23,8 @@ const appointmentRoutes = require('./routes/appointments');
 const patientRoutes = require('./routes/patient');
 const authRoutes = require('./routes/auth');
 const path = require('path');
+const insightRoutes = require('./routes/insight');
+const chatbotRoutes = require('./routes/chatbot');
 
 async function createNotification(userId, type, title, message, data = {}) {
   try {
@@ -60,6 +62,8 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/insight', insightRoutes);
+app.use('/api/chatbot', chatbotRoutes);
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use((req, res, next) => {
