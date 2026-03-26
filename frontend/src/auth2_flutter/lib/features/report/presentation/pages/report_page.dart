@@ -54,6 +54,9 @@ class _ReportPageState extends State<ReportPage> {
 
   String? _currentViewingUserId;
 
+  bool _fromDoctorDashboard = false;
+  String _doctorPatientName = '';
+
   bool get _canEditGoal {
     if (!_isAdmin) return true;
     return !_viewingAll && _viewingUserName == 'your own data';
@@ -98,14 +101,20 @@ class _ReportPageState extends State<ReportPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final args = ModalRoute.of(context)?.settings.arguments as Map?;
+
       if (args != null && args.containsKey('userId')) {
         final userId = args['userId'] as String;
         final userName = args['userName'] as String? ?? 'Patient';
+        final fromDoctorDashboard = args['fromDoctorDashboard'] == true;
+
         _currentViewingUserId = userId;
         _fetchHealthData(specificUserId: userId);
+
         setState(() {
           _viewingUserName = userName;
           _viewingAll = false;
+          _fromDoctorDashboard = fromDoctorDashboard;
+          _doctorPatientName = userName;
         });
       } else {
         final currentUser = context.read<AuthCubit>().currentUser;
@@ -115,6 +124,8 @@ class _ReportPageState extends State<ReportPage> {
           setState(() {
             _viewingUserName = 'your own data';
             _viewingAll = false;
+            _fromDoctorDashboard = false;
+            _doctorPatientName = '';
           });
         } else {
           _fetchHealthData();
@@ -813,28 +824,28 @@ class _ReportPageState extends State<ReportPage> {
     }
   }
 
-  Future<void> _generateSimulatedData() async {
-    final token = await _getToken();
-    if (token == null) return;
-    try {
-      final response = await http.post(
-        Uri.parse('${_getBaseUrl()}/api/dev/simulate-health-data'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-      if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Simulated data generated')),
-        );
-        _fetchHealthData(specificUserId: _currentViewingUserId);
-      } else {
-        throw Exception('Failed to generate data');
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
-    }
-  }
+  // Future<void> _generateSimulatedData() async {
+  //   final token = await _getToken();
+  //   if (token == null) return;
+  //   try {
+  //     final response = await http.post(
+  //       Uri.parse('${_getBaseUrl()}/api/dev/simulate-health-data'),
+  //       headers: {'Authorization': 'Bearer $token'},
+  //     );
+  //     if (response.statusCode == 200) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(content: Text('Simulated data generated')),
+  //       );
+  //       _fetchHealthData(specificUserId: _currentViewingUserId);
+  //     } else {
+  //       throw Exception('Failed to generate data');
+  //     }
+  //   } catch (e) {
+  //     ScaffoldMessenger.of(
+  //       context,
+  //     ).showSnackBar(SnackBar(content: Text('Error: $e')));
+  //   }
+  // }
 
   Future<void> _selectDateRange() async {
     final now = DateTime.now();
@@ -1286,26 +1297,46 @@ class _ReportPageState extends State<ReportPage> {
     }
   }
 
-  Widget _buildModeSelector() {
-    return SegmentedButton<ViewMode>(
-      segments: const [
-        ButtonSegment<ViewMode>(value: ViewMode.day, label: Text('Day')),
-        ButtonSegment<ViewMode>(value: ViewMode.week, label: Text('Week')),
-        ButtonSegment<ViewMode>(value: ViewMode.month, label: Text('Month')),
-      ],
-      selected: {_currentMode},
-      onSelectionChanged: (Set<ViewMode> newSelection) {
-        final newMode = newSelection.first;
-        if (newMode != _currentMode) {
-          setState(() {
-            _currentMode = newMode;
-            _updateDateRangeForMode(newMode);
-          });
-          _fetchHealthData(specificUserId: _currentViewingUserId);
-        }
-      },
-    );
+  PreferredSizeWidget _buildReportAppBar() {
+    if (_fromDoctorDashboard) {
+      return AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          _doctorPatientName.isNotEmpty
+              ? '$_doctorPatientName Report'
+              : 'Patient Report',
+        ),
+        backgroundColor: Colors.green[500],
+      );
+    }
+
+    return DefaultAppBar();
   }
+
+  // to choose the three option button
+  // Widget _buildModeSelector() {
+  //   return SegmentedButton<ViewMode>(
+  //     segments: const [
+  //       ButtonSegment<ViewMode>(value: ViewMode.day, label: Text('Day')),
+  //       ButtonSegment<ViewMode>(value: ViewMode.week, label: Text('Week')),
+  //       ButtonSegment<ViewMode>(value: ViewMode.month, label: Text('Month')),
+  //     ],
+  //     selected: {_currentMode},
+  //     onSelectionChanged: (Set<ViewMode> newSelection) {
+  //       final newMode = newSelection.first;
+  //       if (newMode != _currentMode) {
+  //         setState(() {
+  //           _currentMode = newMode;
+  //           _updateDateRangeForMode(newMode);
+  //         });
+  //         _fetchHealthData(specificUserId: _currentViewingUserId);
+  //       }
+  //     },
+  //   );
+  // }
 
   Widget _buildEmptyState() {
     String message = _isAdmin && _searchName.isNotEmpty
@@ -1359,6 +1390,24 @@ class _ReportPageState extends State<ReportPage> {
     );
   }
 
+  Widget _buildGoalWidget({
+    required String goalType,
+    required int goalValue,
+  }) {
+    if (_fromDoctorDashboard) {
+      return const SizedBox.shrink();
+    }
+
+    if (_canEditGoal) {
+      return GestureDetector(
+        onTap: () => _showEditGoalDialog(goalType, goalValue),
+        child: _buildGoalColumn(goalValue),
+      );
+    }
+
+    return _buildGoalColumn(goalValue);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isLight = Theme.of(context).brightness == Brightness.light;
@@ -1371,23 +1420,23 @@ class _ReportPageState extends State<ReportPage> {
 
     if (_isLoading) {
       return Scaffold(
-        appBar: DefaultAppBar(),
-        drawer: DefaultDrawer(),
+        appBar: _buildReportAppBar(),
+        drawer: _fromDoctorDashboard ? null : DefaultDrawer(),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_error != null) {
       return Scaffold(
-        appBar: DefaultAppBar(),
-        drawer: DefaultDrawer(),
+        appBar: _buildReportAppBar(),
+        drawer: _fromDoctorDashboard ? null : DefaultDrawer(),
         body: Center(child: Text('Error: $_error')),
       );
     }
 
     return Scaffold(
-      appBar: DefaultAppBar(),
-      drawer: DefaultDrawer(),
+      appBar: _buildReportAppBar(),
+      drawer: _fromDoctorDashboard ? null : DefaultDrawer(),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(15.0),
@@ -1566,10 +1615,11 @@ class _ReportPageState extends State<ReportPage> {
                         title: "Generated On",
                         subtitle: _generatedDate,
                       ),
-                      InfoCards(
-                        title: "Goals Achieved",
-                        subtitle: "$_goalsAchievedDays/7 Days",
-                      ),
+                      if (!_fromDoctorDashboard)
+                        InfoCards(
+                          title: "Goals Achieved",
+                          subtitle: "$_goalsAchievedDays/7 Days",
+                        ),
                     ],
                   ),
                 ),
@@ -1666,13 +1716,10 @@ class _ReportPageState extends State<ReportPage> {
                               Text("Last Week", style: TextStyle(fontSize: 10)),
                             ],
                           ),
-                          if (_canEditGoal)
-                            GestureDetector(
-                              onTap: () => _showEditGoalDialog('steps', _stepsGoal),
-                              child: _buildGoalColumn(_stepsGoal),
-                            )
-                          else
-                            _buildGoalColumn(_stepsGoal),
+                          _buildGoalWidget(
+                            goalType: 'steps',
+                            goalValue: _stepsGoal,
+                          ),
                         ],
                       ),
                     ],
@@ -1871,16 +1918,10 @@ class _ReportPageState extends State<ReportPage> {
                               Text("Last Week", style: TextStyle(fontSize: 10)),
                             ],
                           ),
-                          if (_canEditGoal)
-                            GestureDetector(
-                              onTap: () => _showEditGoalDialog(
-                                'calories_burned',
-                                _caloriesGoal,
-                              ),
-                              child: _buildGoalColumn(_caloriesGoal),
-                            )
-                          else
-                            _buildGoalColumn(_caloriesGoal),
+                          _buildGoalWidget(
+                            goalType: 'calories_burned',
+                            goalValue: _caloriesGoal,
+                          ),
                         ],
                       ),
                     ],
@@ -1972,13 +2013,10 @@ class _ReportPageState extends State<ReportPage> {
                               Text("Last Week", style: TextStyle(fontSize: 10)),
                             ],
                           ),
-                          if (_canEditGoal)
-                            GestureDetector(
-                              onTap: () => _showEditGoalDialog('sleep_duration', _sleepGoal),
-                              child: _buildGoalColumn(_sleepGoal),
-                            )
-                          else
-                            _buildGoalColumn(_sleepGoal),
+                          _buildGoalWidget(
+                            goalType: 'sleep_duration',
+                            goalValue: _sleepGoal,
+                          ),
                         ],
                       ),
                     ],
@@ -2307,13 +2345,10 @@ class _ReportPageState extends State<ReportPage> {
                               Text("Last Week", style: TextStyle(fontSize: 10)),
                             ],
                           ),
-                          if (_canEditGoal)
-                            GestureDetector(
-                              onTap: () => _showEditGoalDialog('water_intake', _waterGoal),
-                              child: _buildGoalColumn(_waterGoal),
-                            )
-                          else
-                            _buildGoalColumn(_waterGoal),
+                          _buildGoalWidget(
+                            goalType: 'water_intake',
+                            goalValue: _waterGoal,
+                          ),
                         ],
                       ),
                     ],

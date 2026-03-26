@@ -415,7 +415,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       icon: Icons.question_mark,
                       title: 'Help',
                       isLinkTile: true,
-                      routeName: '/homepage',
+                      routeName: '/help',
                     ),
 
                     Container(

@@ -104,6 +104,12 @@ router.get('/patients', authenticateToken, async (req, res) => {
       patientCode: p.patientCode,
     }));
 
+    console.log('doctorUser:', doctorUser);
+    console.log('doctorProfileId:', doctorId);
+    console.log('relations:', relations);
+    console.log('patientIds:', patientIds);
+    console.log('patients found:', patients);
+
     res.json({ success: true, data: result });
   } catch (err) {
     console.error('Error fetching doctor patients:', err);
@@ -282,6 +288,10 @@ router.post('/add-patient', authenticateToken, requireRole('doctor'), async (req
     if (existingRelation) {
       return res.status(400).json({ success: false, error: 'Patient already in your list' });
     }
+
+    console.log('Doctor ID from token:', doctorUser.doctorProfileId);
+    console.log('Patient ID:', patient._id);
+    console.log('Existing relation:', existingRelation);
 
     const relation = new DoctorPatientRelation({
       doctorId,

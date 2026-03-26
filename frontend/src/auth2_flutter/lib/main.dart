@@ -2,6 +2,7 @@ import 'package:auth2_flutter/features/chat/presentation/pages/chat_page.dart';
 import 'package:auth2_flutter/features/devices/devices.dart';
 import 'package:auth2_flutter/features/patient/patient_search.dart';
 import 'package:auth2_flutter/features/report/presentation/pages/report_page.dart';
+import 'package:auth2_flutter/features/settings/pages/help_page.dart';
 import 'package:auth2_flutter/features/settings/pages/presentation/components/tile_pages/personal_info.dart';
 import 'package:auth2_flutter/features/settings/pages/settings_page.dart';
 import 'features/data/domain/presentation/components/loading.dart';
@@ -25,7 +26,6 @@ import 'package:auth2_flutter/features/doctor/pages/doctor_dashboard.dart';
 import 'package:auth2_flutter/features/auth/pages/apply_doctor_page.dart';
 import 'package:auth2_flutter/features/admin/admin_page.dart';
 import 'package:auth2_flutter/features/admin/admin_review_application.dart';
-import 'package:auth2_flutter/features/doctor/pages/doctor_report_page.dart';
 import 'package:auth2_flutter/features/appointments/pages/appointments_page.dart';
 import 'package:auth2_flutter/features/appointments/pages/doctor_appointments_page.dart';
 import 'package:auth2_flutter/features/appointments/pages/request_appointment_page.dart';
@@ -81,13 +81,13 @@ class MyApp extends StatelessWidget {
                 '/apply-doctor': (context) => const ApplyDoctorPage(),
                 '/admin': (context) => const AdminDashboard(),
                 '/admin/review': (context) => const AdminReviewApplications(),
-                '/doctor-report': (context) => const DoctorReportPage(),
                 '/appointments': (context) => const AppointmentsPage(),
                 '/doctor-appointments': (context) => const DoctorAppointmentsPage(),
                 '/request-appointment': (context) => const RequestAppointmentPage(),
                 '/reset-password': (context) => ResetPasswordPage(
                   token: ModalRoute.of(context)?.settings.arguments as String?,
                 ),
+                '/help': (context) => const HelpPage(),
               },
               theme: mainTheme,
               darkTheme: darkTheme,

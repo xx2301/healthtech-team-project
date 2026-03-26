@@ -276,7 +276,7 @@ class _HomePageState extends State<HomePage> {
       queryParameters: {
         'startDate': startDate.toIso8601String(),
         'endDate': endDate.toIso8601String(),
-        'limit': '500',
+        'limit': '10000',
         if (currentUserId != null) 'userId': currentUserId,
       },
     );
@@ -556,6 +556,37 @@ class _HomePageState extends State<HomePage> {
       print('Error fetching device status: $e');
     }
     return {};
+  }
+
+  String _getDynamicMotivationMessage(Map<String, dynamic> data) {
+    final steps = data['todaySteps'] as int;
+    final goal = data['stepsGoal'] as int;
+    final heart = data['avgHeartRate'] as double;
+    final sleep = data['todaySleep'] as double;
+
+    if (steps >= goal) {
+      if (heart > 0 && (heart < 60 || heart > 100)) {
+        return "You reached your step goal! 🎉 Your heart rate is ${heart.toInt()} bpm – consider a light walk to relax. ❤️";
+      }
+      if (sleep > 0 && sleep < 6) {
+        return "Great job hitting your steps! 🌟 Try to get more rest tonight – you had only ${sleep.toStringAsFixed(1)} hours of sleep. 😴";
+      }
+      return "You've crushed your step goal! Amazing! 🎉 Keep up the great work! 💪";
+    } else if (steps >= goal * 0.8) {
+      final remaining = goal - steps;
+      return "So close! Only $remaining steps left to reach your goal. You can do it! 🚶‍♂️";
+    } else if (steps > 0) {
+      final remaining = goal - steps;
+      return "You've taken $steps steps today. $remaining more to go! Let's stay active! 🏃‍♀️";
+    } else {
+      if (heart > 0 && (heart < 60 || heart > 100)) {
+        return "Your heart rate is ${heart.toInt()} bpm – a short walk can help! 🚶‍♂️ Aim for $goal steps today.";
+      }
+      if (sleep > 0 && sleep < 6) {
+        return "You had ${sleep.toStringAsFixed(1)} hours of sleep. Some light activity might boost your energy! 🌞";
+      }
+      return "Start your day with some steps! Your goal is $goal steps. Let's get moving! 🏃";
+    }
   }
 
   String _getTimeOfDay() {
@@ -885,7 +916,7 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 4),
             Text(
-              "Let's stay healthy today!",
+              _getDynamicMotivationMessage(data),
               style: TextStyle(
                 fontSize: 14,
                 color: Theme.of(context).brightness == Brightness.dark

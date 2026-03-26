@@ -43,7 +43,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
       if (token == null) return;
 
       final response = await http.get(
-        Uri.parse('${_getBaseUrl()}/api/doctors/patients'),
+        Uri.parse('${_getBaseUrl()}/api/doctor/patients-with-summary'),
         headers: {'Authorization': 'Bearer $token'},
       );
 
@@ -58,9 +58,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to load patients: ${response.statusCode}')),
         );
-      }
-      print('Patients from backend: ${jsonEncode(_patients)}');
-      
+      }      
     } catch (e) {
       setState(() => _loading = false);
       print('Error fetching patients: $e');
@@ -140,17 +138,6 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
       );
       setState(() => _loading = false);
     }
-  }
-
-  void _viewPatientDetails(String patientUserId, String patientName) {
-    Navigator.pushNamed(
-      context,
-      '/reportpage',
-      arguments: {
-        'userId': patientUserId,
-        'userName': patientName,
-      },
-    );
   }
 
   @override
@@ -246,8 +233,12 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                                   if (userId != null) {
                                     Navigator.pushNamed(
                                       context,
-                                      '/doctor-report',
-                                      arguments: {'userId': userId, 'userName': name},
+                                      '/reportpage',
+                                      arguments: {
+                                        'userId': userId,
+                                        'userName': name,
+                                        'fromDoctorDashboard': true,
+                                      },
                                     );
                                   }
                                 },
