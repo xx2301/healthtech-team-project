@@ -93,10 +93,10 @@ class AuthCubit extends Cubit<AuthState> {
   }
 
   String _getBaseUrl() {
-    if (kIsWeb) return 'http://localhost:3001';
+    if (kIsWeb) return 'http://10.101.61.123:3001';
     if (Platform.isAndroid) return 'http://10.0.2.2:3001';
-    if (Platform.isIOS) return 'http://localhost:3001';
-    return 'http://localhost:3001';
+    if (Platform.isIOS) return 'http://10.101.61.123:3001';
+    return 'http://10.101.61.123:3001';
     // return 'http://192.168.0.3:3001'; // Connect wifi ip
     // return 'http://172.20.10.2:3001'; // Connect hotspot ip
   }

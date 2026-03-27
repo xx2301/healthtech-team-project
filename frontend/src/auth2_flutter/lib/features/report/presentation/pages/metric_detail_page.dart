@@ -3,9 +3,11 @@ import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:auth2_flutter/features/data/domain/entities/health_metric.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubit.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -38,6 +40,9 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
 
   int _recordCount = 0;
   DateTime? _latestRecordTime;
+  DateTime? _lastRefreshedAt;
+
+  _ViewMode _viewMode = _ViewMode.day;
 
   String get _backendMetricType {
     switch (widget.metricType) {
@@ -65,14 +70,14 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
   @override
   void initState() {
     super.initState();
-    _loadTodayData();
+    _loadMetricData();
   }
 
   String _getBaseUrl() {
-    if (kIsWeb) return 'http://localhost:3001';
+    if (kIsWeb) return 'http://10.101.61.123:3001';
     if (Platform.isAndroid) return 'http://10.0.2.2:3001';
-    if (Platform.isIOS) return 'http://localhost:3001';
-    return 'http://localhost:3001';
+    if (Platform.isIOS) return 'http://10.101.61.123:3001';
+    return 'http://10.101.61.123:3001';
   }
 
   Future<String?> _getToken() async {
@@ -80,7 +85,7 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
     return prefs.getString('auth_token');
   }
 
-  Future<void> _loadTodayData() async {
+  Future<void> _loadMetricData() async {
     setState(() {
       _loading = true;
       _errorMessage = null;
@@ -90,16 +95,28 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
       final token = await _getToken();
       if (token == null) throw Exception('Not authenticated');
 
+      final currentUserId = context.read<AuthCubit>().currentUser?.uid;
+
       final now = DateTime.now();
-      final startDate = DateTime(now.year, now.month, now.day);
-      final endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      late DateTime start;
+      late DateTime end;
+
+      if (_viewMode == _ViewMode.day) {
+        start = DateTime(now.year, now.month, now.day);
+        end = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      } else {
+        final today = DateTime(now.year, now.month, now.day);
+        start = today.subtract(const Duration(days: 6));
+        end = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      }
 
       final url = Uri.parse('${_getBaseUrl()}/api/health-metrics').replace(
         queryParameters: {
-          'startDate': startDate.toIso8601String(),
-          'endDate': endDate.toIso8601String(),
+          'startDate': start.toIso8601String(),
+          'endDate': end.toIso8601String(),
           'metricType': _backendMetricType,
-          'limit': '1000',
+          'limit': '2000',
+          if (currentUserId != null) 'userId': currentUserId,
         },
       );
 
@@ -114,24 +131,36 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
 
       final decoded = jsonDecode(response.body);
       final data = (decoded['data'] as List?) ?? [];
-      final metrics = data.map((e) => HealthMetric.fromJson(e)).toList()
+
+      final metrics = data
+          .map((e) => HealthMetric.fromJson(e))
+          .where((m) => m.metricType == _backendMetricType)
+          .toList()
         ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
       if (metrics.isEmpty) {
         setState(() {
           _loading = false;
-          _errorMessage = 'No data for today';
+          _errorMessage = _viewMode == _ViewMode.day
+              ? 'No data for today'
+              : 'No data for this week';
           _spots = [];
           _systolicSpots = [];
           _diastolicSpots = [];
           _recordCount = 0;
           _latestRecordTime = null;
+          _lastRefreshedAt = DateTime.now();
+          _todayTotal = 0;
+          _todayAvg = 0;
+          _todaySystolic = 0;
+          _todayDiastolic = 0;
         });
         return;
       }
 
       _recordCount = metrics.length;
       _latestRecordTime = metrics.last.timestamp;
+      _lastRefreshedAt = DateTime.now();
 
       if (_isBloodPressure) {
         _processBloodPressure(metrics);
@@ -155,7 +184,13 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
     int totalPoints = 0;
 
     for (final m in metrics) {
-      final hour = m.timestamp.hour;
+      final localTime = m.timestamp.toLocal();
+      final bucket = _viewMode == _ViewMode.day
+          ? localTime.hour
+          : DateTime(localTime.year, localTime.month, localTime.day)
+              .difference(_weekStart())
+              .inDays;
+
       final value = m.value;
 
       if (value is Map &&
@@ -164,8 +199,8 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
         final systolic = (value['systolic'] as num).toDouble();
         final diastolic = (value['diastolic'] as num).toDouble();
 
-        systolicMap.putIfAbsent(hour, () => []).add(systolic);
-        diastolicMap.putIfAbsent(hour, () => []).add(diastolic);
+        systolicMap.putIfAbsent(bucket, () => []).add(systolic);
+        diastolicMap.putIfAbsent(bucket, () => []).add(diastolic);
 
         sumSystolic += systolic;
         sumDiastolic += diastolic;
@@ -176,15 +211,17 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
     final List<FlSpot> systolicSpots = [];
     final List<FlSpot> diastolicSpots = [];
 
-    for (int h = 0; h < 24; h++) {
-      if (systolicMap.containsKey(h) && diastolicMap.containsKey(h)) {
-        final double avgSystolic =
-            systolicMap[h]!.reduce((a, b) => a + b) / systolicMap[h]!.length.toDouble();
-        final double avgDiastolic =
-            diastolicMap[h]!.reduce((a, b) => a + b) / diastolicMap[h]!.length.toDouble();
+    final maxBucket = _viewMode == _ViewMode.day ? 24 : 7;
 
-        systolicSpots.add(FlSpot(h.toDouble(), avgSystolic));
-        diastolicSpots.add(FlSpot(h.toDouble(), avgDiastolic));
+    for (int i = 0; i < maxBucket; i++) {
+      if (systolicMap.containsKey(i) && diastolicMap.containsKey(i)) {
+        final avgSystolic =
+            systolicMap[i]!.reduce((a, b) => a + b) / systolicMap[i]!.length;
+        final avgDiastolic =
+            diastolicMap[i]!.reduce((a, b) => a + b) / diastolicMap[i]!.length;
+
+        systolicSpots.add(FlSpot(i.toDouble(), avgSystolic));
+        diastolicSpots.add(FlSpot(i.toDouble(), avgDiastolic));
       }
     }
 
@@ -199,49 +236,64 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
   }
 
   void _processNormalMetric(List<HealthMetric> metrics) {
-    final Map<int, List<double>> hourlyMap = {};
+    final Map<int, List<double>> groupedMap = {};
     double sum = 0;
     int totalPoints = 0;
 
     for (final m in metrics) {
-      final hour = m.timestamp.hour;
+      final localTime = m.timestamp.toLocal();
       final value = m.value;
 
       if (value is num) {
         final val = value.toDouble();
-        hourlyMap.putIfAbsent(hour, () => []).add(val);
+
+        final bucket = _viewMode == _ViewMode.day
+            ? localTime.hour
+            : DateTime(localTime.year, localTime.month, localTime.day)
+                .difference(_weekStart())
+                .inDays;
+
+        groupedMap.putIfAbsent(bucket, () => []).add(val);
         sum += val;
         totalPoints++;
       }
     }
 
     final List<FlSpot> spots = [];
+    final maxBucket = _viewMode == _ViewMode.day ? 24 : 7;
 
-    for (int h = 0; h < 24; h++) {
-      if (hourlyMap.containsKey(h)) {
-        final values = hourlyMap[h]!;
-        final double aggregated = _useBarChart
-            ? values.reduce((a, b) => a + b).toDouble() // <-- added .toDouble()
-            : values.reduce((a, b) => a + b) / values.length.toDouble();
-        spots.add(FlSpot(h.toDouble(), aggregated));
+    for (int i = 0; i < maxBucket; i++) {
+      if (groupedMap.containsKey(i)) {
+        final values = groupedMap[i]!;
+        final aggregated = _useBarChart
+            ? values.reduce((a, b) => a + b).toDouble()
+            : values.reduce((a, b) => a + b) / values.length;
+        spots.add(FlSpot(i.toDouble(), aggregated));
       }
     }
 
-    final double todayDisplay = _useBarChart
+    final displayValue = _useBarChart
         ? sum.toDouble()
         : totalPoints > 0
             ? (sum / totalPoints).toDouble()
-            : 0.0; // <-- explicitly double
+            : 0.0;
 
     setState(() {
       _spots = spots;
       _systolicSpots = [];
       _diastolicSpots = [];
       _todayTotal = sum;
-      _todayAvg = todayDisplay;
+      _todayAvg = displayValue;
       _loading = false;
     });
   }
+
+  DateTime _weekStart() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return today.subtract(const Duration(days: 6));
+  }
+
   String _getUnit() {
     switch (widget.metricType) {
       case 'steps':
@@ -329,29 +381,72 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
   }
 
   String _formatSubtitle() {
-    if (_isBloodPressure) return 'Daily average';
-    if (_useBarChart) return 'Today total';
-    return 'Today average';
+    if (_isBloodPressure) {
+      return _viewMode == _ViewMode.day ? 'Daily average' : 'Weekly average';
+    }
+    if (_useBarChart) {
+      return _viewMode == _ViewMode.day ? 'Today total' : 'Last 7 days total';
+    }
+    return _viewMode == _ViewMode.day ? 'Today average' : 'Last 7 days average';
   }
 
   String _formatLatestRecordTime() {
     if (_latestRecordTime == null) return '--';
-    final h = _latestRecordTime!.hour.toString().padLeft(2, '0');
-    final m = _latestRecordTime!.minute.toString().padLeft(2, '0');
+    final localTime = _latestRecordTime!.toLocal();
+    final h = localTime.hour.toString().padLeft(2, '0');
+    final m = localTime.minute.toString().padLeft(2, '0');
     return '$h:$m';
+  }
+
+  String _formatRefreshTime() {
+    if (_lastRefreshedAt == null) return '--';
+
+    final diff = DateTime.now().difference(_lastRefreshedAt!);
+
+    if (diff.inSeconds < 60) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+
+    final h = _lastRefreshedAt!.hour.toString().padLeft(2, '0');
+    final m = _lastRefreshedAt!.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  String _buildInsightText() {
+    if (_isBloodPressure) {
+      final source = _systolicSpots.isNotEmpty ? _systolicSpots : _diastolicSpots;
+      if (source.isEmpty) return 'No trend insight available yet.';
+      final peak = source.reduce((a, b) => a.y > b.y ? a : b);
+      return _viewMode == _ViewMode.day
+          ? 'Highest average reading was around ${peak.x.toInt().toString().padLeft(2, '0')}:00.'
+          : 'Highest average reading was on ${_weekLabel(peak.x.toInt())}.';
+    }
+
+    if (_spots.isEmpty) return 'No trend insight available yet.';
+
+    final peak = _spots.reduce((a, b) => a.y > b.y ? a : b);
+
+    if (_viewMode == _ViewMode.day) {
+      return _useBarChart
+          ? 'Peak activity was around ${peak.x.toInt().toString().padLeft(2, '0')}:00.'
+          : 'Highest average reading was around ${peak.x.toInt().toString().padLeft(2, '0')}:00.';
+    }
+
+    return _useBarChart
+        ? 'Highest total was on ${_weekLabel(peak.x.toInt())}.'
+        : 'Highest average reading was on ${_weekLabel(peak.x.toInt())}.';
   }
 
   double _getChartMaxY() {
     if (_isBloodPressure) {
       final all = [..._systolicSpots, ..._diastolicSpots];
       if (all.isEmpty) return 100;
-      final double maxValue =
+      final maxValue =
           all.map((e) => e.y).reduce((a, b) => math.max(a, b).toDouble());
       return (maxValue * 1.2).ceilToDouble();
     }
 
     if (_spots.isEmpty) return 10;
-    final double maxValue =
+    final maxValue =
         _spots.map((e) => e.y).reduce((a, b) => math.max(a, b).toDouble());
 
     if (maxValue <= 5) return 6;
@@ -363,7 +458,7 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
     if (_isBloodPressure) {
       final all = [..._systolicSpots, ..._diastolicSpots];
       if (all.isEmpty) return 0;
-      final double minValue =
+      final minValue =
           all.map((e) => e.y).reduce((a, b) => math.min(a, b).toDouble());
       return math.max(0, (minValue - 15).floorToDouble()).toDouble();
     }
@@ -379,6 +474,28 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
     if (maxY <= 300) return 50;
     if (maxY <= 1000) return 200;
     return maxY / 4;
+  }
+
+  String _formatAxisValue(double value) {
+    if (value >= 1000) {
+      return '${(value / 1000).toStringAsFixed(value % 1000 == 0 ? 0 : 1)}k';
+    }
+    if (value % 1 == 0) return value.toInt().toString();
+    return value.toStringAsFixed(1);
+  }
+
+  String _formatTooltipValue(double value) {
+    if (widget.metricType == 'sleep' || widget.metricType == 'glucose') {
+      return '${value.toStringAsFixed(1)} ${_getUnit()}';
+    }
+    return '${value.toStringAsFixed(0)} ${_getUnit()}';
+  }
+
+  String _weekLabel(int index) {
+    final day = _weekStart().add(Duration(days: index));
+    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final weekdayIndex = day.weekday - 1;
+    return labels[weekdayIndex];
   }
 
   @override
@@ -401,11 +518,15 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
           : _errorMessage != null
               ? _buildErrorState(context)
               : RefreshIndicator(
-                  onRefresh: _loadTodayData,
+                  onRefresh: _loadMetricData,
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                     children: [
+                      _buildModeToggle(context),
+                      const SizedBox(height: 16),
                       _buildHeroCard(context, metricColor),
+                      const SizedBox(height: 12),
+                      _buildInsightCard(context),
                       const SizedBox(height: 16),
                       _buildInfoRow(context),
                       const SizedBox(height: 20),
@@ -413,6 +534,75 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
                     ],
                   ),
                 ),
+    );
+  }
+
+  Widget _buildModeToggle(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final metricColor = _getMetricColor(context);
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF171A20) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          _buildToggleButton(
+            label: 'Day',
+            selected: _viewMode == _ViewMode.day,
+            onTap: () {
+              if (_viewMode != _ViewMode.day) {
+                setState(() => _viewMode = _ViewMode.day);
+                _loadMetricData();
+              }
+            },
+            metricColor: metricColor,
+          ),
+          _buildToggleButton(
+            label: 'Week',
+            selected: _viewMode == _ViewMode.week,
+            onTap: () {
+              if (_viewMode != _ViewMode.week) {
+                setState(() => _viewMode = _ViewMode.week);
+                _loadMetricData();
+              }
+            },
+            metricColor: metricColor,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToggleButton({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+    required Color metricColor,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: selected ? metricColor.withOpacity(0.15) : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: selected ? metricColor : Colors.grey,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -494,6 +684,41 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
     );
   }
 
+  Widget _buildInsightCard(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final metricColor = _getMetricColor(context);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF171A20) : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withOpacity(0.05)
+              : Colors.black.withOpacity(0.04),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.auto_awesome_rounded, color: metricColor, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _buildInsightText(),
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.35,
+                color: isDark ? Colors.white70 : Colors.black87,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildInfoRow(BuildContext context) {
     return Row(
       children: [
@@ -509,7 +734,16 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
         Expanded(
           child: _buildMiniInfoCard(
             context,
-            title: 'Last update',
+            title: 'Refreshed',
+            value: _formatRefreshTime(),
+            icon: Icons.refresh_rounded,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildMiniInfoCard(
+            context,
+            title: 'Latest data',
             value: _formatLatestRecordTime(),
             icon: Icons.schedule_rounded,
           ),
@@ -557,23 +791,25 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
             ),
             child: Icon(icon, size: 20, color: metricColor),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 11,
                     color: isDark ? Colors.white60 : Colors.black54,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   value,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.w700,
                     color: isDark ? Colors.white : Colors.black87,
                   ),
@@ -591,10 +827,14 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
     final isDark = theme.brightness == Brightness.dark;
 
     final chartTitle = _isBloodPressure
-        ? 'Hourly Trend'
+        ? (_viewMode == _ViewMode.day ? 'Hourly Trend' : 'Daily Trend')
         : _useBarChart
-            ? 'Hourly Total'
-            : 'Hourly Average';
+            ? (_viewMode == _ViewMode.day ? 'Today by Hour' : 'Daily Total')
+            : (_viewMode == _ViewMode.day ? 'Hourly Average' : 'Daily Average');
+
+    final subtitle = _viewMode == _ViewMode.day
+        ? '00:00 - 23:59 overview'
+        : 'Last 7 days overview';
 
     final hasData = _isBloodPressure
         ? (_systolicSpots.isNotEmpty || _diastolicSpots.isNotEmpty)
@@ -631,7 +871,7 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
           ),
           const SizedBox(height: 6),
           Text(
-            '00:00 - 23:00 overview',
+            subtitle,
             style: TextStyle(
               fontSize: 13,
               color: isDark ? Colors.white60 : Colors.black54,
@@ -654,7 +894,9 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
                 ? _buildChart(context)
                 : Center(
                     child: Text(
-                      'No hourly data available',
+                      _viewMode == _ViewMode.day
+                          ? 'No hourly data available'
+                          : 'No daily data available',
                       style: TextStyle(
                         color: isDark ? Colors.white60 : Colors.black54,
                         fontSize: 14,
@@ -734,9 +976,12 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
           touchTooltipData: BarTouchTooltipData(
             tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              final hour = group.x;
+              final label = _viewMode == _ViewMode.day
+                  ? '${group.x.toInt().toString().padLeft(2, '0')}:00'
+                  : _weekLabel(group.x.toInt());
+
               return BarTooltipItem(
-                '${hour.toString().padLeft(2, '0')}:00\n${_formatTooltipValue(rod.toY)}',
+                '$label\n${_formatTooltipValue(rod.toY)}',
                 const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
@@ -747,15 +992,16 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
           ),
         ),
         barGroups: _spots.map((spot) {
-          final hour = spot.x.toInt();
-          final isCurrentHour = hour == DateTime.now().hour;
+          final index = spot.x.toInt();
+          final isCurrentHour =
+              _viewMode == _ViewMode.day && index == DateTime.now().hour;
 
           return BarChartGroupData(
-            x: hour,
+            x: index,
             barRods: [
               BarChartRodData(
                 toY: spot.y,
-                width: 16,
+                width: _viewMode == _ViewMode.day ? 16 : 22,
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(8),
                   topRight: Radius.circular(8),
@@ -815,8 +1061,12 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
           touchTooltipData: LineTouchTooltipData(
             getTooltipItems: (spots) {
               return spots.map((spot) {
+                final label = _viewMode == _ViewMode.day
+                    ? '${spot.x.toInt().toString().padLeft(2, '0')}:00'
+                    : _weekLabel(spot.x.toInt());
+
                 return LineTooltipItem(
-                  '${spot.x.toInt().toString().padLeft(2, '0')}:00\n${_formatTooltipValue(spot.y)}',
+                  '$label\n${_formatTooltipValue(spot.y)}',
                   const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
@@ -892,9 +1142,13 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
           touchTooltipData: LineTouchTooltipData(
             getTooltipItems: (spots) {
               return spots.map((spot) {
-                final label = spot.barIndex == 0 ? 'SYS' : 'DIA';
+                final label = _viewMode == _ViewMode.day
+                    ? '${spot.x.toInt().toString().padLeft(2, '0')}:00'
+                    : _weekLabel(spot.x.toInt());
+                final type = spot.barIndex == 0 ? 'SYS' : 'DIA';
+
                 return LineTooltipItem(
-                  '$label ${spot.x.toInt().toString().padLeft(2, '0')}:00\n${spot.y.toStringAsFixed(0)} mmHg',
+                  '$type $label\n${spot.y.toStringAsFixed(0)} mmHg',
                   const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
@@ -1009,15 +1263,36 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
         sideTitles: SideTitles(
           showTitles: true,
           reservedSize: 34,
-          interval: 4,
+          interval: 1,
           getTitlesWidget: (value, meta) {
-            final hour = value.toInt();
-            if (hour < 0 || hour > 23) return const SizedBox.shrink();
+            final index = value.toInt();
+
+            if (_viewMode == _ViewMode.day) {
+              if (index < 0 || index > 23 || index % 4 != 0) {
+                return const SizedBox.shrink();
+              }
+
+              return Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '${index.toString().padLeft(2, '0')}:00',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: labelColor,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              );
+            }
+
+            if (index < 0 || index > 6) {
+              return const SizedBox.shrink();
+            }
 
             return Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                '${hour.toString().padLeft(2, '0')}:00',
+                _weekLabel(index),
                 style: TextStyle(
                   fontSize: 10,
                   color: labelColor,
@@ -1031,24 +1306,13 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
     );
   }
 
-  String _formatAxisValue(double value) {
-    if (value >= 1000) {
-      return '${(value / 1000).toStringAsFixed(value % 1000 == 0 ? 0 : 1)}k';
-    }
-    if (value % 1 == 0) return value.toInt().toString();
-    return value.toStringAsFixed(1);
-  }
-
-  String _formatTooltipValue(double value) {
-    if (widget.metricType == 'sleep' || widget.metricType == 'glucose') {
-      return '${value.toStringAsFixed(1)} ${_getUnit()}';
-    }
-    return '${value.toStringAsFixed(0)} ${_getUnit()}';
-  }
-
   Widget _buildErrorState(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final metricColor = _getMetricColor(context);
+
+    final noDataText = _viewMode == _ViewMode.day
+        ? 'There is no recorded ${widget.title.toLowerCase()} data yet for today.'
+        : 'There is no recorded ${widget.title.toLowerCase()} data yet for the last 7 days.';
 
     return Center(
       child: Padding(
@@ -1077,8 +1341,8 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
               ),
               const SizedBox(height: 14),
               Text(
-                _errorMessage == 'No data for today'
-                    ? 'No data for today'
+                _errorMessage == 'No data for today' || _errorMessage == 'No data for this week'
+                    ? 'No data available'
                     : 'Something went wrong',
                 style: TextStyle(
                   fontSize: 20,
@@ -1088,8 +1352,8 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                _errorMessage == 'No data for today'
-                    ? 'There is no recorded ${widget.title.toLowerCase()} data yet for today.'
+                _errorMessage == 'No data for today' || _errorMessage == 'No data for this week'
+                    ? noDataText
                     : (_errorMessage ?? 'Unknown error'),
                 textAlign: TextAlign.center,
                 style: TextStyle(
@@ -1099,7 +1363,7 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
               ),
               const SizedBox(height: 18),
               ElevatedButton.icon(
-                onPressed: _loadTodayData,
+                onPressed: _loadMetricData,
                 icon: const Icon(Icons.refresh_rounded),
                 label: const Text('Try Again'),
                 style: ElevatedButton.styleFrom(
@@ -1118,4 +1382,9 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
       ),
     );
   }
+}
+
+enum _ViewMode {
+  day,
+  week,
 }

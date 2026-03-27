@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class BackendAuthRepository {
-  static const String baseUrl = 'http://localhost:3001';
+  static const String baseUrl = 'http://10.101.61.123:3001';
   
   static const String _tokenKey = 'auth_token';
   static const String _userKey = 'user_data';

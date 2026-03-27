@@ -84,10 +84,10 @@ class _PatientSearchState extends State<PatientSearch> {
   }
 
   String _getBaseUrl() {
-    if (kIsWeb) return 'http://localhost:3001';
+    if (kIsWeb) return 'http://10.101.61.123:3001';
     if (Platform.isAndroid) return 'http://10.0.2.2:3001';
-    if (Platform.isIOS) return 'http://localhost:3001';
-    return 'http://localhost:3001'; // Windows, Linux, macOS
+    if (Platform.isIOS) return 'http://10.101.61.123:3001';
+    return 'http://10.101.61.123:3001'; // Windows, Linux, macOS
   }
 
   Future<void> _fetchPatients() async {
