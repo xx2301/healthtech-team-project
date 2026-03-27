@@ -74,10 +74,10 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
   }
 
   String _getBaseUrl() {
-    if (kIsWeb) return 'http://10.101.61.123:3001';
+    if (kIsWeb) return 'http://localhost:3001';
     if (Platform.isAndroid) return 'http://10.0.2.2:3001';
-    if (Platform.isIOS) return 'http://10.101.61.123:3001';
-    return 'http://10.101.61.123:3001';
+    if (Platform.isIOS) return 'http://localhost:3001';
+    return 'http://localhost:3001';
   }
 
   Future<String?> _getToken() async {
@@ -891,7 +891,14 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
           SizedBox(
             height: 280,
             child: hasData
-                ? _buildChart(context)
+                ? SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: _viewMode == _ViewMode.day ? 900 : MediaQuery.of(context).size.width - 32,
+                      height: 280,
+                      child: _buildChart(context),
+                    ),
+                  )
                 : Center(
                     child: Text(
                       _viewMode == _ViewMode.day
@@ -1268,7 +1275,7 @@ class _MetricDetailPageState extends State<MetricDetailPage> {
             final index = value.toInt();
 
             if (_viewMode == _ViewMode.day) {
-              if (index < 0 || index > 23 || index % 4 != 0) {
+              if (index < 0 || index > 23) {
                 return const SizedBox.shrink();
               }
 

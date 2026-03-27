@@ -9,13 +9,13 @@ import '../../repos/auth_repo.dart';
 class BackendAuthRepoImpl implements AuthRepo {
   String get baseUrl {
     if (kIsWeb) {
-      return 'http://10.101.61.123:3001';
+      return 'http://localhost:3001';
     } else if (Platform.isAndroid) {
       return 'http://10.0.2.2:3001';
     } else if (Platform.isIOS) {
-      return 'http://10.101.61.123:3001';
+      return 'http://localhost:3001';
     } else {
-      return 'http://10.101.61.123:3001';
+      return 'http://localhost:3001';
     }
   }
   
