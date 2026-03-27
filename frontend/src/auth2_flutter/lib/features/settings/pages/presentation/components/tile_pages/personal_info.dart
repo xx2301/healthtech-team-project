@@ -227,6 +227,7 @@ class _PersonalInfoState extends State<PersonalInfo> {
     required String title,
     required VoidCallback onEdit,
     required List<Widget> children,
+    bool showColorPicker = false, 
   }) {
     return Container(
       width: double.infinity,
@@ -267,13 +268,15 @@ class _PersonalInfoState extends State<PersonalInfo> {
                 icon: const Icon(Icons.edit, size: 20),
                 splashRadius: 18,
               ),
-              const SizedBox(width: 4),
-              IconButton(
-                onPressed: _showColorPickerDialog,
-                icon: const Icon(Icons.color_lens, size: 20),
-                splashRadius: 18,
-                tooltip: 'Change avatar color',
-              ),
+              if (showColorPicker) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  onPressed: _showColorPickerDialog,
+                  icon: const Icon(Icons.color_lens, size: 20),
+                  splashRadius: 18,
+                  tooltip: 'Change avatar color',
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 6),
@@ -602,6 +605,7 @@ class _PersonalInfoState extends State<PersonalInfo> {
             sectionCard(
               title: "Profile",
               onEdit: () => _showEditProfileDialog(context, user!),
+              showColorPicker: true,
               children: [
                 infoRow(
                   icon: Icons.person_rounded,
