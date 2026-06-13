@@ -8,21 +8,7 @@ const DoctorPatientRelation = require('../models/DoctorPatientRelation');
 const Notification = require('../models/Notification');
 const authenticateToken = require('../middleware/auth');
 const { requireRole } = require('../middleware/role');
-
-async function createNotification(userId, type, title, message, data = {}) {
-  try {
-    const notification = new Notification({
-      userId,
-      type,
-      title,
-      message,
-      data,
-    });
-    await notification.save();
-  } catch (err) {
-    console.error('Failed to send notification:', err);
-  }
-}
+const { createNotification } = require('../utils/notifications');
 
 router.get('/patient/:patientId/last', authenticateToken, async (req, res) => {
   try {

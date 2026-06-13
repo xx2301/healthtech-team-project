@@ -9,6 +9,20 @@ const authenticateToken = require('../middleware/auth');
 const { requireRole } = require('../middleware/role');
 const { body, validationResult } = require('express-validator');
 
+router.get('/profile', authenticateToken, requireRole('doctor'), async (req, res) => {
+  try {
+    const doctor = await Doctor.findById(req.user._id)
+      .populate('assignedPatients', 'fullName patientCode dateOfBirth');
+    
+    res.status(200).json({
+      success: true,
+      data: doctor
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 router.put('/profile', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.userId);

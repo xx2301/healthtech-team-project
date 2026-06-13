@@ -9,6 +9,51 @@ const authenticateToken = require('../middleware/auth');
 const { requireRole } = require('../middleware/role');
 const mongoose = require('mongoose');
 
+router.put('/profile', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    if (!user.patientProfileId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'No patient profile found for this user' 
+      });
+    }
+    
+    const patient = await Patient.findById(user.patientProfileId);
+    if (!patient) {
+      return res.status(404).json({ success: false, error: 'Patient profile not found' });
+    }
+
+    const updates = req.body;
+    Object.keys(updates).forEach(key => {
+      if (['weight', 'height', 'bloodType', 'allergies', 'chronicConditions', 'emergencyContacts', 
+           'careModeEnabled', 'preferredUnitSystem', 'primaryDoctor', 'smokingStatus', 
+           'alcoholConsumption', 'exerciseFrequency', 'medicalHistorySummary', 
+           'dataSharingConsent', 'shareWithDoctors'].includes(key)) {
+        patient[key] = updates[key];
+      }
+    });
+
+    await patient.save();
+
+    const patientResponse = patient.toObject();
+
+    res.json({
+      success: true,
+      message: 'Patient information updated successfully',
+      patient: patientResponse
+    });
+
+  } catch (error) {
+    console.error('Update patient information error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update patient information' });
+  }
+});
+
 router.get('/my-doctors', authenticateToken, requireRole('patient'), async (req, res) => {
   try {
     const patient = await Patient.findOne({ userId: req.user.userId });

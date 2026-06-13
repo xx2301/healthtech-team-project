@@ -8,7 +8,7 @@ const User = require('../models/User');
 const Session = require('../models/Session');
 const emailService = require('../services/emailService');
 const HealthGoal = require('../models/HealthGoal');
-const { authenticateToken } = require('../middleware/auth');
+const authenticateToken = require('../middleware/auth');
 const { requireRole } = require('../middleware/role');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -167,7 +167,7 @@ router.post('/login', [
   try {
     const { email, password } = req.body;
     console.log('Login attempt - email:', email);
-    console.log('Login attempt - password (raw):', password);
+    //console.log('Login attempt - password (raw):', password);
 
     const user = await User.findOne({ email });
     if (!user) {
@@ -178,7 +178,7 @@ router.post('/login', [
       });
     }
 
-    console.log('Stored hash:', user.password);
+    //console.log('Stored hash:', user.password);
     const isValidPassword = await user.comparePassword(password);
     console.log('Password valid?', isValidPassword);
 
@@ -283,7 +283,7 @@ router.post('/forgot-password', async (req, res) => {
 
 router.post('/reset-password', async (req, res) => {
   const { token, newPassword } = req.body;
-  console.log('Received reset request with token:', token);
+  //console.log('Received reset request with token:', token);
   try {
     const user = await User.findOne({
       resetPasswordToken: token,
@@ -299,7 +299,7 @@ router.post('/reset-password', async (req, res) => {
     await user.save();
     console.log('Password updated for:', user.email);
     const updatedUser = await User.findById(user._id);
-    console.log('After reset, stored hash in DB:', updatedUser.password);
+    //console.log('After reset, stored hash in DB:', updatedUser.password);
     res.status(200).json({ message: 'Password reset successful' });
   } catch (error) {
     console.error('Reset error:', error);
