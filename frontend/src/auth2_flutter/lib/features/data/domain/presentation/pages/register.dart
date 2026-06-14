@@ -121,7 +121,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 //full name textfield
                 MyTextfield(
                   controller: fullNameController,
-                  hintText: "Joseph Wong",
+                  hintText: "E.g Alex",
                   obsecureText: false,
                   textInputAction: TextInputAction.next,
                   onSubmitted: () {
@@ -134,7 +134,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 //email textfield
                 MyTextfield(
                   controller: emailController,
-                  hintText: "josephw@gmail.com",
+                  hintText: "E.g alex@gmail.com",
                   obsecureText: false,
                   focusNode: emailFocusNode,
                   keyboardType: TextInputType.emailAddress,
@@ -189,7 +189,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           const SizedBox(height: 6),
                           MyTextfield(
                             controller: ageController,
-                            hintText: "17yrs",
+                            hintText: "E.g 25",
                             obsecureText: false,
                             focusNode: ageFocusNode,
                             keyboardType: TextInputType.number,
@@ -211,11 +211,11 @@ class _RegisterPageState extends State<RegisterPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          HeaderTitle(text: "Weight (kgs)"),
+                          HeaderTitle(text: "Weight (kg)"),
                           const SizedBox(height: 6),
                           MyTextfield(
                             controller: weightController,
-                            hintText: "62",
+                            hintText: "E.g 62",
                             obsecureText: false,
                             focusNode: weightFocusNode,
                             keyboardType: TextInputType.number,
@@ -241,7 +241,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           const SizedBox(height: 6),
                           MyTextfield(
                             controller: heightController,
-                            hintText: "180",
+                            hintText: "E.g 180",
                             obsecureText: false,
                             focusNode: heightFocusNode,
                             keyboardType: TextInputType.number,

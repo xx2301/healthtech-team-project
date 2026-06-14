@@ -10,7 +10,7 @@ const authenticateToken = require('../middleware/auth');
 const { requireRole } = require('../middleware/role');
 const { createNotification } = require('../utils/notifications');
 
-router.post('/api/doctor-patient-relations', authenticateToken, requireRole('doctor'), [
+router.post('/doctor-patient-relations', authenticateToken, requireRole('doctor'), [
   body('patientId').isMongoId(),
   body('relationType').isIn(['primary', 'specialist', 'consultant', 'temporary']),
   body('permissions').optional().isObject(),
@@ -98,7 +98,7 @@ router.post('/api/doctor-patient-relations', authenticateToken, requireRole('doc
 });
 
 // get all patients (for doctors and admins)
-router.get('/api/patients/all', authenticateToken, async (req, res) => {
+router.get('/patients/all', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.userId);
     if (!user) {
@@ -144,7 +144,7 @@ router.get('/api/patients/all', authenticateToken, async (req, res) => {
   }
 });
 
-router.get('/api/patients/doctors', authenticateToken, requireRole('patient'), async (req, res) => {
+router.get('/patients/doctors', authenticateToken, requireRole('patient'), async (req, res) => {
   try {
     const relations = await DoctorPatientRelation.find({ 
       patientId: req.user.userId,

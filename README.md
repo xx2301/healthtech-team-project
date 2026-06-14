@@ -33,39 +33,22 @@
 [ASCII diagram:]
 
 ┌──────────────────────────────────────────────────┐
-
 │                  Flutter App                      │
-
 │              (Mobile Frontend)                    │
-
 └───────────────────┬──────────────────────────────┘
-
                     │ HTTP/REST
-
 ┌───────────────────┴──────────────────────────────┐
-
 │              Express.js API Server                │
-
 │                    (Port 3001)                     │
-
 │  ┌─────────┐ ┌──────────┐ ┌──────────────────┐  │
-
 │  │  Auth   │ │  Routes  │ │   Middleware      │  │
-
 │  │  Module │ │  (20+)   │ │  (JWT + Role)     │  │
-
 │  └─────────┘ └──────────┘ └──────────────────┘  │
-
 └───────────────────┬──────────────────────────────┘
-
                     │ Mongoose
-
 ┌───────────────────┴──────────────────────────────┐
-
 │                  MongoDB                          │
-
 │            (Docker / Local)                       │
-
 └──────────────────────────────────────────────────┘
 
 ## Tech Stack
@@ -173,6 +156,26 @@
 
 ## Security Notes
 See SECURITY.md for known issues and recommendations.
+
+## Manual Role Change in Database
+
+If you need to change a user's role directly in the database (e.g., using MongoDB Compass, Mongo Express, or the `mongosh` shell), follow these rules:
+
+- **To make a user an Admin**:  
+  Set both `userType` and `role` to `"admin"`.  
+  Example:  
+  `db.users.updateOne({ email: "user@example.com" }, { $set: { userType: "admin", role: "admin" } })`
+
+- **To make a user a Doctor or Patient** (keeping them as a regular user type):  
+  Change only the `role` field to `"doctor"` or `"patient"`.  
+  Leave `userType` as `"user"`.  
+  Example for Doctor:  
+  `db.users.updateOne({ email: "user@example.com" }, { $set: { role: "doctor" } })`
+
+> **Why?**  
+> The application distinguishes between authentication type (`userType`) and functional role (`role`).  
+> `userType = "admin"` grants administrative API access, while `role = "admin"` is used for role‑based UI rendering.  
+> Regular users (patients/doctors) keep `userType = "user"` to avoid unintended privilege escalation.
 
 ## License
 MIT

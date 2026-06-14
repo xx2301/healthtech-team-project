@@ -63,9 +63,9 @@ app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/user', userProfileRoutes);
 app.use('/api', healthMetricRoutes);
-app.use('/api', medicalRecordRoutes);
-app.use('/api', emergencyContactRoutes);
-app.use('/api', relationRoutes);
+app.use('/api/medical-records', medicalRecordRoutes);
+app.use('/api/emergency-contacts', emergencyContactRoutes);
+app.use('/api/doctor-patient-relations', relationRoutes);
 app.use('/api/symptom-logs', symptomLogRoutes);
 app.use(express.static(path.join(__dirname, 'public')));
 
