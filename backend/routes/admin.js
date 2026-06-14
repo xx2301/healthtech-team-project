@@ -106,7 +106,7 @@ router.post('/login', [
 });
 
 // admin add patient
-router.post('/create-patient', authenticateToken, requireAdmin, [
+router.post('/create-patient', authenticateToken, requireRole('admin'), [
   body('userId').isMongoId(),
   body('weight').optional().isFloat({ min: 0, max: 500 }),
   body('height').optional().isFloat({ min: 0, max: 300 }),
@@ -163,7 +163,7 @@ router.post('/create-patient', authenticateToken, requireAdmin, [
   }
 });
 
-router.get('/pending-doctor-applications', authenticateToken, requireAdmin, async (req, res) => {
+router.get('/pending-doctor-applications', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
     const applications = await Doctor.find({ approvalStatus: 'pending' })
       .populate('userId', 'email fullName dateOfBirth gender phone createdAt')
@@ -181,7 +181,7 @@ router.get('/pending-doctor-applications', authenticateToken, requireAdmin, asyn
   }
 });
 
-router.get('/doctor-applications', authenticateToken, requireAdmin, async (req, res) => {
+router.get('/doctor-applications', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
@@ -220,7 +220,7 @@ router.get('/doctor-applications', authenticateToken, requireAdmin, async (req, 
   }
 });
 
-router.get('/doctor-applications/:applicationId', authenticateToken, requireAdmin, async (req, res) => {
+router.get('/doctor-applications/:applicationId', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
     const application = await Doctor.findById(req.params.applicationId)
       .populate('userId', 'email fullName dateOfBirth gender phone createdAt')
@@ -241,7 +241,7 @@ router.get('/doctor-applications/:applicationId', authenticateToken, requireAdmi
   }
 });
 
-router.post('/doctor-applications/bulk-action', authenticateToken, requireAdmin, [
+router.post('/doctor-applications/bulk-action', authenticateToken, requireRole('admin'), [
   body('applicationIds').isArray(),
   body('action').isIn(['approve', 'reject']),
   body('rejectionReason').optional().trim()
@@ -295,7 +295,7 @@ router.post('/doctor-applications/bulk-action', authenticateToken, requireAdmin,
   }
 });
 
-router.post('/approve-doctor/:doctorId', authenticateToken, requireAdmin, async (req, res) => {
+router.post('/approve-doctor/:doctorId', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.params.doctorId);
     
@@ -342,7 +342,7 @@ router.post('/approve-doctor/:doctorId', authenticateToken, requireAdmin, async 
   }
 });
 
-router.post('/reject-doctor/:doctorId', authenticateToken, requireAdmin, [
+router.post('/reject-doctor/:doctorId', authenticateToken, requireRole('admin'), [
   body('rejectionReason').optional().trim()
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -398,7 +398,7 @@ router.post('/reject-doctor/:doctorId', authenticateToken, requireAdmin, [
   }
 });
 
-router.get('/users', authenticateToken, requireAdmin, async (req, res) => {
+router.get('/users', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
     const { 
       search, 
@@ -476,7 +476,7 @@ router.get('/users', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
-router.put('/users/:userId/status', authenticateToken, requireAdmin, [
+router.put('/users/:userId/status', authenticateToken, requireRole('admin'), [
   body('accountStatus').isIn(['active', 'suspended', 'pending_doctor_approval'])
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -507,7 +507,7 @@ router.put('/users/:userId/status', authenticateToken, requireAdmin, [
   }
 });
 
-router.get('/patients', authenticateToken, requireAdmin, async (req, res) => {
+router.get('/patients', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
     const { search, page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
@@ -555,7 +555,7 @@ router.get('/patients', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
-router.put('/patients/:patientId', authenticateToken, requireAdmin, [
+router.put('/patients/:patientId', authenticateToken, requireRole('admin'), [
   body('age').optional().isInt({ min: 0, max: 150 }),
   body('weight').optional().isFloat({ min: 0, max: 500 }),
   body('height').optional().isFloat({ min: 0, max: 300 }),
@@ -638,7 +638,7 @@ router.put('/patients/:patientId', authenticateToken, requireAdmin, [
   }
 });
 
-router.delete('/patients/:patientId', authenticateToken, requireAdmin, async (req, res) => {
+router.delete('/patients/:patientId', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
     const patient = await Patient.findById(req.params.patientId);
     

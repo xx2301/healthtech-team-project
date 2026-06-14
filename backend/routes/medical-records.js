@@ -7,7 +7,7 @@ const Patient = require('../models/patient');
 const MedicalRecord = require('../models/MedicalRecord');
 const DoctorPatientRelation = require('../models/DoctorPatientRelation');
 const authenticateToken = require('../middleware/auth');
-const { createActivityLog } = require('../utils/activity-log'); // 直接使用 Phase 1 的版本
+const { createActivityLog } = require('../utils/activity-logs'); // 直接使用 Phase 1 的版本
 
 router.post('/', authenticateToken, [
   body('patientId').isMongoId(),

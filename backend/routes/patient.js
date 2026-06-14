@@ -54,6 +54,22 @@ router.put('/profile', authenticateToken, async (req, res) => {
   }
 });
 
+router.get('/profile', authenticateToken, requireRole('patient'), async (req, res) => {
+  try {
+    const patient = await Patient.findById(req.user._id)
+      .populate('emergencyContacts')
+      .populate('primaryDoctor', 'fullName specialization')
+      .populate('shareWithDoctors.doctorId', 'fullName specialization');
+    
+    res.status(200).json({
+      success: true,
+      data: patient
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 router.get('/my-doctors', authenticateToken, requireRole('patient'), async (req, res) => {
   try {
     const patient = await Patient.findOne({ userId: req.user.userId });

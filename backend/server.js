@@ -26,8 +26,9 @@ const path = require('path');
 const insightRoutes = require('./routes/insight');
 const chatbotRoutes = require('./routes/chatbot');
 const { requireRole } = require('./middleware/role');
+const authenticateToken = require('./middleware/auth');
 const adminRoutes = require('./routes/admin');
-const userProfileRoutes = require('./routes/userProfile');
+const userProfileRoutes = require('./routes/user-profile');
 const healthMetricRoutes = require('./routes/health-metrics');
 const medicalRecordRoutes = require('./routes/medical-records');
 const emergencyContactRoutes = require('./routes/emergency-contacts');
@@ -419,23 +420,6 @@ app.get('/api/user/export-data', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Export data error:', error);
     res.status(500).json({ success: false, error: 'Failed to export data' });
-  }
-});
-
-//patient routes
-router.get('/patients/profile', authenticateToken, requireRole('patient'), async (req, res) => {
-  try {
-    const patient = await Patient.findById(req.user._id)
-      .populate('emergencyContacts')
-      .populate('primaryDoctor', 'fullName specialization')
-      .populate('shareWithDoctors.doctorId', 'fullName specialization');
-    
-    res.status(200).json({
-      success: true,
-      data: patient
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
   }
 });
 

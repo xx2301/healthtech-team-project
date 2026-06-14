@@ -122,7 +122,7 @@ async function generateLiveDataForAllTestUsers() {
     for (const user of testUsers) {
       await generateLiveDataForUser(user);
     }
-    console.log(`[AutoSimulate] Completed run at ${new Date().toISOString()}`);
+    //console.log(`[AutoSimulate] Completed run at ${new Date().toISOString()}`);
   } catch (error) {
     console.error('[AutoSimulate] Error:', error);
   }
@@ -130,7 +130,7 @@ async function generateLiveDataForAllTestUsers() {
 
 function startAutoSimulate() {
   cron.schedule('* * * * *', async () => {
-    console.log('Running auto-simulate task...');
+    // console.log('Running auto-simulate task...');
     await generateLiveDataForAllTestUsers();
   });
   console.log('Auto-simulate cron job scheduled (every minute).');

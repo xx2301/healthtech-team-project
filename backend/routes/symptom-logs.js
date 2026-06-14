@@ -3,7 +3,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const SymptomLog = require('../models/SymptomLog');
 const authenticateToken = require('../middleware/auth');
-const requireRole = require('../middleware/role');
+const { requireRole } = require('../middleware/role');
 
 router.post('/', authenticateToken, requireRole('patient'), [
   body('symptomType').notEmpty(),
