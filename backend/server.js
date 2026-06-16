@@ -1,12 +1,9 @@
-﻿const bcrypt = require('bcryptjs');
-const express = require('express');
+﻿const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const jwt = require('jsonwebtoken');
 const helmet = require('helmet');
 const { body, validationResult } = require('express-validator');
 require('dotenv').config();
-const nodemailer = require('nodemailer');
 const { startAutoSimulate } = require('./services/autoSimulateService');
 const deviceRoutes = require('./routes/devices');
 const Session = require('./models/Session');
@@ -29,6 +26,7 @@ const { requireRole } = require('./middleware/role');
 const authenticateToken = require('./middleware/auth');
 const adminRoutes = require('./routes/admin');
 const userProfileRoutes = require('./routes/user-profile');
+const goalsRoutes = require('./routes/goals');
 const healthMetricRoutes = require('./routes/health-metrics');
 const medicalRecordRoutes = require('./routes/medical-records');
 const emergencyContactRoutes = require('./routes/emergency-contacts');
@@ -62,7 +60,8 @@ app.use('/api/insight', insightRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/user', userProfileRoutes);
-app.use('/api', healthMetricRoutes);
+app.use('/api/health-goals', goalsRoutes);
+app.use('/api/health-metrics', healthMetricRoutes);
 app.use('/api/medical-records', medicalRecordRoutes);
 app.use('/api/emergency-contacts', emergencyContactRoutes);
 app.use('/api/doctor-patient-relations', relationRoutes);
@@ -217,210 +216,6 @@ app.get('/auth/me', (req, res) => {
 app.all('/api/patient/*', (req, res, next) => {
   req.url = req.url.replace('/api/patient', '/api/patients');
   app._router.handle(req, res);
-});
-
-app.post('/api/health-goals', authenticateToken, [
-  body('goalType').notEmpty(),
-  body('targetValue').isNumeric(),
-  body('targetDate').isISO8601()
-], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
-  }
-  
-  try {
-    const { goalType, targetValue, targetDate, startDate, frequency, priority, description, title } = req.body;
-    
-    const user = await User.findById(req.user.userId);
-    if (!user) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
-
-    const healthGoal = new HealthGoal({
-      patientId: user.patientProfileId || null,
-      userId: user._id,
-      goalType,
-      title: title || `${goalType} goal`,
-      targetValue: parseFloat(targetValue),
-      currentValue: 0,
-      startDate: startDate ? new Date(startDate) : new Date(),
-      targetDate: new Date(targetDate),
-      frequency: frequency || 'daily',
-      priority: priority || 'medium',
-      isActive: true,
-      progressPercentage: 0,
-      description
-    });
-    
-    await healthGoal.save();
-    
-    res.status(201).json({
-      success: true,
-      message: 'Health goal set successfully',
-      data: healthGoal
-    });
-  } catch (error) {
-    console.error('Set health goal error:', error);
-    res.status(500).json({ success: false, error: 'Failed to set health goal' });
-  }
-});
-
-app.get('/api/health-goals', authenticateToken, async (req, res) => {
-  try {
-    const { isActive } = req.query;
-    const query = { userId: req.user.userId };
-    if (isActive !== undefined) {
-      query.isActive = isActive === 'true';
-    }
-    const goals = await HealthGoal.find(query).sort({ priority: 1, targetDate: 1 });
-    res.json({ success: true, data: goals, count: goals.length });
-  } catch (error) {
-    console.error('Fetch health goals error:', error);
-    res.status(500).json({ success: false, error: 'Failed to retrieve health goals' });
-  }
-});
-
-app.put('/api/health-goals/:goalId', authenticateToken, async (req, res) => {
-  try {
-    const goalId = req.params.goalId;
-    const userId = req.user.userId;
-
-    const goal = await HealthGoal.findOne({ _id: goalId, userId });
-    if (!goal) {
-      return res.status(404).json({ success: false, error: 'Goal not found or not owned by you' });
-    }
-
-    const allowedUpdates = [
-      'targetValue',
-      'title',
-      'description',
-      'targetDate',
-      'priority',
-      'isActive',
-      'frequency',
-      'notes',
-      'category',
-      'reminders'
-    ];
-
-    allowedUpdates.forEach(field => {
-      if (req.body[field] !== undefined) {
-        goal[field] = req.body[field];
-      }
-    });
-
-    if (req.body.targetValue !== undefined) {
-      goal.progressPercentage = (goal.currentValue / goal.targetValue) * 100;
-    }
-
-    goal.lastUpdated = new Date();
-    await goal.save();
-
-    res.json({
-      success: true,
-      message: 'Health goal updated successfully',
-      data: goal
-    });
-  } catch (error) {
-    console.error('Update health goal error:', error);
-    res.status(500).json({ success: false, error: 'Failed to update health goal' });
-  }
-});
-
-// get health summary for today
-app.get('/api/user/health-summary', authenticateToken, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const today = new Date();
-    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
-
-    const metrics = await HealthMetric.find({
-      userId,
-      timestamp: { $gte: start, $lte: end }
-    });
-
-    let stepsTotal = 0;
-    let heartRateSum = 0;
-    let heartRateCount = 0;
-    let sleepTotal = 0;
-    let caloriesTotal = 0;
-
-    metrics.forEach(metric => {
-      const val = metric.decryptedValue;
-      switch (metric.metricType) {
-        case 'steps':
-          stepsTotal += val;
-          break;
-        case 'heart_rate':
-          heartRateSum += val;
-          heartRateCount++;
-          break;
-        case 'sleep_duration':
-          sleepTotal += val;
-          break;
-        case 'calories_burned':
-          caloriesTotal += val;
-          break;
-        // TODO: add more metrics as needed
-      }
-    });
-
-    const goal = await HealthGoal.findOne({ userId, goalType: 'steps' });
-
-    res.json({
-      success: true,
-      data: {
-        steps: stepsTotal,
-        heartRate: heartRateCount > 0 ? heartRateSum / heartRateCount : null,
-        sleep: sleepTotal,
-        calories: caloriesTotal,
-        stepsGoal: goal?.targetValue ?? 6700,
-      }
-    });
-  } catch (err) {
-    console.error('Health summary error:', err.stack);
-    res.status(500).json({ success: false, error: 'Failed to get summary' });
-  }
-});
-
-// export in JSON format
-app.get('/api/user/export-data', authenticateToken, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-
-    const metrics = await HealthMetric.find({ userId }).sort({ timestamp: 1 });
-
-    const user = await User.findById(userId).select('-password');
-
-    const exportData = {
-      user: {
-        email: user.email,
-        fullName: user.fullName,
-        age: user.age,
-        height: user.height,
-        weight: user.weight,
-        role: user.role,
-      },
-      metrics: metrics.map(m => ({
-        metricType: m.metricType,
-        value: m.value,
-        unit: m.unit,
-        timestamp: m.timestamp,
-        source: m.source,
-        deviceName: m.deviceName,
-      })),
-      exportDate: new Date(),
-    };
-
-    res.setHeader('Content-Disposition', 'attachment; filename="my_health_data.json"');
-    res.setHeader('Content-Type', 'application/json');
-    res.json(exportData);
-  } catch (error) {
-    console.error('Export data error:', error);
-    res.status(500).json({ success: false, error: 'Failed to export data' });
-  }
 });
 
 function getDefaultUnit(type) {

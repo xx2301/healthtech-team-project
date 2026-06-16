@@ -13,7 +13,7 @@ const HealthGoal = require('../models/HealthGoal');
 const authenticateToken = require('../middleware/auth');
 
 // user change password by themselves
-router.put('/api/user/password', authenticateToken, [
+router.put('/password', authenticateToken, [
   body('oldPassword').notEmpty(),
   body('newPassword').isLength({ min: 6 })
 ], async (req, res) => {
@@ -346,6 +346,101 @@ router.get('/basic-info', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Get basic info error:', error);
     res.status(500).json({ success: false, error: 'Failed to get user info' });
+  }
+});
+
+// get health summary for today
+router.get('/health-summary', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const today = new Date();
+    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+
+    const metrics = await HealthMetric.find({
+      userId,
+      timestamp: { $gte: start, $lte: end }
+    });
+
+    let stepsTotal = 0;
+    let heartRateSum = 0;
+    let heartRateCount = 0;
+    let sleepTotal = 0;
+    let caloriesTotal = 0;
+
+    metrics.forEach(metric => {
+      const val = metric.decryptedValue;
+      switch (metric.metricType) {
+        case 'steps':
+          stepsTotal += val;
+          break;
+        case 'heart_rate':
+          heartRateSum += val;
+          heartRateCount++;
+          break;
+        case 'sleep_duration':
+          sleepTotal += val;
+          break;
+        case 'calories_burned':
+          caloriesTotal += val;
+          break;
+        // TODO: add more metrics as needed
+      }
+    });
+
+    const goal = await HealthGoal.findOne({ userId, goalType: 'steps' });
+
+    res.json({
+      success: true,
+      data: {
+        steps: stepsTotal,
+        heartRate: heartRateCount > 0 ? heartRateSum / heartRateCount : null,
+        sleep: sleepTotal,
+        calories: caloriesTotal,
+        stepsGoal: goal?.targetValue ?? 6700,
+      }
+    });
+  } catch (err) {
+    console.error('Health summary error:', err.stack);
+    res.status(500).json({ success: false, error: 'Failed to get summary' });
+  }
+});
+
+// export in JSON format
+router.get('/export-data', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const metrics = await HealthMetric.find({ userId }).sort({ timestamp: 1 });
+
+    const user = await User.findById(userId).select('-password');
+
+    const exportData = {
+      user: {
+        email: user.email,
+        fullName: user.fullName,
+        age: user.age,
+        height: user.height,
+        weight: user.weight,
+        role: user.role,
+      },
+      metrics: metrics.map(m => ({
+        metricType: m.metricType,
+        value: m.value,
+        unit: m.unit,
+        timestamp: m.timestamp,
+        source: m.source,
+        deviceName: m.deviceName,
+      })),
+      exportDate: new Date(),
+    };
+
+    res.setHeader('Content-Disposition', 'attachment; filename="my_health_data.json"');
+    res.setHeader('Content-Type', 'application/json');
+    res.json(exportData);
+  } catch (error) {
+    console.error('Export data error:', error);
+    res.status(500).json({ success: false, error: 'Failed to export data' });
   }
 });
 
