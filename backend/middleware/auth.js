@@ -32,10 +32,12 @@ const authenticateToken = (req, res, next) => {
       }
       
       req.user = {
-        userId: detailedUser._id,
-        email: detailedUser.email,
-        userType: detailedUser.userType,
-        sessionId: detailedUser.sessionId,
+        userId: user._id,
+        email: user.email,
+        userType: user.userType,
+        sessionId: decoded.sessionId,
+        doctorProfileId: user.doctorProfileId || null,
+        patientProfileId: user.patientProfileId || null,
         ...detailedUser.toObject()
       };
       

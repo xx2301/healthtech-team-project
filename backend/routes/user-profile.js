@@ -444,4 +444,25 @@ router.get('/export-data', authenticateToken, async (req, res) => {
   }
 });
 
+router.put('/ai-consent', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    user.aiConsent = req.body.aiConsent === true;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: user.aiConsent ? 'AI consent granted' : 'AI consent revoked',
+      aiConsent: user.aiConsent
+    });
+  } catch (error) {
+    console.error('AI consent error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update AI consent' });
+  }
+});
+
 module.exports = router;

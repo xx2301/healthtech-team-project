@@ -109,6 +109,7 @@ healthMetricSchema.index({ userId: 1 });
 healthMetricSchema.index({ deviceId: 1 });
 healthMetricSchema.index({ timestamp: 1 });
 healthMetricSchema.index({ metricType: 1, isAbnormal: 1 });
+healthMetricSchema.index({ timestamp: 1 }, { expireAfterSeconds: 7776000 }); // Auto-delete after 90 days
 
 healthMetricSchema.pre('save', function(next) {
   if (!this.unit) {

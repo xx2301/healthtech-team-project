@@ -7,6 +7,7 @@ const Patient = require('../models/patient');
 const HealthMetric = require('../models/HealthMetric');
 const DoctorPatientRelation = require('../models/DoctorPatientRelation');
 const authenticateToken = require('../middleware/auth');
+const { getDailySummary } = require('../services/healthAnalytics');
 
 router.get('/health-metrics', authenticateToken, async (req, res) => {
   try {
@@ -165,6 +166,17 @@ router.post('/health-metrics', authenticateToken, [
   } catch (error) {
     console.error('Save health metric error:', error);
     res.status(500).json({ success: false, error: 'Failed to save health metric' });
+  }
+});
+
+router.get('/daily-summary', authenticateToken, async (req, res) => {
+  try {
+    const date = req.query.date || new Date().toISOString().split('T')[0];
+    const data = await getDailySummary(req.user.userId, date);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Fetch daily summary error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch daily summary' });
   }
 });
 

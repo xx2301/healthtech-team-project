@@ -11,7 +11,7 @@ const { body, validationResult } = require('express-validator');
 
 router.get('/profile', authenticateToken, requireRole('doctor'), async (req, res) => {
   try {
-    const doctor = await Doctor.findById(req.user._id)
+    const doctor = await Doctor.findById(req.user.doctorProfileId)
       .populate('assignedPatients', 'fullName patientCode dateOfBirth');
     
     res.status(200).json({

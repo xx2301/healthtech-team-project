@@ -9,6 +9,14 @@ const AI_API_KEY = process.env.AI_API_KEY;
 
 router.post('/weekly-insight', authMiddleware, async (req, res) => {
   try {
+    const user = await User.findById(req.user.userId);
+    if (!user || !user.aiConsent) {
+      return res.status(403).json({
+        success: false,
+        error: 'User has not consented to AI interactions. Please enable AI consent in your settings.'
+      });
+    }
+    
     const { stepsTotal, stepsGoal, stepsChangePercent, sleepTotal, sleepGoal, sleepChangePercent, waterTotal, waterGoal, waterChangePercent, avgHeartRate } = req.body;
 
     const prompt = `

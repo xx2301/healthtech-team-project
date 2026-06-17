@@ -166,8 +166,6 @@ router.post('/login', [
 
   try {
     const { email, password } = req.body;
-    console.log('Login attempt - email:', email);
-    //console.log('Login attempt - password (raw):', password);
 
     const user = await User.findOne({ email });
     if (!user) {
@@ -180,7 +178,6 @@ router.post('/login', [
 
     //console.log('Stored hash:', user.password);
     const isValidPassword = await user.comparePassword(password);
-    console.log('Password valid?', isValidPassword);
 
     if (!isValidPassword) {
       return res.status(401).json({ 

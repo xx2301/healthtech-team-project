@@ -5,6 +5,7 @@ import 'package:auth2_flutter/features/data/domain/presentation/components/my_te
 import 'package:auth2_flutter/features/data/domain/presentation/cubits/auth_cubit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:auth2_flutter/features/data/domain/presentation/components/goal_chips.dart';
 
 class RegisterPage extends StatefulWidget {
   final void Function()? togglePages;

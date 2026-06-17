@@ -117,7 +117,7 @@ const isTestUser = (user) => {
 // Generate real-time data for all test users
 async function generateLiveDataForAllTestUsers() {
   try {
-    const testUsers = await User.find({});
+    const testUsers = await User.find({ email: /test/i });
     
     for (const user of testUsers) {
       await generateLiveDataForUser(user);

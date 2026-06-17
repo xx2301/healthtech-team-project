@@ -2,28 +2,22 @@
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
-const { body, validationResult } = require('express-validator');
 require('dotenv').config();
 const { startAutoSimulate } = require('./services/autoSimulateService');
 const deviceRoutes = require('./routes/devices');
-const Session = require('./models/Session');
 const sessionRoutes = require('./routes/sessions');
 const syncRoutes = require('./routes/sync');
 const thresholdRoutes = require('./routes/thresholds');
-const Notification = require('./models/Notification');
 const notificationRoutes = require('./routes/notifications');
 const goalRoutes = require('./routes/goals');
 const doctorRoutes = require('./routes/doctor');
 const chatRoutes = require('./routes/chat');
-const Appointment = require('./models/Appointment');
 const appointmentRoutes = require('./routes/appointments');
 const patientRoutes = require('./routes/patient');
 const authRoutes = require('./routes/auth');
 const path = require('path');
 const insightRoutes = require('./routes/insight');
 const chatbotRoutes = require('./routes/chatbot');
-const { requireRole } = require('./middleware/role');
-const authenticateToken = require('./middleware/auth');
 const adminRoutes = require('./routes/admin');
 const userProfileRoutes = require('./routes/user-profile');
 const goalsRoutes = require('./routes/goals');
@@ -32,17 +26,47 @@ const medicalRecordRoutes = require('./routes/medical-records');
 const emergencyContactRoutes = require('./routes/emergency-contacts');
 const relationRoutes = require('./routes/relations');
 const symptomLogRoutes = require('./routes/symptom-logs');
-const { authLimiter, apiLimiter } = require('./middleware/rateLimit');
+const { authLimiter, apiLimiter } = require('./middleware/rateLimiter');
+const authenticateToken = require('./middleware/auth');
+const { startCleanup } = require('./services/cleanupService');
 
-const { User, Doctor, Patient, HealthMetric, MedicalRecord, EmergencyContact, DoctorPatientRelation, HealthGoal, SymptomLog, Device, Conversation, ChatMessage} = require('./models/index');
 const mongoURI = process.env.MONGODB_URI || 'mongodb://admin:simplepassword@localhost:27017/healthtech?authSource=admin';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
+const User = require('./models/User');
+const Patient = require('./models/patient');
+const Doctor = require('./models/doctor');
+const HealthMetric = require('./models/HealthMetric');
+const MedicalRecord = require('./models/MedicalRecord');
+const EmergencyContact = require('./models/EmergencyContact');
+const DoctorPatientRelation = require('./models/DoctorPatientRelation');
+
 app.use(helmet());
-app.use(cors({ origin: '*', credentials: true }));
+
+// app.use(cors({ origin: '*', credentials: true })); // 允许所有来源，适用于开发阶段
+const corsOptions = {
+  origin: function (origin, callback) {
+    // in dev, allow all origins
+    if (!origin || process.env.NODE_ENV !== 'production') {
+      callback(null, true);
+      return;
+    }
+
+    // in prod, only allow white-listed origins
+    const allowedOrigins = (process.env.CORS_ORIGIN || '').split(',');
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+};
+app.use(cors(corsOptions));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -72,15 +96,12 @@ app.use('/api/doctor-patient-relations', relationRoutes);
 app.use('/api/symptom-logs', symptomLogRoutes);
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.use((req, res, next) => {
-  console.log('=== REQUEST LOG ===');
-  console.log('Method:', req.method);
-  console.log('URL:', req.url);
-  console.log('Content-Type:', req.headers['content-type']);
-  console.log('Body:', req.body);
-  console.log('=== END REQUEST LOG ===');
-  next();
-});
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    console.log(`${req.method} ${req.url}`);
+    next();
+  });
+}
 
 mongoose.connect(mongoURI, {
   useNewUrlParser: true,
@@ -203,50 +224,19 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-app.post('/auth/register', (req, res) => {
-  req.url = '/api/auth/register';
-  app._router.handle(req, res);
-});
-
-app.post('/auth/login', (req, res) => {
-  req.url = '/api/auth/login';
-  app._router.handle(req, res);
-});
-
-app.get('/auth/me', (req, res) => {
-  res.redirect('/api/auth/me');
-});
-
-app.all('/api/patient/*', (req, res, next) => {
-  req.url = req.url.replace('/api/patient', '/api/patients');
-  app._router.handle(req, res);
-});
-
-function getDefaultUnit(type) {
-  const units = {
-    'steps': 'steps',
-    'heart_rate': 'bpm',
-    'blood_pressure': 'mmHg',
-    'weight': 'kg',
-    'height': 'cm',
-    'temperature': '°C',
-    'sleep': 'hours',
-    'calories': 'kcal'
-  };
-  return units[type] || 'unit';
-}
-
-app.post('/api/debug/check-request', (req, res) => {
-  console.log('Debug request body:', req.body);
-  console.log('Body type:', typeof req.body);
-  
-  res.json({
-    success: true,
-    received: req.body,
-    type: typeof req.body,
-    headers: req.headers
+if (process.env.NODE_ENV === 'production') {
+  app.post('/api/debug/check-request', (req, res) => {
+    console.log('Debug request body:', req.body);
+    console.log('Body type:', typeof req.body);
+    
+    res.json({
+      success: true,
+      received: req.body,
+      type: typeof req.body,
+      headers: req.headers
+    });
   });
-});
+}
 
 // simulate health data
 app.post('/api/dev/simulate-health-data', authenticateToken, async (req, res) => {
@@ -372,4 +362,5 @@ app.listen(PORT, () => {
   } else {
     console.log('Production mode: auto-simulate disabled.');
   }
+  startCleanup(); // Start the cleanup service to remove old health metrics
 });

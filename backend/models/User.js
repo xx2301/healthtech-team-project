@@ -86,9 +86,14 @@ const userSchema = new mongoose.Schema({
     default: 'other'
   },
 
-    avatarColor: {
+  avatarColor: {
     type: Number,
     default: null
+  },
+
+  aiConsent: {
+    type: Boolean,
+    default: false
   },
 
   phone: String,

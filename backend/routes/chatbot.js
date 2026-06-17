@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const User = require('../models/User');
 const authMiddleware = require('../middleware/auth');
 
 const AI_API_URL = 'https://api.openai.com/v1/chat/completions';
@@ -9,13 +10,27 @@ const AI_API_KEY = process.env.AI_API_KEY;
 
 router.post('/message', authMiddleware, async (req, res) => {
   try {
+    const user = await User.findById(req.user.userId);
+    if (!user || !user.aiConsent) {
+      return res.status(403).json({
+        success: false,
+        error: 'User has not consented to AI interactions. Please enable AI consent in your settings.'
+      });
+    }
+    
     const { message, healthData } = req.body;
     if (!message) return res.status(400).json({ error: 'Message required' });
 
     let systemPrompt = 'You are a friendly and encouraging health coach. Keep your replies very short, 1-2 sentences maximum. Avoid repeating the same words or phrases. Be concise and helpful.';
+
     if (healthData) {
-    const { steps, stepsGoal, avgHeartRate, calories, sleep } = healthData;
-    systemPrompt += ` Today's data: Steps: ${steps || 0}/${stepsGoal || 6700}, Heart rate: ${avgHeartRate || 0} bpm, Calories: ${calories || 0} kcal, Sleep: ${sleep || 0} hours.`;
+      const { steps, stepsGoal, avgHeartRate, calories, sleep } = healthData;
+      
+      const stepsStatus = steps >= stepsGoal ? 'goal achieved' : `${Math.round((steps / stepsGoal) * 100)}% of goal`;
+      const hrStatus = avgHeartRate >= 60 && avgHeartRate <= 100 ? 'normal range' : 'outside normal range';
+      const sleepStatus = sleep >= 7 ? 'sufficient' : 'insufficient';
+
+      systemPrompt += ` Today's data: Steps: ${steps || 0}/${stepsGoal || 6700}, Heart rate: ${avgHeartRate || 0} bpm, Calories: ${calories || 0} kcal, Sleep: ${sleep || 0} hours.`;
     }
     systemPrompt += ' Keep answers short, positive, and actionable.';
 

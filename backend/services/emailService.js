@@ -9,7 +9,7 @@ const transporter = nodemailer.createTransport({
 });
 
 exports.sendPasswordResetEmail = async (email, token) => {
-  const resetUrl = `http://localhost:3001/reset-password.html?token=${token}`;
+  const resetUrl = process.env.BASE_URL || `http://localhost:3001/reset-password.html?token=${token}`;
   const mailOptions = {
     from: `"HealthTech Team" <${process.env.EMAIL_USER}>`,
     to: email,

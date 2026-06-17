@@ -9,7 +9,6 @@ const Patient = require('../models/patient');
 const Session = require('../models/Session');
 const Notification = require('../models/Notification');
 const authenticateToken = require('../middleware/auth');
-const admin = require('../middleware/admin');
 const { requireRole } = require('../middleware/role');
 
 router.post('/login', [

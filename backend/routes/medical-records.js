@@ -42,7 +42,7 @@ router.post('/', authenticateToken, [
     } = req.body;
 
     const relation = await DoctorPatientRelation.findOne({
-      doctorId: req.user._id,
+      doctorId: req.user.doctorProfileId,
       patientId,
       status: 'active',
       'permissions.addMedicalNotes': true
