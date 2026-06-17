@@ -35,8 +35,8 @@ dependencies:
   reorderable_grid_view: ^2.2.0
   path_provider: ^2.0.16
   share_plus: ^12.0.1
-  win32: ^5.5.3
-  ffi: ^2.2.0
+  # win32: ^5.5.3
+  # ffi: ^2.2.0
   csv: ^5.0.2
   open_file: ^3.3.2
 

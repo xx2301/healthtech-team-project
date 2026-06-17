@@ -1,9 +1,20 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class NotificationService {
-  static const String baseUrl = 'http://10.0.2.2:3001';
+  static String get baseUrl {
+    if (kIsWeb) {
+      return 'http://localhost:3001';
+    } else if (Platform.isAndroid) {
+      return 'http://10.0.2.2:3001';
+    } else if (Platform.isIOS) {
+      return 'http://localhost:3001';
+    }
+    return 'http://localhost:3001';
+  }
 
   static Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();

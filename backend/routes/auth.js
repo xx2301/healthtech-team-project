@@ -247,7 +247,7 @@ router.post('/login', [
   }
 });
 
-router.get('/me', requireRole('user'), async (req, res) => {
+router.get('/me', authenticateToken, requireRole('user'), async (req, res) => {
   try {
     const user = await User.findById(req.user.userId);
     if (!user) {

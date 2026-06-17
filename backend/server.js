@@ -32,6 +32,7 @@ const medicalRecordRoutes = require('./routes/medical-records');
 const emergencyContactRoutes = require('./routes/emergency-contacts');
 const relationRoutes = require('./routes/relations');
 const symptomLogRoutes = require('./routes/symptom-logs');
+const { authLimiter, apiLimiter } = require('./middleware/rateLimit');
 
 const { User, Doctor, Patient, HealthMetric, MedicalRecord, EmergencyContact, DoctorPatientRelation, HealthGoal, SymptomLog, Device, Conversation, ChatMessage} = require('./models/index');
 const mongoURI = process.env.MONGODB_URI || 'mongodb://admin:simplepassword@localhost:27017/healthtech?authSource=admin';
@@ -56,6 +57,9 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/forgot-password', authLimiter);
+app.use('/api/', apiLimiter);
 app.use('/api/insight', insightRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/admin', adminRoutes);

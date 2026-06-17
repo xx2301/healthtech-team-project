@@ -55,7 +55,6 @@ class BackendAuthRepoImpl implements AuthRepo {
         final userJson = jsonDecode(userString);
         return AppUser.fromJson(userJson);
       } catch (e) {
-        print('Failed to parse user from storage: $e');
         return null;
       }
     }
@@ -126,7 +125,7 @@ class BackendAuthRepoImpl implements AuthRepo {
           try {
             await _sendRequest(
               method: 'GET',
-              endpoint: '/api/auth/verify',
+              endpoint: '/api/auth/me',
               needsAuth: true,
             );
             return localUser;
@@ -139,7 +138,6 @@ class BackendAuthRepoImpl implements AuthRepo {
       }
       return null;
     } catch (e) {
-      print('Retrieve data failed: $e');
       return null;
     }
   }

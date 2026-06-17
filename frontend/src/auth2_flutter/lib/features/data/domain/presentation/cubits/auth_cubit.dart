@@ -105,7 +105,7 @@ class AuthCubit extends Cubit<AuthState> {
     final token = await _getToken();
     if (token == null) return;
     final response = await http.get(
-      Uri.parse('${_getBaseUrl()}/auth/me'),
+      Uri.parse('${_getBaseUrl()}/api/auth/me'),
       headers: {'Authorization': 'Bearer $token'},
     );
     if (response.statusCode == 200) {

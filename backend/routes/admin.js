@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const Doctor = require('../models/doctor');
@@ -10,7 +11,6 @@ const Notification = require('../models/Notification');
 const authenticateToken = require('../middleware/auth');
 const admin = require('../middleware/admin');
 const { requireRole } = require('../middleware/role');
-const { createNotification } = require('../utils/notifications');
 
 router.post('/login', [
   body('email').isEmail(),

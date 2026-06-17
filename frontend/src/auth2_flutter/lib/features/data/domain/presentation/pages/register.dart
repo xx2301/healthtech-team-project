@@ -1,5 +1,4 @@
 import 'package:auth2_flutter/features/data/domain/presentation/components/appbar2.dart';
-import 'package:auth2_flutter/features/data/domain/presentation/components/goal_chips.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/header_title.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/my_button.dart';
 import 'package:auth2_flutter/features/data/domain/presentation/components/my_textfield.dart';

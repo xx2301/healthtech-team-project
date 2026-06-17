@@ -94,7 +94,6 @@ class MyApp extends StatelessWidget {
               themeMode: themeNotifier.themeMode,
               home: BlocConsumer<AuthCubit, AuthState>(
                 builder: (context, state) {
-                  print('AuthState in builder: $state');
                   if (state is Unauthenticated) {
                     return const AuthPage();
                   }

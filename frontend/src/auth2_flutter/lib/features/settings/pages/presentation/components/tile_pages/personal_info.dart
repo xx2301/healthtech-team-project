@@ -130,11 +130,9 @@ class _PersonalInfoState extends State<PersonalInfo> {
         });
       } else {
         if (!silent) setState(() => _loadingSessions = false);
-        print('Failed to load sessions: ${response.body}');
       }
     } catch (e) {
       if (!silent) setState(() => _loadingSessions = false);
-      print('Error fetching sessions: $e');
     }
   }
 

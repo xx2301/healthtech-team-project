@@ -8,7 +8,6 @@ const DoctorPatientRelation = require('./DoctorPatientRelation');
 const HealthGoal = require('./HealthGoal');
 const SymptomLog = require('./SymptomLog');
 const Device = require('./Device');
-const HealthReport = require('./HealthReport');
 const Conversation = require('./conversation');
 const ChatMessage = require('./ChatMessage');
 
@@ -23,7 +22,6 @@ module.exports = {
   HealthGoal,
   SymptomLog,
   Device,
-  HealthReport,
   Conversation,
   ChatMessage
 };

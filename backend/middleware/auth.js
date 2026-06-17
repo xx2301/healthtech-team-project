@@ -25,16 +25,17 @@ const authenticateToken = (req, res, next) => {
       }
       
       let detailedUser = user;
-      if (user.userType === 'doctor') {
-        detailedUser = await Doctor.findById(user._id);
-      } else if (user.userType === 'patient') {
-        detailedUser = await Patient.findById(user._id);
+      if (user.doctorProfileId) {
+        detailedUser = await Doctor.findById(user.doctorProfileId);
+      } else if (user.patientProfileId) {
+        detailedUser = await Patient.findById(user.patientProfileId);
       }
       
       req.user = {
         userId: detailedUser._id,
         email: detailedUser.email,
         userType: detailedUser.userType,
+        sessionId: detailedUser.sessionId,
         ...detailedUser.toObject()
       };
       
